@@ -1,0 +1,48 @@
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: equilibre-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - equilibre-network
+    # :delegated recommandé sur macOS pour limiter la latence I/O des bind mounts (cf. cahier des charges)
+    volumes:
+      - ./api/src:/app/src:delegated
+
+  mongo:
+    image: mongo:7
+    container_name: equilibre-mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT}:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - equilibre-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  equilibre-network:
+    driver: bridge
+
+volumes:
+  mongo-data:

@@ -1,0 +1,47 @@
+services:
+  api:
+    image: ${DOCKER_REGISTRY}/equilibre-api:${IMAGE_TAG:-latest}
+    container_name: equilibre-api
+    restart: unless-stopped
+    ports:
+      # Seul port réellement nécessaire à exposer : l'API elle-même
+      # (en prod, ce port sera généralement derrière un reverse proxy Caddy, pas exposé directement au public)
+      - "${API_PORT}:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - equilibre-network
+    # Pas de volume de code source en prod : l'image contient déjà le build figé
+    # (contrairement au docker-compose.yml de dev qui monte ./api/src pour le hot-reload)
+
+  mongo:
+    image: mongo:7
+    container_name: equilibre-mongo
+    restart: unless-stopped
+    # Volontairement PAS de "ports:" ici : Mongo ne doit jamais être exposé publiquement en prod.
+    # Seul le service "api", sur le même réseau Docker, peut le joindre via le nom "mongo".
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo-data-prod:/data/db
+    networks:
+      - equilibre-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  equilibre-network:
+    driver: bridge
+
+volumes:
+  mongo-data-prod:
