@@ -10,7 +10,7 @@ WORKDIR /app
 # (les dépendances ne sont réinstallées que si package.json change, pas à chaque modif de code)
 COPY package.json pnpm-lock.yaml ./
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare --activate
 RUN pnpm install --frozen-lockfile
 
 COPY . .
@@ -26,7 +26,7 @@ ENV NODE_ENV=production
 
 COPY package.json pnpm-lock.yaml ./
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare --activate
 RUN pnpm install --frozen-lockfile --prod
 
 # On ne récupère que le résultat compilé du stage précédent, pas les sources TS ni les devDependencies
