@@ -1,0 +1,29 @@
+# Surcharge DEVELOPPEMENT.
+# Lancement : pnpm docker:dev  (voir package.json a la racine)
+
+services:
+  api:
+    # En dev l'image est construite localement a partir du code source.
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      # Etape dediee au dev : devDependencies + nest --watch
+      target: development
+    container_name: equilibre-api
+    ports:
+      - "${API_PORT}:3000"
+    # Bind mount du code source pour le rechargement a chaud.
+    # :delegated recommande sur macOS pour limiter la latence I/O.
+    volumes:
+      - ./api/src:/app/src:delegated
+
+  mongo:
+    container_name: equilibre-mongo
+    # Mongo est expose sur la machine en dev pour pouvoir s'y connecter
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - mongo-data-dev:/data/db
+
+volumes:
+  mongo-data-dev:

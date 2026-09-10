@@ -1,48 +1,51 @@
+# Configuration COMMUNE aux trois environnements (dev / test / prod).
+# Ce fichier ne se lance jamais seul : il est toujours combine avec l'un des
+# fichiers de surcharge docker-compose.dev.yml / .test.yml / .prod.yml.
+# Tout ce qui varie selon l'environnement (ports, volumes, build vs image,
+# politique de redemarrage) est volontairement absent d'ici.
+
 services:
   api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: equilibre-api
     restart: unless-stopped
-    ports:
-      - "${API_PORT}:3000"
     environment:
       - NODE_ENV=${NODE_ENV}
       - MONGO_URI=${MONGO_URI}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+    # L'API ne demarre qu'une fois Mongo reellement pret a repondre,
+    # pas seulement "conteneur lance" (cf. healthcheck ci-dessous).
     depends_on:
       mongo:
         condition: service_healthy
     networks:
       - equilibre-network
-    # :delegated recommandé sur macOS pour limiter la latence I/O des bind mounts (cf. cahier des charges)
-    volumes:
-      - ./api/src:/app/src:delegated
 
   mongo:
-    image: mongo:7
-    container_name: equilibre-mongo
+    image: mongo:8.0
+    # --quiet supprime les lignes "Connection accepted/ended" que le
+    # healthcheck genere a chaque sonde : sans lui les logs de Mongo
+    # noient completement ceux de l'API.
+    command: ["mongod", "--quiet"]
     restart: unless-stopped
-    ports:
-      - "${MONGO_PORT}:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-    volumes:
-      - mongo-data:/data/db
     networks:
       - equilibre-network
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
+      # Regime de croisiere : une sonde toutes les 30s, pour ne pas
+      # polluer les logs avec une connexion mongosh toutes les 10s.
+      interval: 30s
       timeout: 5s
       retries: 5
+      # Phase de demarrage : sondes rapprochees et echecs non comptabilises,
+      # donc l'API demarre des que Mongo repond, sans attendre 30s.
+      start_period: 30s
+      start_interval: 5s
 
+# Reseau interne : l'API joint Mongo par le nom de service "mongo",
+# jamais par localhost (qui designerait le conteneur de l'API lui-meme).
 networks:
   equilibre-network:
     driver: bridge
-
-volumes:
-  mongo-data:

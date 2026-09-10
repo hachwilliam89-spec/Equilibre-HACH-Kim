@@ -4,8 +4,20 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint": "pnpm --dir api lint",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build",
+    "docker:dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev down",
+    "docker:dev:logs": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev logs -f",
+    "docker:dev:logs:api": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev logs -f api",
+    "docker:dev:logs:mongo": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev logs -f mongo",
+    "docker:dev:ps": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev ps",
+    "docker:test": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build",
+    "docker:test:down": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test down -v",
+    "docker:test:logs": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test logs -f",
+    "docker:test:logs:api": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test logs -f api",
+    "docker:prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d",
+    "docker:prod:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod down"
   },
   "keywords": [],
   "author": "",

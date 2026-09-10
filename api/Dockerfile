@@ -17,7 +17,24 @@ COPY . .
 
 RUN pnpm run build
 
-# ---- Stage 2 : production ----
+# ---- Stage 2 : developpement ----
+# Utilisee uniquement par docker-compose.dev.yml (target: development).
+# Contient les devDependencies et lance Nest en mode watch : combinee au
+# bind mount de ./api/src, elle donne le rechargement a chaud.
+FROM node:20-alpine AS development
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+
+RUN corepack enable && corepack prepare --activate
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+CMD ["pnpm", "run", "start:dev"]
+
+# ---- Stage 3 : production ----
 FROM node:20-alpine AS production
 
 WORKDIR /app
