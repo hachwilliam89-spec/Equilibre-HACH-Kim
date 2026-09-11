@@ -4,7 +4,9 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Injectable,
 } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import type { Request, Response } from 'express';
 
 interface FieldError {
@@ -19,7 +21,7 @@ interface ProblemDetails {
   status: number;
   detail: string;
   instance: string;
-  errors?: FieldError[]; // extension member, autorisee par la RFC
+  errors?: FieldError[];
 }
 
 const DEFAULT_TITLES: Record<number, string> = {
@@ -32,12 +34,19 @@ const DEFAULT_TITLES: Record<number, string> = {
 };
 
 /**
- * Filtre d'exception global, branche une seule fois dans main.ts.
- * Formate TOUTE reponse d'erreur selon la RFC 7807 (application/problem+json),
- * avec un "type" stable que le mobile peut utiliser sans parser le texte francais.
+ * Filtre d'exception global, enregistre via APP_FILTER dans app.module.ts
+ * (pas "new" dans main.ts) pour beneficier de l'injection de dependances,
+ * notamment le logger Pino ci-dessous.
+ * Formate TOUTE reponse d'erreur selon la RFC 7807.
  */
+@Injectable()
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
+  constructor(
+    @InjectPinoLogger(AllExceptionsFilter.name)
+    private readonly logger: PinoLogger,
+  ) {}
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -50,7 +59,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const rawResponse = isHttpException ? exception.getResponse() : null;
 
-    let type = 'about:blank'; // valeur par defaut RFC 7807 quand aucun type specifique
+    let type = 'about:blank';
     let title: string;
     let detail: string;
     let errors: FieldError[] | undefined;
@@ -78,10 +87,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ...(errors ? { errors } : {}),
     };
 
-    // Les erreurs 500 non prevues meritent d'etre loguees cote serveur.
-    // TODO : remplacer par le logger Pino une fois cable.
+    // Les erreurs 500 non prevues sont de vraies anomalies a investiguer.
+    // Les 4xx (mauvaise requete, mauvais identifiants...) sont attendues et
+    // n'ont pas besoin de polluer les logs au niveau error.
     if (status >= 500) {
-      console.error(exception);
+      this.logger.error(
+        { err: exception, path: request.url },
+        'Erreur interne non geree',
+      );
+    } else {
+      this.logger.debug(
+        { status, path: request.url, title },
+        'Requete rejetee',
+      );
     }
 
     response

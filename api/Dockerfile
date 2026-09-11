@@ -32,6 +32,12 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# Meme sonde qu'en production : le stage dev doit aussi remonter "healthy"
+# pour que docker compose ps affiche un vrai statut, et pour rester coherent
+# avec le comportement attendu par le brief (etape 3).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+
 CMD ["pnpm", "run", "start:dev"]
 
 # ---- Stage 3 : production ----
