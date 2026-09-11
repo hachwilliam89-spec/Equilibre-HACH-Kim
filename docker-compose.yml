@@ -6,6 +6,10 @@
 
 services:
   api:
+    # Docker insere un init minimal en PID 1 : il relaie SIGTERM au
+    # processus Node et recolte les processus orphelins, ce qui evite
+    # l'arret force apres le delai de grace.
+    init: true
     restart: unless-stopped
     environment:
       - NODE_ENV=${NODE_ENV}
