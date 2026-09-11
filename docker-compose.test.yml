@@ -8,6 +8,10 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+      # Explicite et volontaire : les tests d'integration s'executent contre
+      # l'image de production, celle qui sera reellement deployee, et non
+      # contre le stage de developpement.
+      target: production
     container_name: equilibre-api-test
     ports:
       - "${API_PORT}:3000"
@@ -17,6 +21,9 @@ services:
 
   mongo:
     container_name: equilibre-mongo-test
+    # Cache WiredTiger limite : par defaut Mongo reserve ~3,4 Go calcules
+    # sur la RAM de la machine, inutile pour une base de dev ou de test.
+    command: ["mongod", "--quiet", "--wiredTigerCacheSizeGB", "0.5"]
     ports:
       - "${MONGO_PORT}:27017"
     restart: "no"

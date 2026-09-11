@@ -11,7 +11,11 @@ export const envSchema = z.object({
     .enum(['development', 'test', 'production'])
     .default('development'),
 
-  API_PORT: z.coerce.number().int().positive().default(3000),
+  // Port d'ecoute INTERNE de l'application, toujours 3000 dans le conteneur.
+  // A ne pas confondre avec API_PORT, qui est le port publie sur la machine
+  // hote par Docker : celui-la n'est jamais injecte dans le conteneur et ne
+  // concerne pas l'application.
+  PORT: z.coerce.number().int().positive().default(3000),
 
   MONGO_URI: z
     .string()
