@@ -1,0 +1,28 @@
+# Surcharge TEST (tests d'integration, sans mock, et pipeline CI).
+# Lancement : pnpm docker:test
+# Projet Docker distinct (-p equilibre-test) pour pouvoir tourner
+# en parallele de l'environnement de dev sans collision de conteneurs.
+
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: equilibre-api-test
+    ports:
+      - "${API_PORT}:3000"
+    # Pas de redemarrage automatique : un conteneur de test qui plante
+    # doit rester plante pour que la CI le voie.
+    restart: "no"
+
+  mongo:
+    container_name: equilibre-mongo-test
+    ports:
+      - "${MONGO_PORT}:27017"
+    restart: "no"
+    # Base EPHEMERE : les donnees vivent en memoire et disparaissent
+    # avec le conteneur. Chaque execution de la suite de tests repart
+    # d'une base vierge, ce qui rend les assertions sur l'etat final
+    # de la BDD deterministes.
+    tmpfs:
+      - /data/db

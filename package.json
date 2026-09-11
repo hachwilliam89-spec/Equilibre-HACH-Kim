@@ -1,0 +1,32 @@
+{
+  "name": "equilibre-hach-kim",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "prepare": "husky",
+    "lint": "pnpm --dir api lint",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build",
+    "docker:dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev down",
+    "docker:dev:logs": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev logs -f",
+    "docker:dev:logs:api": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev logs -f api",
+    "docker:dev:logs:mongo": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev logs -f mongo",
+    "docker:dev:ps": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev ps",
+    "docker:test": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test up -d --build",
+    "docker:test:down": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test down -v",
+    "docker:test:logs": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test logs -f",
+    "docker:test:logs:api": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test logs -f api",
+    "docker:prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d",
+    "docker:prod:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod down"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.25.0",
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.0"
+  }
+}

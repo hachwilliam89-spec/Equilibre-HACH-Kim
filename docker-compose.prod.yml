@@ -1,0 +1,30 @@
+# Surcharge PRODUCTION.
+# Lancement : pnpm docker:prod
+# Aucun build ici : l'image versionnee est recuperee depuis la registry
+# alimentee par la pipeline CI/CD (etape 8 du fil rouge).
+
+services:
+  api:
+    image: ${DOCKER_REGISTRY}/equilibre-api:${IMAGE_TAG:-latest}
+    container_name: equilibre-api
+    environment:
+      # Force en dur : la production ne doit jamais tourner dans un autre mode.
+      - NODE_ENV=production
+    # Seul port reellement necessaire. Derriere un reverse proxy Caddy,
+    # il ne sera pas expose publiquement.
+    ports:
+      - "${API_PORT}:3000"
+    restart: always
+    # Pas de bind mount du code : l'image contient le build fige.
+
+  mongo:
+    container_name: equilibre-mongo
+    restart: always
+    # Volontairement PAS de "ports" : Mongo n'est joignable que par l'API,
+    # via le reseau interne Docker. Jamais expose sur l'hote ni sur Internet.
+    volumes:
+      - mongo-data-prod:/data/db
+
+# Volume de production strictement separe de ceux de dev et de test.
+volumes:
+  mongo-data-prod:
