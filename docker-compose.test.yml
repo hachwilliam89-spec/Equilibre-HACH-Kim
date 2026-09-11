@@ -8,6 +8,10 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+      # Explicite et volontaire : les tests d'integration s'executent contre
+      # l'image de production, celle qui sera reellement deployee, et non
+      # contre le stage de developpement.
+      target: production
     container_name: equilibre-api-test
     ports:
       - "${API_PORT}:3000"

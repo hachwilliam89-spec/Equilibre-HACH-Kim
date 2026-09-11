@@ -31,7 +31,9 @@ async function bootstrap() {
   // Il se passe desormais sur le document deja genere, pas avant sa creation.
   SwaggerModule.setup('api/docs', app, cleanupOpenApiDoc(document));
 
-  await app.listen(configService.get<number>('API_PORT') ?? 3000);
+  // Port interne du conteneur. API_PORT, lui, est le port publie cote hote
+  // par docker-compose ; il ne doit pas piloter l'ecoute de l'application.
+  await app.listen(configService.get<number>('PORT') ?? 3000);
 }
 
 bootstrap().catch((err) => {

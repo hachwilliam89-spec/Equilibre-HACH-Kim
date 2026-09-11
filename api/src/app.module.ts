@@ -20,16 +20,39 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const isProd = configService.get<string>('NODE_ENV') === 'production';
+        // Condition sur "development" et non sur "pas production" : les
+        // environnements test et production utilisent tous deux l'image
+        // construite avec --prod, d'ou pino-pretty (devDependency) est absent.
+        // Tester NODE_ENV !== 'production' faisait planter l'API de test au
+        // demarrage sur un transport introuvable.
+        const isDev = configService.get<string>('NODE_ENV') === 'development';
         return {
           pinoHttp: {
-            level: isProd ? 'info' : 'debug',
-            // pino-pretty n'est installe qu'en devDependency : jamais charge en prod
-            transport: isProd
-              ? undefined
-              : { target: 'pino-pretty', options: { singleLine: true } },
+            level: isDev ? 'debug' : 'info',
+            // pino-pretty n'est installe qu'en devDependency : charge uniquement
+            // en developpement, ou l'image contient les devDependencies.
+            transport: isDev
+              ? { target: 'pino-pretty', options: { singleLine: true } }
+              : undefined,
             // Jamais loguer un secret, un token ou un mot de passe en clair,
             // meme accidentellement via une requete qui echoue.
+            // Le healthcheck sonde toutes les 30s : inutile de le journaliser.
+            autoLogging: {
+              ignore: (req: { url?: string }) => req.url === '/api/health',
+            },
+            // Par defaut pino-http serialise toute la requete et toute la
+            // reponse, en-tetes Helmet compris. On ne garde que l'utile ;
+            // le detail complet des erreurs passe par AllExceptionsFilter.
+            serializers: {
+              req: (req: { id: unknown; method: string; url: string }) => ({
+                id: req.id,
+                method: req.method,
+                url: req.url,
+              }),
+              res: (res: { statusCode: number }) => ({
+                statusCode: res.statusCode,
+              }),
+            },
             redact: {
               paths: [
                 'req.headers.authorization',
