@@ -1,93 +1,165 @@
-# Equilibre-HACH-Kim
+# Equilibre
 
+Application de suivi de rééquilibrage alimentaire avec accompagnement coach.
 
+Un coach définit pour un utilisateur un plan de poids et un budget calorique
+calculé à partir de son métabolisme. L'utilisateur reçoit automatiquement ses
+pesées via une balance connectée simulée, consigne son alimentation à partir
+d'une librairie de référence, et suit son écart à la trajectoire fixée.
 
-## Getting started
+Projet fil rouge de Licence Professionnelle Développement Full Stack — UHA 4.0.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Stack
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+| Composant | Technologie |
+|---|---|
+| API | NestJS (Node.js / TypeScript), architecture hexagonale par module |
+| Base de données | MongoDB 8.0 via Mongoose |
+| Mobile | React Native (Expo) — à venir |
+| Authentification | JWT + refresh token |
+| Conteneurisation | Docker / Docker Compose |
+| Qualité | ESLint 9 (flat config) + Prettier, Husky, commitlint |
+| Tests | Jest, Supertest, Cucumber |
+| Documentation API | Swagger sur `/api/docs` |
 
-## Add your files
+## Prérequis
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+- Docker Desktop
+- Node 24 et pnpm 10.25.0 (via corepack) — uniquement pour lancer le lint et
+  les tests hors conteneur ; le reste tourne dans Docker
+
+```bash
+corepack enable
+```
+
+## Démarrage
+
+```bash
+git clone <url-du-depot>
+cd equilibre-hach-kim
+
+# Fichiers d'environnement (non versionnés)
+cp .env.example .env.dev
+cp .env.example .env.test
+
+# Générer les secrets — le schéma de validation exige 32 caractères minimum
+openssl rand -hex 32   # à reporter dans JWT_SECRET
+openssl rand -hex 32   # à reporter dans JWT_REFRESH_SECRET
+
+# Dépendances (pour le lint et les tests locaux)
+pnpm install
+pnpm --dir api install
+
+# Lancer l'environnement de développement
+pnpm docker:dev
+```
+
+Dans `.env.test`, pensez à décaler les ports (`API_PORT=3001`,
+`MONGO_PORT=27018`) et à utiliser une base distincte (`equilibre_test`), afin
+que les deux environnements puissent tourner en parallèle.
+
+Vérification :
+
+```bash
+pnpm docker:dev:ps                      # les deux conteneurs doivent être healthy
+curl -s localhost:3000/api/health       # {"status":"ok", ... "mongo":{"status":"up"}}
+```
+
+Documentation Swagger : http://localhost:3000/api/docs
+
+## Scripts
+
+| Commande | Effet |
+|---|---|
+| `pnpm docker:dev` | Construit si besoin et démarre l'environnement de développement |
+| `pnpm docker:dev:ps` | État et santé des conteneurs |
+| `pnpm docker:dev:logs` | Logs des deux services |
+| `pnpm docker:dev:logs:api` | Logs de l'API seule |
+| `pnpm docker:dev:logs:mongo` | Logs de MongoDB seul |
+| `pnpm docker:dev:down` | Arrête l'environnement de développement |
+| `pnpm docker:test` | Démarre l'environnement de test (API 3001, Mongo 27018) |
+| `pnpm docker:test:logs` | Logs de l'environnement de test |
+| `pnpm docker:test:down` | Arrête et purge l'environnement de test |
+| `pnpm docker:prod` | Démarre la production depuis l'image de la registry |
+| `pnpm docker:prod:down` | Arrête la production |
+| `pnpm lint` | Lance ESLint sur l'API |
+
+## Environnements
+
+Les trois environnements sont isolés : bases, utilisateurs, volumes et secrets
+distincts. `docker-compose.yml` contient la configuration commune et n'est
+jamais lançable seul ; chaque environnement résulte de sa fusion avec un
+fichier de surcharge.
+
+| | Développement | Test | Production |
+|---|---|---|---|
+| Base | `equilibre_dev` | `equilibre_test` | `equilibre` |
+| Stockage | volume nommé | mémoire (`tmpfs`) | volume nommé |
+| Port API | 3000 | 3001 | 3000 |
+| Mongo exposé | oui (27017) | oui (27018) | non |
+| Stage Docker | `development` (mode watch) | `production` | `production` |
+
+L'environnement de test utilise une base éphémère : chaque exécution repart
+d'une base vierge, ce qui rend les tests d'intégration déterministes sans
+code de nettoyage.
+
+## Structure
 
 ```
-cd existing_repo
-git remote add origin https://git.uha4point0.fr/UHA40/fil-rouge-2026/4.0.3/equilibre-hach-kim.git
-git branch -M main
-git push -uf origin main
+.
+├── api/                     API NestJS
+│   ├── src/
+│   │   ├── auth/            module d'authentification
+│   │   │   ├── domain/          entités et ports (aucune dépendance technique)
+│   │   │   ├── application/     cas d'usage
+│   │   │   └── infrastructure/  adaptateurs Mongoose et HTTP
+│   │   ├── config/          validation des variables d'environnement (Zod)
+│   │   ├── common/          filtres et erreurs transverses
+│   │   └── health/          endpoint de santé (Terminus)
+│   ├── Dockerfile           build multi-stage : deps, development, builder, production
+│   └── .dockerignore
+├── mobile/                  application React Native (à venir)
+├── docker-compose.yml       configuration commune
+├── docker-compose.dev.yml   surcharge développement
+├── docker-compose.test.yml  surcharge test
+├── docker-compose.prod.yml  surcharge production
+└── .env.example             modèle des fichiers d'environnement
 ```
 
-## Integrate with your tools
+Chaque module métier suit la même structure hexagonale : le domaine ne connaît
+que ses propres interfaces, les adaptateurs branchent la technique dessus. Les
+règles métier se testent en TypeScript pur, sans base de données ni mock.
 
-* [Set up project integrations](https://git.uha4point0.fr/UHA40/fil-rouge-2026/4.0.3/equilibre-hach-kim/-/settings/integrations)
+## Conventions
 
-## Collaborate with your team
+**Branches** — une branche par tâche, nommée `PRO403-X-Description` où `X` est
+le numéro du ticket. Fusion dans `develop` avec `--no-ff`, pour que le
+regroupement des commits reste visible dans l'historique.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+**Commits** — format conventional commits, vérifié automatiquement par
+commitlint au moment du commit.
 
-## Test and Deploy
+```
+feat(auth): ajoute le rafraichissement de jeton
+fix(docker): corrige le chemin du Dockerfile
+```
 
-Use the built-in continuous integration in GitLab.
+**Qualité** — Husky installe deux hooks à la racine :
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+- `pre-commit` lance ESLint et Prettier sur les fichiers TypeScript indexés
+- `commit-msg` valide le format du message
 
-***
+Un lint en échec bloque le commit.
 
-# Editing this README
+## Sécurité
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+- Aucun secret n'est versionné : les fichiers `.env.*` sont exclus, seul
+  `.env.example` est suivi
+- Les secrets JWT sont validés au démarrage (32 caractères minimum) ; une
+  configuration invalide empêche l'application de démarrer
+- Le conteneur de production tourne sous un utilisateur sans privilèges
+- En-têtes de sécurité HTTP via Helmet
+- Les journaux masquent les en-têtes d'autorisation, les cookies et les mots
+  de passe
+- En production, MongoDB n'est pas exposé : il n'est joignable que par l'API,
+  via le réseau interne Docker
