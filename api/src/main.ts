@@ -12,8 +12,30 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
-  app.use(helmet());
-  app.use('/api/docs', helmet({ contentSecurityPolicy: false }));
+  const isProduction = configService.get<string>('NODE_ENV') === 'production';
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          // Swagger UI sert ses assets depuis la meme origine.
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'img-src': ["'self'", 'data:'],
+          // upgrade-insecure-requests bascule toutes les sous-ressources en
+          // HTTPS. En HTTP local cela casse le chargement des assets de
+          // Swagger sous Safari, qui n'exempte pas localhost contrairement a
+          // Chrome : la page reste blanche. Active uniquement en production.
+          'upgrade-insecure-requests': isProduction ? [] : null,
+        },
+      },
+      // HSTS n'a de sens que derriere HTTPS. En local il est inutile, et
+      // Safari le met en cache, ce qui rend le probleme persistant meme
+      // apres correction.
+      strictTransportSecurity: isProduction,
+    }),
+  );
 
   app.setGlobalPrefix('api');
 
