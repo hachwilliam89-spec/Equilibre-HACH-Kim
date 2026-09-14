@@ -2,12 +2,14 @@ import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { LoginUseCase } from '../../application/use-cases/login.use-case';
 import { RefreshTokenUseCase } from '../../application/use-cases/refresh-token.use-case';
+import { RegisterUseCase } from '../../application/use-cases/register.use-case';
 import {
   LoginDto,
   loginSchema,
   RefreshTokenDto,
   refreshTokenSchema,
 } from './dto/login.dto';
+import { RegisterDto, registerSchema } from './dto/register.dto';
 import { ZodValidationPipe } from './dto/zod-validation.pipe';
 
 @ApiTags('auth')
@@ -16,7 +18,21 @@ export class AuthController {
   constructor(
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshTokenUseCase: RefreshTokenUseCase,
+    private readonly registerUseCase: RegisterUseCase,
   ) {}
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Creation de compte (coach ou utilisateur)' })
+  @ApiBody({ type: RegisterDto })
+  @ApiResponse({ status: 201, description: 'Compte cree' })
+  @ApiResponse({ status: 400, description: 'Donnees invalides (voir errors)' })
+  @ApiResponse({ status: 409, description: 'Email deja utilise' })
+  async register(
+    @Body(new ZodValidationPipe(registerSchema)) body: RegisterDto,
+  ) {
+    return this.registerUseCase.execute(body);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
