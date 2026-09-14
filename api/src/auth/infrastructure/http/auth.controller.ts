@@ -3,6 +3,7 @@ import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { LoginUseCase } from '../../application/use-cases/login.use-case';
 import { RefreshTokenUseCase } from '../../application/use-cases/refresh-token.use-case';
 import { RegisterUseCase } from '../../application/use-cases/register.use-case';
+import { LogoutUseCase } from '../../application/use-cases/logout.use-case';
 import {
   LoginDto,
   loginSchema,
@@ -19,6 +20,7 @@ export class AuthController {
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshTokenUseCase: RefreshTokenUseCase,
     private readonly registerUseCase: RegisterUseCase,
+    private readonly logoutUseCase: LogoutUseCase,
   ) {}
 
   @Post('register')
@@ -53,10 +55,27 @@ export class AuthController {
   @ApiOperation({ summary: "Renouvellement de l'access token" })
   @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({ status: 200, description: 'Nouvel access token' })
-  @ApiResponse({ status: 401, description: 'Refresh token invalide ou expire' })
+  @ApiResponse({
+    status: 401,
+    description: 'Refresh token invalide, expire ou revoque',
+  })
   async refresh(
     @Body(new ZodValidationPipe(refreshTokenSchema)) body: RefreshTokenDto,
   ) {
     return this.refreshTokenUseCase.execute(body.refreshToken);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Deconnexion -- revoque le refresh token' })
+  @ApiBody({ type: RefreshTokenDto })
+  @ApiResponse({
+    status: 204,
+    description: 'Deconnexion effectuee (idempotent)',
+  })
+  async logout(
+    @Body(new ZodValidationPipe(refreshTokenSchema)) body: RefreshTokenDto,
+  ) {
+    await this.logoutUseCase.execute(body.refreshToken);
   }
 }
