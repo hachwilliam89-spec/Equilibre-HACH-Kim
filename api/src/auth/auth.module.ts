@@ -28,7 +28,10 @@ import {
       { name: UserDocumentClass.name, schema: UserSchema },
       { name: RefreshTokenDocumentClass.name, schema: RefreshTokenSchema },
     ]),
-    PassportModule,
+    // .register() est indispensable : PassportModule importe nu ne fournit
+    // aucun provider (AuthModuleOptions n'existe alors nulle part dans le
+    // graphe DI), meme si on l'exporte ensuite.
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
