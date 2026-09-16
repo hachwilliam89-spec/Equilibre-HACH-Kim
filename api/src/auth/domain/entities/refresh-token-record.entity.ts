@@ -34,7 +34,6 @@ export class RefreshTokenRecord {
     return this.props.revoked;
   }
 
-  /** Valide = ni revoque, ni expire */
   isValid(): boolean {
     return !this.props.revoked && this.props.expiresAt.getTime() > Date.now();
   }

@@ -76,7 +76,6 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     }),
     AuthModule,
     HealthModule,
-    // Les modules plans et suivi viendront s'ajouter ici ensuite
   ],
   controllers: [AppController],
   providers: [
