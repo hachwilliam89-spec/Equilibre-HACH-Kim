@@ -56,9 +56,15 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Renouvellement de l'access token" })
+  @ApiOperation({
+    summary: "Renouvellement de l'access token (rotation du refresh token)",
+  })
   @ApiBody({ type: RefreshTokenDto })
-  @ApiResponse({ status: 200, description: 'Nouvel access token' })
+  @ApiResponse({
+    status: 200,
+    description:
+      "Nouvel access token et nouveau refresh token -- l'ancien est revoque",
+  })
   @ApiResponse({
     status: 401,
     description: 'Refresh token invalide, expire ou revoque',

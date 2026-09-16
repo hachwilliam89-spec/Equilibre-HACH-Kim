@@ -10,6 +10,7 @@ import type { RefreshTokenRepositoryPort } from '../../domain/ports/refresh-toke
 import { RefreshTokenRecord } from '../../domain/entities/refresh-token-record.entity';
 import { AppException } from '../../../common/errors/app-exception';
 import { hashToken } from '../../../common/security/hash-token';
+import { REFRESH_TOKEN_TTL_MS } from '../auth.constants';
 import type { EnvConfig } from '../../../config/env.schema';
 
 export interface LoginResult {
@@ -18,8 +19,6 @@ export interface LoginResult {
   role: 'coach' | 'utilisateur';
   userId: string;
 }
-
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
 @Injectable()
 export class LoginUseCase {
