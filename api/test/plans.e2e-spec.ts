@@ -118,14 +118,24 @@ describe('Plans (e2e)', () => {
     };
   };
 
+  // Dates calees sur "maintenant" (jamais figees dans le passe) : un plan
+  // dont la dateCible est deja passee est auto-termine des la premiere
+  // lecture (voir findActiveByUserId), ce qui casserait silencieusement
+  // tout test qui recree/relit un plan cense rester actif.
+  const daysFromNow = (days: number): string => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
   // Plan de base valide : -4kg sur 4 semaines = -1kg/semaine (limite haute
   // acceptee), pour un utilisateur de 1.70m (IMC cible = 78/1.7^2 ~= 27).
   const validPlanBody = (userId: string) => ({
     userId,
     poidsDepart: 82,
     poidsCible: 78,
-    dateDebut: '2026-01-01',
-    dateCible: '2026-01-29',
+    dateDebut: daysFromNow(0),
+    dateCible: daysFromNow(28),
     niveauActivite: 'sportif',
   });
 
@@ -241,7 +251,6 @@ describe('Plans (e2e)', () => {
           ...validPlanBody(userId),
           poidsDepart: 60,
           poidsCible: 45, // IMC ~= 15.6 pour 1.70m
-          dateCible: '2026-06-01',
         })
         .expect(HttpStatus.BAD_REQUEST);
     });
@@ -257,7 +266,7 @@ describe('Plans (e2e)', () => {
           ...validPlanBody(userId),
           poidsDepart: 60,
           poidsCible: 53.5, // IMC = 18.5 pour 1.70m
-          dateCible: '2026-03-01',
+          dateCible: daysFromNow(59), // ~8.4 semaines -> ~0.77kg/semaine
         })
         .expect(HttpStatus.CREATED);
     });
@@ -567,7 +576,9 @@ describe('Plans (e2e)', () => {
         .get(`/api/plans/users/${userId}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(HttpStatus.OK);
-      expect(response.body).toBeNull();
+      // Nest n'envoie pas de corps JSON "null" pour un retour null/undefined
+      // de controleur -- reponse vide, que supertest expose comme {}.
+      expect(response.body).toEqual({});
 
       const docAfter = await plansCollection(app).findOne({ _id: planId });
       expect(docAfter?.statut).toBe('termine');
