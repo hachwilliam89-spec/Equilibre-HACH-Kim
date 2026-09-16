@@ -44,23 +44,43 @@ describe('Auth (e2e)', () => {
 
   // Cree un compte coach et connecte-le, pour les tests qui ont besoin d'un
   // couple access/refresh token valide sans que ce ne soit l'objet du test.
-  const registerAndLogin = async (): Promise<{
+  // Prend l'app en parametre (plutot que de fermer sur la variable `app`
+  // du describe englobant) : POST /auth/login est limite a 5 tentatives
+  // par minute et par IP, donc chaque bloc qui appelle cette fonction
+  // plusieurs fois a besoin de sa propre instance Nest pour ne pas epuiser
+  // le quota d'un autre bloc de tests.
+  const registerAndLogin = async (
+    testApp: INestApplication<App>,
+  ): Promise<{
     accessToken: string;
     refreshToken: string;
   }> => {
     const email = uniqueEmail();
     const password = 'password123';
-    await request(app.getHttpServer())
+    await request(testApp.getHttpServer())
       .post('/api/auth/register')
       .send({ email, password, role: 'coach' })
       .expect(HttpStatus.CREATED);
 
-    const response = await request(app.getHttpServer())
+    const response = await request(testApp.getHttpServer())
       .post('/api/auth/login')
       .send({ email, password })
       .expect(HttpStatus.OK);
 
     return response.body as { accessToken: string; refreshToken: string };
+  };
+
+  // Cree une instance Nest independante avec son propre etat de throttling
+  // en memoire, pour les blocs de tests qui appellent login() plusieurs
+  // fois et ne doivent pas partager leur quota avec le reste du fichier.
+  const createIsolatedApp = async (): Promise<INestApplication<App>> => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    const isolatedApp = moduleFixture.createNestApplication();
+    isolatedApp.setGlobalPrefix('api');
+    await isolatedApp.init();
+    return isolatedApp;
   };
 
   describe('POST /api/auth/register', () => {
@@ -159,10 +179,25 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /api/auth/refresh', () => {
-    it('renouvelle access et refresh token (rotation)', async () => {
-      const { refreshToken } = await registerAndLogin();
+    // Instance dediee : 3 des 4 tests ci-dessous se connectent, ce qui
+    // resterait sous la limite de 5/min sur l'app partagee du describe
+    // racine, mais la couplerait inutilement aux tests register/login
+    // executes avant elle -- un test ajoute plus tard ailleurs dans le
+    // fichier ne doit pas pouvoir faire echouer celui-ci.
+    let refreshApp: INestApplication<App>;
 
-      const response = await request(app.getHttpServer())
+    beforeAll(async () => {
+      refreshApp = await createIsolatedApp();
+    });
+
+    afterAll(async () => {
+      await refreshApp.close();
+    });
+
+    it('renouvelle access et refresh token (rotation)', async () => {
+      const { refreshToken } = await registerAndLogin(refreshApp);
+
+      const response = await request(refreshApp.getHttpServer())
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(HttpStatus.OK);
@@ -179,9 +214,9 @@ describe('Auth (e2e)', () => {
     });
 
     it("rejette la reutilisation d'un refresh token deja consomme (rejeu)", async () => {
-      const { refreshToken } = await registerAndLogin();
+      const { refreshToken } = await registerAndLogin(refreshApp);
 
-      await request(app.getHttpServer())
+      await request(refreshApp.getHttpServer())
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(HttpStatus.OK);
@@ -189,7 +224,7 @@ describe('Auth (e2e)', () => {
       // Le meme refresh token, deja tourne une premiere fois, doit
       // maintenant etre refuse -- la rotation ne sert a rien si un jeton
       // vole reste utilisable apres avoir ete legitimement renouvele.
-      const response = await request(app.getHttpServer())
+      const response = await request(refreshApp.getHttpServer())
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(HttpStatus.UNAUTHORIZED);
@@ -199,16 +234,16 @@ describe('Auth (e2e)', () => {
     });
 
     it('un seul de deux renouvellements simultanes avec le meme refresh token reussit (concurrence)', async () => {
-      const { refreshToken } = await registerAndLogin();
+      const { refreshToken } = await registerAndLogin(refreshApp);
 
       // Deux requetes concurrentes avec le meme refresh token (ex: deux
       // onglets, un retry reseau) : la revocation doit etre atomique, donc
       // une seule doit reussir, l'autre doit echouer -- jamais les deux.
       const [first, second] = await Promise.all([
-        request(app.getHttpServer())
+        request(refreshApp.getHttpServer())
           .post('/api/auth/refresh')
           .send({ refreshToken }),
-        request(app.getHttpServer())
+        request(refreshApp.getHttpServer())
           .post('/api/auth/refresh')
           .send({ refreshToken }),
       ]);
@@ -218,7 +253,7 @@ describe('Auth (e2e)', () => {
     });
 
     it('rejette un refresh token invalide', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(refreshApp.getHttpServer())
         .post('/api/auth/refresh')
         .send({ refreshToken: 'ceci-nest-pas-un-jwt' })
         .expect(HttpStatus.UNAUTHORIZED);
@@ -229,29 +264,40 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /api/auth/logout', () => {
-    it('revoque le refresh token : un renouvellement ulterieur echoue', async () => {
-      const { refreshToken } = await registerAndLogin();
+    // Instance dediee, meme raison que POST /api/auth/refresh ci-dessus.
+    let logoutApp: INestApplication<App>;
 
-      await request(app.getHttpServer())
+    beforeAll(async () => {
+      logoutApp = await createIsolatedApp();
+    });
+
+    afterAll(async () => {
+      await logoutApp.close();
+    });
+
+    it('revoque le refresh token : un renouvellement ulterieur echoue', async () => {
+      const { refreshToken } = await registerAndLogin(logoutApp);
+
+      await request(logoutApp.getHttpServer())
         .post('/api/auth/logout')
         .send({ refreshToken })
         .expect(HttpStatus.NO_CONTENT);
 
-      await request(app.getHttpServer())
+      await request(logoutApp.getHttpServer())
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(HttpStatus.UNAUTHORIZED);
     });
 
     it("est idempotent : deconnecter deux fois ne renvoie pas d'erreur", async () => {
-      const { refreshToken } = await registerAndLogin();
+      const { refreshToken } = await registerAndLogin(logoutApp);
 
-      await request(app.getHttpServer())
+      await request(logoutApp.getHttpServer())
         .post('/api/auth/logout')
         .send({ refreshToken })
         .expect(HttpStatus.NO_CONTENT);
 
-      await request(app.getHttpServer())
+      await request(logoutApp.getHttpServer())
         .post('/api/auth/logout')
         .send({ refreshToken })
         .expect(HttpStatus.NO_CONTENT);
@@ -266,12 +312,7 @@ describe('Auth (e2e)', () => {
     let throttleApp: INestApplication<App>;
 
     beforeAll(async () => {
-      const moduleFixture: TestingModule = await Test.createTestingModule({
-        imports: [AppModule],
-      }).compile();
-      throttleApp = moduleFixture.createNestApplication();
-      throttleApp.setGlobalPrefix('api');
-      await throttleApp.init();
+      throttleApp = await createIsolatedApp();
     });
 
     afterAll(async () => {
