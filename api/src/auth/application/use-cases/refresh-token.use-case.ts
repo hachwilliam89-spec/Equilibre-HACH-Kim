@@ -79,13 +79,21 @@ export class RefreshTokenUseCase {
     const accessToken = this.jwtService.sign(newPayload, {
       expiresIn: '15m',
     });
-    const newRefreshToken = this.jwtService.sign(newPayload, {
-      expiresIn: '7d',
-      secret: refreshSecret,
-    });
+
+    // jti unique par jeton, voir LoginUseCase pour le detail : sans lui, deux
+    // rotations dans la meme seconde pour le meme utilisateur produiraient
+    // un JWT identique.
+    const newRefreshTokenId = randomUUID();
+    const newRefreshToken = this.jwtService.sign(
+      { ...newPayload, jti: newRefreshTokenId },
+      {
+        expiresIn: '7d',
+        secret: refreshSecret,
+      },
+    );
 
     const newRecord = RefreshTokenRecord.create({
-      id: randomUUID(),
+      id: newRefreshTokenId,
       userId: user.id,
       tokenHash: hashToken(newRefreshToken),
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
