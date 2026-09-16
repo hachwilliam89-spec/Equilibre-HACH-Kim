@@ -40,6 +40,22 @@ export class RegisterUseCase {
       );
     }
 
+    // Un utilisateur doit etre rattache a un coach existant, pas a une
+    // simple chaine arbitraire : le DTO ne valide que la forme de coachId,
+    // pas son existence ni son role.
+    if (input.role === 'utilisateur') {
+      const coach = input.coachId
+        ? await this.userRepository.findById(input.coachId)
+        : null;
+      if (!coach || coach.role !== 'coach') {
+        throw new AppException(
+          'invalid-coach',
+          'Coach introuvable',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const saltRounds = this.configService.get('BCRYPT_SALT_ROUNDS', {
       infer: true,
     });
