@@ -1,10 +1,12 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { Types } from 'mongoose';
 import { USER_REPOSITORY } from '../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../domain/ports/user-repository.port';
 import { User } from '../../domain/entities/user.entity';
 import { AppException } from '../../../common/errors/app-exception';
+import type { EnvConfig } from '../../../config/env.schema';
 
 export interface RegisterInput {
   email: string;
@@ -25,6 +27,7 @@ export class RegisterUseCase {
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepositoryPort,
+    private readonly configService: ConfigService<EnvConfig, true>,
   ) {}
 
   async execute(input: RegisterInput): Promise<RegisterResult> {
@@ -37,7 +40,10 @@ export class RegisterUseCase {
       );
     }
 
-    const passwordHash = await bcrypt.hash(input.password, 10);
+    const saltRounds = this.configService.get('BCRYPT_SALT_ROUNDS', {
+      infer: true,
+    });
+    const passwordHash = await bcrypt.hash(input.password, saltRounds);
 
     // L'id doit etre un ObjectId Mongo valide : le repository fait un
     // upsert par _id (voir mongoose-user.repository.ts), pas une insertion
@@ -58,7 +64,7 @@ export class RegisterUseCase {
       createdAt: new Date(),
     });
 
-    const saved = await this.userRepository.save(user);
+    const saved = await this.userRepository.create(user);
     return { userId: saved.id };
   }
 }

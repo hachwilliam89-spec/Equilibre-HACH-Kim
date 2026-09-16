@@ -31,6 +31,11 @@ export const envSchema = z.object({
   JWT_REFRESH_SECRET: z
     .string()
     .min(32, 'JWT_REFRESH_SECRET doit contenir au moins 32 caractères'),
+
+  // Cout de hachage bcrypt (nombre de tours de sel). 10 est la valeur par
+  // defaut recommandee ; configurable pour l'augmenter en prod sans toucher
+  // au code.
+  BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(10),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

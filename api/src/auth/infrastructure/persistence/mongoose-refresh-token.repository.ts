@@ -20,7 +20,7 @@ export class MongooseRefreshTokenRepository implements RefreshTokenRepositoryPor
     const doc = await this.model.findByIdAndUpdate(
       props.id,
       { $set: props },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
     return this.toDomain(doc);
   }
