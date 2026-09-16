@@ -42,6 +42,27 @@ describe('Auth (e2e)', () => {
   // direct a la base pour la nettoyer entre les tests.
   const uniqueEmail = () => `test-${randomUUID()}@equilibre.app`;
 
+  // Cree un compte coach et connecte-le, pour les tests qui ont besoin d'un
+  // couple access/refresh token valide sans que ce ne soit l'objet du test.
+  const registerAndLogin = async (): Promise<{
+    accessToken: string;
+    refreshToken: string;
+  }> => {
+    const email = uniqueEmail();
+    const password = 'password123';
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({ email, password, role: 'coach' })
+      .expect(HttpStatus.CREATED);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password })
+      .expect(HttpStatus.OK);
+
+    return response.body as { accessToken: string; refreshToken: string };
+  };
+
   describe('POST /api/auth/register', () => {
     it('cree un compte coach et renvoie son id', async () => {
       const response = await request(app.getHttpServer())
@@ -134,6 +155,146 @@ describe('Auth (e2e)', () => {
       // Un vrai JWT signe a 3 segments (header.payload.signature) ; la
       // signature elle-meme n'a pas besoin d'etre revalidee ici.
       expect(body.accessToken.split('.')).toHaveLength(3);
+    });
+  });
+
+  describe('POST /api/auth/refresh', () => {
+    it('renouvelle access et refresh token (rotation)', async () => {
+      const { refreshToken } = await registerAndLogin();
+
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(HttpStatus.OK);
+
+      const body = response.body as {
+        accessToken: string;
+        refreshToken: string;
+      };
+      expect(typeof body.accessToken).toBe('string');
+      expect(typeof body.refreshToken).toBe('string');
+      // La rotation doit emettre un nouveau refresh token, distinct de
+      // l'ancien -- pas juste un nouvel access token.
+      expect(body.refreshToken).not.toBe(refreshToken);
+    });
+
+    it("rejette la reutilisation d'un refresh token deja consomme (rejeu)", async () => {
+      const { refreshToken } = await registerAndLogin();
+
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(HttpStatus.OK);
+
+      // Le meme refresh token, deja tourne une premiere fois, doit
+      // maintenant etre refuse -- la rotation ne sert a rien si un jeton
+      // vole reste utilisable apres avoir ete legitimement renouvele.
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(HttpStatus.UNAUTHORIZED);
+
+      const body = response.body as { type: string };
+      expect(body.type).toContain('invalid-refresh-token');
+    });
+
+    it('un seul de deux renouvellements simultanes avec le meme refresh token reussit (concurrence)', async () => {
+      const { refreshToken } = await registerAndLogin();
+
+      // Deux requetes concurrentes avec le meme refresh token (ex: deux
+      // onglets, un retry reseau) : la revocation doit etre atomique, donc
+      // une seule doit reussir, l'autre doit echouer -- jamais les deux.
+      const [first, second] = await Promise.all([
+        request(app.getHttpServer())
+          .post('/api/auth/refresh')
+          .send({ refreshToken }),
+        request(app.getHttpServer())
+          .post('/api/auth/refresh')
+          .send({ refreshToken }),
+      ]);
+
+      const statuses = [first.status, second.status].sort((a, b) => a - b);
+      expect(statuses).toEqual([HttpStatus.OK, HttpStatus.UNAUTHORIZED]);
+    });
+
+    it('rejette un refresh token invalide', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: 'ceci-nest-pas-un-jwt' })
+        .expect(HttpStatus.UNAUTHORIZED);
+
+      const body = response.body as { type: string };
+      expect(body.type).toContain('invalid-refresh-token');
+    });
+  });
+
+  describe('POST /api/auth/logout', () => {
+    it('revoque le refresh token : un renouvellement ulterieur echoue', async () => {
+      const { refreshToken } = await registerAndLogin();
+
+      await request(app.getHttpServer())
+        .post('/api/auth/logout')
+        .send({ refreshToken })
+        .expect(HttpStatus.NO_CONTENT);
+
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(HttpStatus.UNAUTHORIZED);
+    });
+
+    it("est idempotent : deconnecter deux fois ne renvoie pas d'erreur", async () => {
+      const { refreshToken } = await registerAndLogin();
+
+      await request(app.getHttpServer())
+        .post('/api/auth/logout')
+        .send({ refreshToken })
+        .expect(HttpStatus.NO_CONTENT);
+
+      await request(app.getHttpServer())
+        .post('/api/auth/logout')
+        .send({ refreshToken })
+        .expect(HttpStatus.NO_CONTENT);
+    });
+  });
+
+  describe('Limitation des requetes sur /api/auth/login', () => {
+    // Instance Nest dediee : le throttler garde ses compteurs en memoire
+    // par instance d'application, donc partager l'app des describe
+    // precedents ferait dependre ce test du nombre de connexions deja
+    // tentees ailleurs dans le fichier.
+    let throttleApp: INestApplication<App>;
+
+    beforeAll(async () => {
+      const moduleFixture: TestingModule = await Test.createTestingModule({
+        imports: [AppModule],
+      }).compile();
+      throttleApp = moduleFixture.createNestApplication();
+      throttleApp.setGlobalPrefix('api');
+      await throttleApp.init();
+    });
+
+    afterAll(async () => {
+      await throttleApp.close();
+    });
+
+    it('bloque au-dela de 5 tentatives de connexion par minute et par IP', async () => {
+      const email = uniqueEmail();
+      const attempt = () =>
+        request(throttleApp.getHttpServer())
+          .post('/api/auth/login')
+          .send({ email, password: 'peu-importe-le-mot-de-passe' });
+
+      const responses = [];
+      for (let i = 0; i < 6; i += 1) {
+        // Sequentiel et non Promise.all : le but est de depasser la limite
+        // de 5/min, pas de tester une race condition ici.
+        responses.push(await attempt());
+      }
+
+      const statuses = responses.map((response) => response.status);
+      expect(statuses.slice(0, 5)).not.toContain(HttpStatus.TOO_MANY_REQUESTS);
+      expect(statuses[5]).toBe(HttpStatus.TOO_MANY_REQUESTS);
     });
   });
 });
