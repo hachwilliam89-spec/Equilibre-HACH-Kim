@@ -6,6 +6,12 @@
 
 export type Role = 'coach' | 'utilisateur';
 
+// Verification de forme suffisante pour une entite domaine (la verification
+// applicative complete, avec message d'erreur utilisateur, est deja faite en
+// amont par le DTO Zod -- ceci est un second filet de securite au niveau
+// domaine, pas la validation primaire).
+const EMAIL_SHAPE_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export interface UserProps {
   id: string;
   email: string;
@@ -24,7 +30,7 @@ export class User {
   private constructor(private readonly props: UserProps) {}
 
   static create(props: UserProps): User {
-    if (!props.email.includes('@')) {
+    if (!EMAIL_SHAPE_REGEX.test(props.email)) {
       throw new Error('Email invalide');
     }
     if (props.role === 'utilisateur' && !props.coachId) {
