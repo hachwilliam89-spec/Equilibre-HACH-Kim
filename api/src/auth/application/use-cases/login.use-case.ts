@@ -1,7 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import { USER_REPOSITORY } from '../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../domain/ports/user-repository.port';
 import { REFRESH_TOKEN_REPOSITORY } from '../../domain/ports/refresh-token-repository.port';
@@ -55,7 +55,7 @@ export class LoginUseCase {
 
     // Trace le refresh token emis, pour pouvoir le revoquer plus tard (logout).
     const record = RefreshTokenRecord.create({
-      id: new Types.ObjectId().toHexString(),
+      id: randomUUID(),
       userId: user.id,
       tokenHash: hashToken(refreshToken),
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),

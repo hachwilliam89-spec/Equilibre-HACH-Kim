@@ -1,10 +1,15 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type RefreshTokenDocument = RefreshTokenDocumentClass & Document;
+export type RefreshTokenDocument = RefreshTokenDocumentClass &
+  Omit<Document, '_id'>;
 
-@Schema({ timestamps: true, collection: 'refresh_tokens' })
+@Schema({ timestamps: true, collection: 'refresh_tokens', _id: false })
 export class RefreshTokenDocumentClass {
+  // Meme raison que UserDocumentClass : id applicatif opaque, pas un ObjectId.
+  @Prop({ type: String })
+  _id: string;
+
   @Prop({ required: true })
   userId: string;
 

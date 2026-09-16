@@ -1,10 +1,15 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type UserDocument = UserDocumentClass & Document;
+export type UserDocument = UserDocumentClass & Omit<Document, '_id'>;
 
-@Schema({ timestamps: true, collection: 'users' })
+@Schema({ timestamps: true, collection: 'users', _id: false })
 export class UserDocumentClass {
+  // Id opaque genere par l'application (crypto.randomUUID), pas un
+  // ObjectId Mongo : desactive donc la generation automatique ci-dessus.
+  @Prop({ type: String })
+  _id: string;
+
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   email: string;
 
