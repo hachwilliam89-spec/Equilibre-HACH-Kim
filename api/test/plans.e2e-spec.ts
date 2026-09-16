@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { HttpStatus, INestApplication } from '@nestjs/common';
 import { getConnectionToken } from '@nestjs/mongoose';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { Collection, Connection } from 'mongoose';
 import request from 'supertest';
@@ -40,6 +41,19 @@ describe('Plans (e2e)', () => {
     sexe?: 'homme' | 'femme';
   }
 
+  // Emet un access token valide directement via le JwtService de l'appli
+  // (meme secret, meme forme de payload que LoginUseCase), sans passer par
+  // POST /api/auth/login -- cette route est deliberement limitee a 5
+  // tentatives/minute/IP (anti brute-force, voir auth.controller.ts) et la
+  // plupart des tests de ce fichier n'ont besoin que d'un token valide, pas
+  // de retester le login lui-meme (deja couvert par auth.e2e-spec.ts).
+  const mintAccessToken = (
+    testApp: INestApplication<App>,
+    userId: string,
+    role: 'coach' | 'utilisateur',
+  ): string =>
+    testApp.get(JwtService).sign({ sub: userId, role }, { expiresIn: '15m' });
+
   const registerAndLoginCoach = async (
     testApp: INestApplication<App>,
   ): Promise<{ coachId: string; accessToken: string }> => {
@@ -50,14 +64,11 @@ describe('Plans (e2e)', () => {
       .send({ email, password, role: 'coach' })
       .expect(HttpStatus.CREATED);
 
-    const loginResponse = await request(testApp.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email, password })
-      .expect(HttpStatus.OK);
+    const coachId = (registerResponse.body as { userId: string }).userId;
 
     return {
-      coachId: (registerResponse.body as { userId: string }).userId,
-      accessToken: (loginResponse.body as { accessToken: string }).accessToken,
+      coachId,
+      accessToken: mintAccessToken(testApp, coachId, 'coach'),
     };
   };
 
@@ -82,35 +93,28 @@ describe('Plans (e2e)', () => {
     return (response.body as { userId: string }).userId;
   };
 
-  const loginAs = async (
-    testApp: INestApplication<App>,
-    email: string,
-    password: string,
-  ): Promise<string> => {
-    const response = await request(testApp.getHttpServer())
-      .post('/api/auth/login')
-      .send({ email, password })
-      .expect(HttpStatus.OK);
-    return (response.body as { accessToken: string }).accessToken;
-  };
-
-  // Utilisateur enregistre + connecte en une fois, pour les tests de
-  // consultation (GET /plans/me) qui ont besoin de son propre token.
+  // Utilisateur enregistre + son token, pour les tests de consultation
+  // (GET /plans/me) qui ont besoin de leur propre token -- meme raisonnement
+  // que mintAccessToken ci-dessus, pas de passage par POST /api/auth/login.
   const registerAndLoginUtilisateur = async (
     testApp: INestApplication<App>,
     coachId: string,
     profile: RegisterProfile = { tailleCm: 170, age: 30, sexe: 'femme' },
   ): Promise<{ userId: string; accessToken: string }> => {
-    const email = uniqueEmail();
-    const password = 'password123';
     const registerResponse = await request(testApp.getHttpServer())
       .post('/api/auth/register')
-      .send({ email, password, role: 'utilisateur', coachId, ...profile })
+      .send({
+        email: uniqueEmail(),
+        password: 'password123',
+        role: 'utilisateur',
+        coachId,
+        ...profile,
+      })
       .expect(HttpStatus.CREATED);
-    const accessToken = await loginAs(testApp, email, password);
+    const userId = (registerResponse.body as { userId: string }).userId;
     return {
-      userId: (registerResponse.body as { userId: string }).userId,
-      accessToken,
+      userId,
+      accessToken: mintAccessToken(testApp, userId, 'utilisateur'),
     };
   };
 
@@ -140,6 +144,24 @@ describe('Plans (e2e)', () => {
     statut: 'actif' | 'termine' | 'annule';
   }
 
+  // Forme du corps JSON renvoye par l'API (PlanProps serialise) : `id`, pas
+  // `_id` -- distinct de PlanRow (document Mongo brut) utilise pour les
+  // assertions directes en base.
+  interface PlanResponseBody {
+    id: string;
+    userId: string;
+    coachId: string;
+    poidsDepart: number;
+    poidsCible: number;
+    dateDebut: string;
+    dateCible: string;
+    imcCible: number;
+    niveauActivite: string;
+    budgetCalorique: number;
+    budgetPlafonneAuBmr: boolean;
+    statut: 'actif' | 'termine' | 'annule';
+  }
+
   const plansCollection = (
     testApp: INestApplication<App>,
   ): Collection<PlanRow> =>
@@ -156,11 +178,11 @@ describe('Plans (e2e)', () => {
         .send(validPlanBody(userId))
         .expect(HttpStatus.CREATED);
 
-      const body = response.body as PlanRow;
+      const body = response.body as PlanResponseBody;
       expect(body.statut).toBe('actif');
       expect(body.imcCible).toBeCloseTo(78 / 1.7 ** 2, 2);
 
-      const doc = await plansCollection(app).findOne({ _id: body._id });
+      const doc = await plansCollection(app).findOne({ _id: body.id });
       expect(doc).not.toBeNull();
       expect(doc?.userId).toBe(userId);
       expect(doc?.coachId).toBe(coachId);
@@ -255,7 +277,7 @@ describe('Plans (e2e)', () => {
           dateCible: '2026-02-26', // 8 semaines, 1kg/semaine
         })
         .expect(HttpStatus.CREATED);
-      expect((response.body as PlanRow).imcCible).toBeGreaterThan(30);
+      expect((response.body as PlanResponseBody).imcCible).toBeGreaterThan(30);
     });
 
     it('refuse un rythme de perte trop rapide', async () => {
@@ -333,8 +355,10 @@ describe('Plans (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ ...validPlanBody(userId), budgetCalorique: 1600 })
         .expect(HttpStatus.CREATED);
-      expect((response.body as PlanRow).budgetCalorique).toBe(1600);
-      expect((response.body as PlanRow).budgetPlafonneAuBmr).toBe(false);
+      expect((response.body as PlanResponseBody).budgetCalorique).toBe(1600);
+      expect((response.body as PlanResponseBody).budgetPlafonneAuBmr).toBe(
+        false,
+      );
     });
 
     it('retient le budget du coach plutot que la suggestion automatique', async () => {
@@ -346,7 +370,7 @@ describe('Plans (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ ...validPlanBody(userId), budgetCalorique: 2000 })
         .expect(HttpStatus.CREATED);
-      expect((response.body as PlanRow).budgetCalorique).toBe(2000);
+      expect((response.body as PlanResponseBody).budgetCalorique).toBe(2000);
     });
 
     it('plafonne le budget suggere au BMR quand le calcul brut tombe en dessous', async () => {
@@ -369,7 +393,7 @@ describe('Plans (e2e)', () => {
           niveauActivite: 'sedentaire',
         })
         .expect(HttpStatus.CREATED);
-      const body = response.body as PlanRow;
+      const body = response.body as PlanResponseBody;
       expect(body.budgetPlafonneAuBmr).toBe(true);
     });
 
@@ -401,7 +425,7 @@ describe('Plans (e2e)', () => {
         .expect(HttpStatus.CREATED);
 
       await request(app.getHttpServer())
-        .post(`/api/plans/${(created.body as PlanRow)._id}/cancel`)
+        .post(`/api/plans/${(created.body as PlanResponseBody).id}/cancel`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(HttpStatus.OK);
 
@@ -434,7 +458,7 @@ describe('Plans (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .send(validPlanBody(userId))
         .expect(HttpStatus.CREATED);
-      const planId = (created.body as PlanRow)._id;
+      const planId = (created.body as PlanResponseBody).id;
 
       await request(app.getHttpServer())
         .post(`/api/plans/${planId}/cancel`)
@@ -457,7 +481,7 @@ describe('Plans (e2e)', () => {
       const coachB = await registerAndLoginCoach(app);
 
       await request(app.getHttpServer())
-        .post(`/api/plans/${(created.body as PlanRow)._id}/cancel`)
+        .post(`/api/plans/${(created.body as PlanResponseBody).id}/cancel`)
         .set('Authorization', `Bearer ${coachB.accessToken}`)
         .expect(HttpStatus.FORBIDDEN);
     });
@@ -479,7 +503,7 @@ describe('Plans (e2e)', () => {
         .get('/api/plans/me')
         .set('Authorization', `Bearer ${userToken}`)
         .expect(HttpStatus.OK);
-      expect((response.body as PlanRow).userId).toBe(userId);
+      expect((response.body as PlanResponseBody).userId).toBe(userId);
     });
 
     it("un coach consulte le plan d'un utilisateur rattache", async () => {
@@ -496,7 +520,7 @@ describe('Plans (e2e)', () => {
         .get(`/api/plans/users/${userId}`)
         .set('Authorization', `Bearer ${coachToken}`)
         .expect(HttpStatus.OK);
-      expect((response.body as PlanRow).userId).toBe(userId);
+      expect((response.body as PlanResponseBody).userId).toBe(userId);
     });
 
     it("refuse a un coach la consultation du plan d'un utilisateur non rattache", async () => {
