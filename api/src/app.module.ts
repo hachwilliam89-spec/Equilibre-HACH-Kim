@@ -7,6 +7,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { PlansModule } from './plans/plans.module';
 import { HealthModule } from './health/health.module';
 import { validateEnv } from './config/env.schema';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -76,6 +77,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
       }),
     }),
     AuthModule,
+    PlansModule,
     HealthModule,
     // Limite globale par IP, filet de securite general contre l'abus/DoS.
     // Les routes sensibles (ex: login) resserrent cette limite via @Throttle.
