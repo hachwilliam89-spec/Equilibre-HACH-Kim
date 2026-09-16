@@ -30,8 +30,17 @@ export class MongooseRefreshTokenRepository implements RefreshTokenRepositoryPor
     return doc ? this.toDomain(doc) : null;
   }
 
-  async revokeByTokenHash(tokenHash: string): Promise<void> {
-    await this.model.updateOne({ tokenHash }, { $set: { revoked: true } });
+  async revokeByTokenHash(tokenHash: string): Promise<boolean> {
+    // Operation atomique "revoque uniquement si encore valide" : le filtre
+    // (revoked: false, expiresAt futur) et la mise a jour sont executes en
+    // une seule requete Mongo, donc deux requetes concurrentes sur le meme
+    // tokenHash ne peuvent pas toutes les deux reussir -- une seule modifie
+    // le document, l'autre voit modifiedCount === 0.
+    const result = await this.model.updateOne(
+      { tokenHash, revoked: false, expiresAt: { $gt: new Date() } },
+      { $set: { revoked: true } },
+    );
+    return result.modifiedCount === 1;
   }
 
   private toDomain(doc: RefreshTokenDocument): RefreshTokenRecord {

@@ -53,16 +53,25 @@ export class LoginUseCase {
 
     const payload = { sub: user.id, role: user.role };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+
+    // jti unique par jeton : iat a une granularite de la seconde, donc sans
+    // jti deux emissions dans la meme seconde pour le meme utilisateur
+    // produiraient un JWT strictement identique (meme payload, meme
+    // signature). Reutilise cet id comme _id du RefreshTokenRecord.
+    const refreshTokenId = randomUUID();
     // Secret distinct de l'access token (JWT_REFRESH_SECRET) : la fuite de
     // l'un des deux secrets ne compromet pas l'autre jeton.
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: '7d',
-      secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
-    });
+    const refreshToken = this.jwtService.sign(
+      { ...payload, jti: refreshTokenId },
+      {
+        expiresIn: '7d',
+        secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
+      },
+    );
 
     // Trace le refresh token emis, pour pouvoir le revoquer plus tard (logout).
     const record = RefreshTokenRecord.create({
-      id: randomUUID(),
+      id: refreshTokenId,
       userId: user.id,
       tokenHash: hashToken(refreshToken),
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),

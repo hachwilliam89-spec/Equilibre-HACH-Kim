@@ -44,13 +44,16 @@ export class RefreshTokenUseCase {
       );
     }
 
-    // Verifie que ce token n'a pas ete revoque (logout) depuis son emission --
-    // la seule verification de signature JWT ne suffit pas, un token
-    // techniquement valide mais revoque doit etre rejete.
+    // Consomme l'ancien refresh token de facon atomique : la revocation
+    // n'a lieu que s'il est encore valide (ni deja revoque, ni expire), et
+    // on verifie qu'elle a reellement eu lieu. Un simple "lire puis
+    // revoquer" laisserait une fenetre ou deux requetes concurrentes avec
+    // le meme token passeraient toutes les deux le controle avant que l'une
+    // des deux ne le revoque -- ici, une seule des deux peut reussir.
     const oldTokenHash = hashToken(refreshToken);
-    const record =
-      await this.refreshTokenRepository.findByTokenHash(oldTokenHash);
-    if (!record || !record.isValid()) {
+    const wasRevoked =
+      await this.refreshTokenRepository.revokeByTokenHash(oldTokenHash);
+    if (!wasRevoked) {
       throw new AppException(
         'invalid-refresh-token',
         'Refresh token invalide ou expire',
@@ -67,11 +70,6 @@ export class RefreshTokenUseCase {
       );
     }
 
-    // Rotation : l'ancien refresh token est revoque immediatement et remplace
-    // par un nouveau. S'il est rejoue plus tard (vol/fuite), il echouera au
-    // lieu de rester valide jusqu'a expiration naturelle (7 jours).
-    await this.refreshTokenRepository.revokeByTokenHash(oldTokenHash);
-
     const newPayload = { sub: user.id, role: user.role };
     const refreshSecret = this.configService.get('JWT_REFRESH_SECRET', {
       infer: true,
@@ -79,13 +77,21 @@ export class RefreshTokenUseCase {
     const accessToken = this.jwtService.sign(newPayload, {
       expiresIn: '15m',
     });
-    const newRefreshToken = this.jwtService.sign(newPayload, {
-      expiresIn: '7d',
-      secret: refreshSecret,
-    });
+
+    // jti unique par jeton, voir LoginUseCase pour le detail : sans lui, deux
+    // rotations dans la meme seconde pour le meme utilisateur produiraient
+    // un JWT identique.
+    const newRefreshTokenId = randomUUID();
+    const newRefreshToken = this.jwtService.sign(
+      { ...newPayload, jti: newRefreshTokenId },
+      {
+        expiresIn: '7d',
+        secret: refreshSecret,
+      },
+    );
 
     const newRecord = RefreshTokenRecord.create({
-      id: randomUUID(),
+      id: newRefreshTokenId,
       userId: user.id,
       tokenHash: hashToken(newRefreshToken),
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),

@@ -12,7 +12,14 @@ export const registerSchema = z
       .min(8, {
         message: 'Le mot de passe doit contenir au moins 8 caracteres',
       })
-      .describe('Mot de passe (8 caracteres minimum)'),
+      // bcrypt ignore silencieusement tout octet au-dela du 72e : deux mots
+      // de passe partageant les memes 72 premiers octets produiraient le
+      // meme hash. On rejette explicitement plutot que de tronquer en
+      // silence.
+      .refine((value) => Buffer.byteLength(value, 'utf8') <= 72, {
+        message: 'Le mot de passe ne doit pas depasser 72 octets',
+      })
+      .describe('Mot de passe (8 a 72 octets)'),
     role: z.enum(['coach', 'utilisateur']).describe('Role du compte'),
     coachId: z
       .string()

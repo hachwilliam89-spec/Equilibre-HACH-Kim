@@ -1,7 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import { USER_REPOSITORY } from '../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../domain/ports/user-repository.port';
 import { User } from '../../domain/entities/user.entity';
@@ -40,15 +40,30 @@ export class RegisterUseCase {
       );
     }
 
+    // Un utilisateur doit etre rattache a un coach existant, pas a une
+    // simple chaine arbitraire : le DTO ne valide que la forme de coachId,
+    // pas son existence ni son role.
+    if (input.role === 'utilisateur') {
+      const coach = input.coachId
+        ? await this.userRepository.findById(input.coachId)
+        : null;
+      if (!coach || coach.role !== 'coach') {
+        throw new AppException(
+          'invalid-coach',
+          'Coach introuvable',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
     const saltRounds = this.configService.get('BCRYPT_SALT_ROUNDS', {
       infer: true,
     });
     const passwordHash = await bcrypt.hash(input.password, saltRounds);
 
-    // L'id doit etre un ObjectId Mongo valide : le repository fait un
-    // upsert par _id (voir mongoose-user.repository.ts), pas une insertion
-    // auto-generee.
-    const id = new Types.ObjectId().toHexString();
+    // Id opaque genere par l'application, pas un ObjectId Mongo (voir
+    // user.schema.ts : _id est stocke comme une simple chaine).
+    const id = randomUUID();
 
     // User.create() applique deja la regle "utilisateur => coachId requis"
     // (deuxieme filet de securite, en plus de la validation Zod du DTO).
