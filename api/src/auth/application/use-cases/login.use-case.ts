@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +10,7 @@ import type { RefreshTokenRepositoryPort } from '../../domain/ports/refresh-toke
 import { RefreshTokenRecord } from '../../domain/entities/refresh-token-record.entity';
 import { AppException } from '../../../common/errors/app-exception';
 import { hashToken } from '../../../common/security/hash-token';
+import type { EnvConfig } from '../../../config/env.schema';
 
 export interface LoginResult {
   accessToken: string;
@@ -27,6 +29,7 @@ export class LoginUseCase {
     @Inject(REFRESH_TOKEN_REPOSITORY)
     private readonly refreshTokenRepository: RefreshTokenRepositoryPort,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService<EnvConfig, true>,
   ) {}
 
   async execute(email: string, password: string): Promise<LoginResult> {
@@ -51,7 +54,12 @@ export class LoginUseCase {
 
     const payload = { sub: user.id, role: user.role };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    // Secret distinct de l'access token (JWT_REFRESH_SECRET) : la fuite de
+    // l'un des deux secrets ne compromet pas l'autre jeton.
+    const refreshToken = this.jwtService.sign(payload, {
+      expiresIn: '7d',
+      secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
+    });
 
     // Trace le refresh token emis, pour pouvoir le revoquer plus tard (logout).
     const record = RefreshTokenRecord.create({

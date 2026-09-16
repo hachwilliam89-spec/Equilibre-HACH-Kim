@@ -1,4 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { USER_REPOSITORY } from '../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../domain/ports/user-repository.port';
@@ -6,6 +7,7 @@ import { REFRESH_TOKEN_REPOSITORY } from '../../domain/ports/refresh-token-repos
 import type { RefreshTokenRepositoryPort } from '../../domain/ports/refresh-token-repository.port';
 import { AppException } from '../../../common/errors/app-exception';
 import { hashToken } from '../../../common/security/hash-token';
+import type { EnvConfig } from '../../../config/env.schema';
 
 @Injectable()
 export class RefreshTokenUseCase {
@@ -15,12 +17,17 @@ export class RefreshTokenUseCase {
     @Inject(REFRESH_TOKEN_REPOSITORY)
     private readonly refreshTokenRepository: RefreshTokenRepositoryPort,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService<EnvConfig, true>,
   ) {}
 
   async execute(refreshToken: string): Promise<{ accessToken: string }> {
     let payload: { sub: string; role: string };
     try {
-      payload = this.jwtService.verify(refreshToken);
+      // Meme secret que celui utilise pour signer le refresh token au login
+      // (JWT_REFRESH_SECRET), distinct de celui de l'access token.
+      payload = this.jwtService.verify(refreshToken, {
+        secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
+      });
     } catch {
       throw new AppException(
         'invalid-refresh-token',
