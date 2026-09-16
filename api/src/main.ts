@@ -9,6 +9,10 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
+  // Sans ceci, un SIGTERM (docker compose down, deploiement, eviction K8s)
+  // tue le process directement : les hooks OnModuleDestroy / OnApplicationShutdown
+  // ne tournent jamais, et la connexion MongoDB n'est jamais fermee proprement.
+  app.enableShutdownHooks();
 
   const configService = app.get(ConfigService);
 

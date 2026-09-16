@@ -9,7 +9,14 @@ export const loginSchema = z.object({
   password: z
     .string()
     .min(8, { message: 'Le mot de passe doit contenir au moins 8 caracteres' })
-    .describe('Mot de passe (8 caracteres minimum)'),
+    // Coherence avec register.dto.ts : bcrypt ignore silencieusement tout
+    // octet au-dela du 72e, un mot de passe plus long que ca n'a jamais pu
+    // etre enregistre tel quel -- meme limite ici pour rejeter clairement
+    // plutot que de laisser bcrypt.compare tronquer en silence.
+    .refine((value) => Buffer.byteLength(value, 'utf8') <= 72, {
+      message: 'Le mot de passe ne doit pas depasser 72 octets',
+    })
+    .describe('Mot de passe (8 a 72 octets)'),
 });
 
 // createZodDto genere a la fois le typage TS ET la documentation Swagger
