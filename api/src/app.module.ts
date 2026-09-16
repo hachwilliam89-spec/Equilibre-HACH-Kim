@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -76,7 +77,9 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     }),
     AuthModule,
     HealthModule,
-    // Les modules plans et suivi viendront s'ajouter ici ensuite
+    // Limite globale par IP, filet de securite general contre l'abus/DoS.
+    // Les routes sensibles (ex: login) resserrent cette limite via @Throttle.
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
   ],
   controllers: [AppController],
   providers: [
@@ -84,6 +87,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     // Enregistre le filtre comme provider Nest plutot que "new" dans main.ts,
     // pour qu'il beneficie de l'injection de dependances (le logger Pino).
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}
