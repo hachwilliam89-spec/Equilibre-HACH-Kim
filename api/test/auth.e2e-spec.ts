@@ -1,9 +1,12 @@
 import { randomUUID } from 'crypto';
 import { HttpStatus, INestApplication } from '@nestjs/common';
+import { getConnectionToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Collection, Connection } from 'mongoose';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { hashToken } from '../src/common/security/hash-token';
 
 /**
  * Tests d'integration bout en bout du module auth : vraie application Nest,
@@ -83,20 +86,63 @@ describe('Auth (e2e)', () => {
     return isolatedApp;
   };
 
+  // Acces direct aux collections Mongo, en contournant repository et
+  // controller : les assertions sur les codes HTTP ne prouvent que le
+  // comportement de l'API, pas ce qui a reellement ete persiste. Le driver
+  // Mongo type _id en ObjectId par defaut ; nos schemas le stockent en
+  // chaine opaque (voir user.schema.ts / refresh-token.schema.ts), d'ou ces
+  // interfaces dediees plutot que le type Document generique.
+  interface UserRow {
+    _id: string;
+    email: string;
+    passwordHash: string;
+    role: 'coach' | 'utilisateur';
+  }
+
+  interface RefreshTokenRow {
+    _id: string;
+    userId: string;
+    tokenHash: string;
+    revoked: boolean;
+  }
+
+  const usersCollection = (
+    testApp: INestApplication<App>,
+  ): Collection<UserRow> =>
+    testApp.get<Connection>(getConnectionToken()).collection<UserRow>('users');
+
+  const refreshTokensCollection = (
+    testApp: INestApplication<App>,
+  ): Collection<RefreshTokenRow> =>
+    testApp
+      .get<Connection>(getConnectionToken())
+      .collection<RefreshTokenRow>('refresh_tokens');
+
   describe('POST /api/auth/register', () => {
-    it('cree un compte coach et renvoie son id', async () => {
+    it('cree un compte coach et le persiste correctement en base', async () => {
+      const email = uniqueEmail();
+      const password = 'password123';
       const response = await request(app.getHttpServer())
         .post('/api/auth/register')
-        .send({
-          email: uniqueEmail(),
-          password: 'password123',
-          role: 'coach',
-        })
+        .send({ email, password, role: 'coach' })
         .expect(HttpStatus.CREATED);
 
       const body = response.body as { userId: string };
       expect(typeof body.userId).toBe('string');
       expect(body.userId.length).toBeGreaterThan(0);
+
+      // Assertion directe sur l'etat final de Mongo, pas seulement sur la
+      // reponse HTTP : le document existe, avec un _id opaque (chaine, pas
+      // un ObjectId Mongo -- voir user.schema.ts) et un hash bcrypt, jamais
+      // le mot de passe en clair.
+      const doc = await usersCollection(app).findOne({ _id: body.userId });
+      expect(doc).not.toBeNull();
+      expect(doc?._id).toBe(body.userId);
+      expect(typeof doc?._id).toBe('string');
+      expect(doc?.email).toBe(email);
+      expect(doc?.role).toBe('coach');
+      expect(doc?.passwordHash).not.toBe(password);
+      expect(doc?.passwordHash).toMatch(/^\$2[aby]\$/);
     });
 
     it('refuse un utilisateur sans coachId (regle metier validee des le DTO)', async () => {
@@ -194,7 +240,7 @@ describe('Auth (e2e)', () => {
       await refreshApp.close();
     });
 
-    it('renouvelle access et refresh token (rotation)', async () => {
+    it('renouvelle access et refresh token (rotation), et persiste la revocation en base', async () => {
       const { refreshToken } = await registerAndLogin(refreshApp);
 
       const response = await request(refreshApp.getHttpServer())
@@ -211,6 +257,21 @@ describe('Auth (e2e)', () => {
       // La rotation doit emettre un nouveau refresh token, distinct de
       // l'ancien -- pas juste un nouvel access token.
       expect(body.refreshToken).not.toBe(refreshToken);
+
+      // Assertion directe sur l'etat final de Mongo : l'ancien enregistrement
+      // doit etre marque revoked, le nouveau doit exister et etre actif --
+      // pas seulement "la reponse HTTP dit que ca a marche".
+      const oldRecord = await refreshTokensCollection(refreshApp).findOne({
+        tokenHash: hashToken(refreshToken),
+      });
+      expect(oldRecord?.revoked).toBe(true);
+
+      const newRecord = await refreshTokensCollection(refreshApp).findOne({
+        tokenHash: hashToken(body.refreshToken),
+      });
+      expect(newRecord).not.toBeNull();
+      expect(newRecord?.revoked).toBe(false);
+      expect(newRecord?._id).not.toBe(oldRecord?._id);
     });
 
     it("rejette la reutilisation d'un refresh token deja consomme (rejeu)", async () => {
@@ -231,10 +292,24 @@ describe('Auth (e2e)', () => {
 
       const body = response.body as { type: string };
       expect(body.type).toContain('invalid-refresh-token');
+
+      // Le rejeu refuse ne doit avoir cree aucun nouvel enregistrement en
+      // base : un seul refresh token actif doit exister pour cet ancien
+      // enregistrement, celui issu de la premiere rotation legitime.
+      const oldRecord = await refreshTokensCollection(refreshApp).findOne({
+        tokenHash: hashToken(refreshToken),
+      });
+      const activeRecords = await refreshTokensCollection(refreshApp)
+        .find({ userId: oldRecord?.userId, revoked: false })
+        .toArray();
+      expect(activeRecords).toHaveLength(1);
     });
 
     it('un seul de deux renouvellements simultanes avec le meme refresh token reussit (concurrence)', async () => {
       const { refreshToken } = await registerAndLogin(refreshApp);
+      const oldRecordBefore = await refreshTokensCollection(refreshApp).findOne(
+        { tokenHash: hashToken(refreshToken) },
+      );
 
       // Deux requetes concurrentes avec le meme refresh token (ex: deux
       // onglets, un retry reseau) : la revocation doit etre atomique, donc
@@ -250,6 +325,16 @@ describe('Auth (e2e)', () => {
 
       const statuses = [first.status, second.status].sort((a, b) => a - b);
       expect(statuses).toEqual([HttpStatus.OK, HttpStatus.UNAUTHORIZED]);
+
+      // La preuve n'est pas dans les codes HTTP mais en base : peu importe
+      // combien de requetes concurrentes ont ete envoyees, un seul nouveau
+      // refresh token actif doit exister pour cet utilisateur -- jamais
+      // deux, ce qui signalerait que la revocation atomique n'a pas
+      // empeche une double emission.
+      const activeRecords = await refreshTokensCollection(refreshApp)
+        .find({ userId: oldRecordBefore?.userId, revoked: false })
+        .toArray();
+      expect(activeRecords).toHaveLength(1);
     });
 
     it('rejette un refresh token invalide', async () => {
@@ -275,13 +360,21 @@ describe('Auth (e2e)', () => {
       await logoutApp.close();
     });
 
-    it('revoque le refresh token : un renouvellement ulterieur echoue', async () => {
+    it('revoque le refresh token en base : un renouvellement ulterieur echoue', async () => {
       const { refreshToken } = await registerAndLogin(logoutApp);
 
       await request(logoutApp.getHttpServer())
         .post('/api/auth/logout')
         .send({ refreshToken })
         .expect(HttpStatus.NO_CONTENT);
+
+      // Assertion directe sur l'etat final de Mongo : le document existe
+      // toujours (logout ne supprime pas, il revoque), avec revoked: true.
+      const record = await refreshTokensCollection(logoutApp).findOne({
+        tokenHash: hashToken(refreshToken),
+      });
+      expect(record).not.toBeNull();
+      expect(record?.revoked).toBe(true);
 
       await request(logoutApp.getHttpServer())
         .post('/api/auth/refresh')
