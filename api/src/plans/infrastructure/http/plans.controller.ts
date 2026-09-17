@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -16,7 +17,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard';
 import type { JwtPayload } from '../../../auth/infrastructure/http/jwt.strategy';
 import { RolesGuard } from '../../../common/auth/roles.guard';
@@ -80,13 +81,13 @@ export class PlansController {
   @Roles('utilisateur')
   @ApiOperation({ summary: "Plan actif de l'utilisateur connecte" })
   @ApiResponse({ status: 200, description: 'Plan actif, ou null si aucun' })
-  async getMine(@Req() req: AuthenticatedRequest) {
+  async getMine(@Req() req: AuthenticatedRequest, @Res() res: Response) {
     const plan = await this.getCurrentPlanUseCase.execute({
       requesterId: req.user.sub,
       requesterRole: req.user.role,
       targetUserId: req.user.sub,
     });
-    return plan ? plan.toProps() : null;
+    return res.json(plan ? plan.toProps() : null);
   }
 
   @Get('users/:userId')
@@ -100,13 +101,14 @@ export class PlansController {
   async getForUser(
     @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
+    @Res() res: Response,
   ) {
     const plan = await this.getCurrentPlanUseCase.execute({
       requesterId: req.user.sub,
       requesterRole: req.user.role,
       targetUserId: userId,
     });
-    return plan ? plan.toProps() : null;
+    return res.json(plan ? plan.toProps() : null);
   }
 
   @Post(':id/cancel')

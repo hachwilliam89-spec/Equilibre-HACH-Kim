@@ -177,6 +177,102 @@ describe('Plans (e2e)', () => {
   ): Collection<PlanRow> =>
     testApp.get<Connection>(getConnectionToken()).collection<PlanRow>('plans');
 
+  describe('Unicité et échéance du plan', () => {
+    it('refuse une des deux soumissions simultanées et conserve un seul plan actif', async () => {
+      const { coachId, accessToken } = await registerAndLoginCoach(app);
+      const userId = await registerUtilisateur(app, coachId);
+      const responses = await Promise.all(
+        [0, 1].map(() =>
+          request(app.getHttpServer())
+            .post('/api/plans')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send(validPlanBody(userId)),
+        ),
+      );
+      expect(responses.map((res) => res.status).sort()).toEqual([201, 409]);
+      expect(
+        await plansCollection(app).countDocuments({ userId, statut: 'actif' }),
+      ).toBe(1);
+      const indexes = await plansCollection(app).indexes();
+      expect(
+        indexes.find((index) => index.name === 'one_active_plan_per_user'),
+      ).toMatchObject({
+        unique: true,
+        partialFilterExpression: { statut: 'actif' },
+      });
+    });
+
+    it.each(['aujourdhui', 'hier'])(
+      'respecte la date cible : %s',
+      async (jour) => {
+        const { coachId, accessToken } = await registerAndLoginCoach(app);
+        const userId = await registerUtilisateur(app, coachId);
+        const response = await request(app.getHttpServer())
+          .post('/api/plans')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .send(validPlanBody(userId))
+          .expect(201);
+        const id = (response.body as PlanResponseBody).id;
+        await plansCollection(app).updateOne(
+          { _id: id },
+          {
+            $set: {
+              dateCible: new Date(
+                daysFromNow(jour === 'aujourdhui' ? 0 : -1),
+              ) as unknown as string,
+            },
+          },
+        );
+        if (jour === 'aujourdhui') {
+          const current = await request(app.getHttpServer())
+            .get(`/api/plans/users/${userId}`)
+            .set('Authorization', `Bearer ${accessToken}`)
+            .expect(200);
+          expect((current.body as PlanResponseBody).statut).toBe('actif');
+          expect(
+            (await plansCollection(app).findOne({ _id: id }))?.statut,
+          ).toBe('actif');
+        } else {
+          await request(app.getHttpServer())
+            .post(`/api/plans/${id}/cancel`)
+            .set('Authorization', `Bearer ${accessToken}`)
+            .expect(409);
+          expect(
+            (await plansCollection(app).findOne({ _id: id }))?.statut,
+          ).toBe('termine');
+          await request(app.getHttpServer())
+            .post('/api/plans')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send(validPlanBody(userId))
+            .expect(201);
+          expect(
+            await plansCollection(app).countDocuments({
+              userId,
+              statut: 'actif',
+            }),
+          ).toBe(1);
+        }
+      },
+    );
+  });
+
+  it('retourne un JSON null aux deux rôles quand aucun plan actif existe', async () => {
+    const coach = await registerAndLoginCoach(app);
+    const user = await registerAndLoginUtilisateur(app, coach.coachId);
+    for (const [url, token] of [
+      ['/api/plans/me', user.accessToken],
+      [`/api/plans/users/${user.userId}`, coach.accessToken],
+    ]) {
+      const response = await request(app.getHttpServer())
+        .get(url)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.text).toBe('null');
+      expect(response.body).toBeNull();
+    }
+  });
+
   describe('POST /api/plans', () => {
     it('cree un plan valide et le persiste correctement en base (cas nominal)', async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
@@ -257,15 +353,19 @@ describe('Plans (e2e)', () => {
 
     it('accepte un IMC cible pile a 18.5 (borne incluse)', async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
+      const userId = await registerUtilisateur(app, coachId, {
+        tailleCm: 200,
+        age: 30,
+        sexe: 'femme',
+      });
 
       await request(app.getHttpServer())
         .post('/api/plans')
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
           ...validPlanBody(userId),
-          poidsDepart: 60,
-          poidsCible: 53.5, // IMC = 18.5 pour 1.70m
+          poidsDepart: 75,
+          poidsCible: 74, // IMC = 18.5 exactement pour 2m
           dateCible: daysFromNow(59), // ~8.4 semaines -> ~0.77kg/semaine
         })
         .expect(HttpStatus.CREATED);
@@ -454,7 +554,7 @@ describe('Plans (e2e)', () => {
         .post('/api/plans')
         .set('Authorization', `Bearer ${coachAToken}`)
         .send(validPlanBody(userOfCoachB))
-        .expect(HttpStatus.BAD_REQUEST);
+        .expect(HttpStatus.FORBIDDEN);
     });
   });
 
@@ -576,9 +676,9 @@ describe('Plans (e2e)', () => {
         .get(`/api/plans/users/${userId}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(HttpStatus.OK);
-      // Nest n'envoie pas de corps JSON "null" pour un retour null/undefined
-      // de controleur -- reponse vide, que supertest expose comme {}.
-      expect(response.body).toEqual({});
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.text).toBe('null');
+      expect(response.body).toBeNull();
 
       const docAfter = await plansCollection(app).findOne({ _id: planId });
       expect(docAfter?.statut).toBe('termine');

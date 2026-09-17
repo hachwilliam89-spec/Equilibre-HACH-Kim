@@ -51,3 +51,13 @@ export class PlanDocumentClass {
 }
 
 export const PlanSchema = SchemaFactory.createForClass(PlanDocumentClass);
+
+// La base arbitre aussi les demandes concurrentes pour un même utilisateur.
+PlanSchema.index(
+  { userId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { statut: 'actif' },
+    name: 'one_active_plan_per_user',
+  },
+);

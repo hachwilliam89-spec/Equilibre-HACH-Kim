@@ -42,6 +42,16 @@ export class CancelPlanUseCase {
       );
     }
 
+    // Résout aussi l'expiration avant une annulation, sans exiger de consultation.
+    if (plan.statut === 'actif' && plan.hasExpired(new Date())) {
+      await this.planRepository.findActiveByUserId(plan.userId);
+      throw new AppException(
+        'plan-not-active',
+        'Un plan termine ne peut pas etre annule',
+        HttpStatus.CONFLICT,
+      );
+    }
+
     if (plan.statut !== 'actif') {
       throw new AppException(
         'plan-not-active',
