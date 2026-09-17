@@ -99,6 +99,7 @@ Documentation Swagger : http://localhost:3000/api/docs
 | `pnpm docker:prod` | Démarre la production depuis l'image de la registry |
 | `pnpm docker:prod:down` | Arrête la production |
 | `pnpm lint` | Lance ESLint sur l'API |
+| `pnpm test:cucumber:local` | Exécute les scénarios Gherkin de l’US1 avec MongoDB de test ; nécessite `pnpm docker:test` |
 
 ## Environnements
 

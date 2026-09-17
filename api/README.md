@@ -168,3 +168,54 @@ Relancer uniquement Jest ne réinitialise pas automatiquement MongoDB.
 
 Ces mécanismes décrivent l’implémentation actuelle ; les tests restent la
 référence pour les scénarios effectivement vérifiés.
+
+## Scénarios métier Cucumber / Gherkin
+
+Les scénarios lisibles de l’US1 se trouvent dans
+[`test/cucumber/features/plans.feature`](test/cucumber/features/plans.feature).
+Les tags `@us1` et `@FR403-123`, `@FR403-126`, `@FR403-127` relient les
+scénarios aux règles et aux tickets. Ils complètent les tests Jest existants.
+
+Depuis la racine, avec `.env.test` préparé :
+
+```bash
+pnpm docker:test
+pnpm test:cucumber:local
+```
+
+La commande compile l’API, puis lance Cucumber selon `api/cucumber.cjs`.
+Chaque scénario utilise une instance Nest, des comptes authentifiés par l’API,
+des appels HTTP Supertest et une vraie base MongoDB. Les assertions vérifient
+les réponses et les documents enregistrés. Le nettoyage supprime uniquement
+les données du scénario ; il ne vide pas les autres données de test.
+
+Un rapport HTML est généré dans `api/reports/cucumber.html` (non versionné).
+Les sorties du terminal donnent le nombre de scénarios et d’étapes réussis.
+Avec l’environnement déjà exporté, `pnpm test:cucumber` lance la même suite.
+Le runner exige `NODE_ENV=test` et une URI visant la base `equilibre_test`.
+
+La suite actuelle couvre 21 scénarios de l’US1 : dates, poids, IMC et rythme,
+budget automatique ou manuel, accès du coach, absence de plan, concurrence,
+annulation et expiration. Elle ne constitue pas encore une couverture de
+chaque retour possible de toutes les routes, ni du parcours mobile.
+
+### Répartition des vérifications
+
+- **Jest unitaire** : calculs et limites du domaine, contrat des DTO.
+- **Jest intégration** : authentification et contrôles complémentaires des plans
+  (profils incomplets, budget sédentaire, conflit séquentiel, droits de consultation
+  et d’annulation, lecture d’un plan expiré).
+- **Cucumber** : scénarios métier des plans (dates, poids, IMC, rythme, budgets,
+  concurrence, absence de plan, annulation et échéance).
+
+Les scénarios d’intégration déjà entièrement couverts par Cucumber ont été
+retirés de Jest. Leurs assertions supplémentaires ont été transférées :
+rattachement utilisateur/coach, IMC enregistré, index MongoDB unique et nombre
+de plans actifs. Les tests unitaires restent utiles pour isoler les calculs.
+Pour vérifier l’ensemble, exécuter les trois commandes :
+
+```bash
+pnpm test --runInBand
+pnpm test:e2e:local --runInBand
+pnpm test:cucumber:local
+```
