@@ -119,7 +119,11 @@ export class Plan {
   }
 
   hasExpired(now: Date): boolean {
-    return this.props.dateCible.getTime() < now.getTime();
+    // Les dates du plan sont comparées par jour civil UTC, pas par instant.
+    return (
+      this.props.dateCible.toISOString().slice(0, 10) <
+      now.toISOString().slice(0, 10)
+    );
   }
 
   /** Passage automatique en 'terminé' (date cible dépassée). Idempotent. */

@@ -44,7 +44,7 @@ export class CreatePlanUseCase {
       throw new AppException(
         'invalid-user',
         'Utilisateur introuvable ou non rattache a ce coach',
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.FORBIDDEN,
       );
     }
 

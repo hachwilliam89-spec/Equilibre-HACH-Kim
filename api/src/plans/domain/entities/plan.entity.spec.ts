@@ -16,6 +16,11 @@ const baseProps: PlanCreateProps = {
 };
 
 describe('Plan (entite domaine)', () => {
+  it('reste actif pendant toute la date cible UTC et expire le lendemain', () => {
+    const plan = Plan.create(baseProps);
+    expect(plan.hasExpired(new Date('2026-01-29T23:59:59.999Z'))).toBe(false);
+    expect(plan.hasExpired(new Date('2026-01-30T00:00:00.000Z'))).toBe(true);
+  });
   it('cree un plan valide (cas nominal)', () => {
     const plan = Plan.create(baseProps);
     expect(plan.statut).toBe('actif');
@@ -60,8 +65,9 @@ describe('Plan (entite domaine)', () => {
   it('accepte un IMC cible pile a 18.5 (borne incluse)', () => {
     const plan = Plan.create({
       ...baseProps,
-      poidsDepart: 60,
-      poidsCible: 53.5, // IMC = 18.5 pour 1.70m
+      tailleCm: 200,
+      poidsDepart: 75,
+      poidsCible: 74, // 74 / 2² = 18.5 exactement
       dateCible: new Date('2026-03-01'), // rythme sous 1kg/semaine
     });
     expect(plan.statut).toBe('actif');
