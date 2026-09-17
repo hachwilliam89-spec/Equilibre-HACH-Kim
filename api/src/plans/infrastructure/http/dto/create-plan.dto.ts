@@ -1,13 +1,19 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
+// Le contrat HTTP expose des chaînes ISO ; le domaine reçoit des Date.
+// Le schéma d'entrée reste ainsi représentable dans Swagger/JSON Schema.
+const planDateSchema = z
+  .union([z.iso.date(), z.iso.datetime({ offset: true })])
+  .pipe(z.coerce.date());
+
 export const createPlanSchema = z
   .object({
     userId: z.string().min(1).describe("Identifiant de l'utilisateur cible"),
     poidsDepart: z.number().positive().describe('Poids de depart, en kg'),
     poidsCible: z.number().positive().describe('Poids cible, en kg'),
-    dateDebut: z.coerce.date().describe('Date de debut du plan'),
-    dateCible: z.coerce.date().describe('Date cible du plan'),
+    dateDebut: planDateSchema.describe('Date de debut du plan'),
+    dateCible: planDateSchema.describe('Date cible du plan'),
     niveauActivite: z
       .enum(['sedentaire', 'actif', 'sportif', 'athlete'])
       .describe(
