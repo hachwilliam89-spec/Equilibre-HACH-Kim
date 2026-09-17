@@ -1,114 +1,170 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Équilibre — API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend du projet fil rouge UHA 4.0 : accompagnement du rééquilibrage alimentaire
+par un coach. L’API utilise NestJS, TypeScript et MongoDB via Mongoose.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+[Dépôt GitLab](https://git.uha4point0.fr/UHA40/fil-rouge-2026/4.0.3/equilibre-hach-kim)
+ · [Installation générale et environnements Docker](../README.md)
 
-## Description
+## Modules présents
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **auth** : inscription, connexion, renouvellement des jetons et déconnexion ;
+  rôles `coach` et `utilisateur`.
+- **plans** : soumission d’un plan pour un utilisateur rattaché, calcul de l’IMC
+  cible, contrôle du rythme, calcul du budget calorique, consultation et annulation.
+- **health** : vérification de la disponibilité de MongoDB.
 
-## Project setup
+Le suivi des pesées et le journal alimentaire font partie du périmètre métier
+prévu, mais leurs modules ne sont pas encore présents dans cette API.
+La déduction du niveau d’activité depuis une montre simulée relève de l’US4,
+hors MVP ; le niveau d’activité du plan est actuellement choisi manuellement.
 
-```bash
-$ pnpm install
-```
+## Démarrage avec Docker
 
-## Compile and run the project
+Prérequis : Docker Compose, Node.js **24.9.0 minimum** et pnpm **10.25.0**
+pour les commandes locales. Toutes les commandes ci-dessous s’exécutent
+**depuis la racine du dépôt**, et non depuis `api/`.
+
+Suivre d’abord le [README principal](../README.md#démarrage) pour préparer
+`.env.dev`, `.env.test`, les secrets et les dépendances. Puis :
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+pnpm docker:dev
+pnpm docker:dev:ps
+curl http://localhost:3000/api/health
 ```
 
-## Run tests
+Les deux services doivent être `healthy`. Avec le port de développement par défaut :
+
+- API : `http://localhost:3000/api`
+- Swagger : `http://localhost:3000/api/docs`
+- Santé : `http://localhost:3000/api/health`
+
+Adapter le port des URL si `API_PORT` est modifié dans `.env.dev`.
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+pnpm docker:dev:logs:api
+pnpm docker:dev:down
 ```
 
-## Deployment
+Le mode de développement Docker recharge l’API lors des changements de code.
+L’arrêt standard conserve les données du volume de développement.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Configuration
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+La configuration de l’API est validée au démarrage dans
+[`src/config/env.schema.ts`](src/config/env.schema.ts).
+
+| Variable | Utilisation |
+|---|---|
+| `NODE_ENV` | `development`, `test` ou `production` ; défaut : `development` |
+| `MONGO_URI` | URI MongoDB obligatoire, avec les identifiants et la base de l’environnement |
+| `JWT_SECRET` | Secret du jeton d’accès, au moins 32 caractères |
+| `JWT_REFRESH_SECRET` | Secret du jeton de renouvellement, au moins 32 caractères |
+| `PORT` | Port d’écoute de l’API ; défaut : `3000` |
+| `BCRYPT_SALT_ROUNDS` | Coût bcrypt entre 4 et 15 ; défaut : `10` |
+
+`API_PORT` et `MONGO_PORT` servent à Docker Compose pour publier les ports sur
+la machine hôte. Ils ne changent pas les ports internes des services.
+Dans Docker, MongoDB est accessible sous le nom `mongo` ; depuis la machine
+hôte, il est accessible sur `localhost` avec le port publié.
+
+Compose transmet actuellement `NODE_ENV`, `MONGO_URI` et les deux secrets JWT
+à l’API. Pour surcharger `PORT` ou `BCRYPT_SALT_ROUNDS` dans un conteneur,
+il faut également les déclarer dans sa configuration `environment`.
+Les fichiers d’environnement contenant des secrets ne doivent pas être versionnés.
+
+## Routes disponibles
+
+Toutes les routes utilisent le préfixe `/api`. Les schémas de requête et les
+réponses documentées sont consultables dans Swagger.
+
+| Méthode | Route | Utilisation / accès |
+|---|---|---|
+| GET | `/api/health` | Santé de l’API et de MongoDB |
+| POST | `/api/auth/register` | Inscription d’un coach ou utilisateur |
+| POST | `/api/auth/login` | Connexion ; retourne les jetons |
+| POST | `/api/auth/refresh` | Renouvellement avec rotation du refresh token |
+| POST | `/api/auth/logout` | Révocation du refresh token fourni ; réponse 204 |
+| POST | `/api/plans` | Soumission d’un plan ; coach authentifié |
+| GET | `/api/plans/me` | Plan actif de l’utilisateur connecté, ou `null` |
+| GET | `/api/plans/users/:userId` | Plan actif d’un utilisateur rattaché au coach, ou `null` |
+| POST | `/api/plans/:id/cancel` | Annulation d’un plan ; coach concerné |
+
+Pour les routes protégées, transmettre `Authorization: Bearer <accessToken>`.
+Dans Swagger, utiliser le bouton **Authorize** avec le jeton d’accès obtenu
+à la connexion. Les routes de renouvellement et de déconnexion attendent
+un champ `refreshToken` dans le corps JSON.
+
+## Architecture
+
+```text
+src/
+├── auth/              Authentification
+├── plans/             Plans de poids et budgets caloriques
+├── common/            Erreurs, filtres, rôles et sécurité transverses
+├── config/            Validation de l’environnement
+├── health/            Contrôle de santé MongoDB
+├── app.module.ts      Assemblage des modules
+└── main.ts            Démarrage, préfixe API, Helmet et Swagger
+```
+
+Les modules `auth` et `plans` suivent une architecture hexagonale :
+
+- `domain/` : entités, règles métier et interfaces des repositories ;
+- `application/` : cas d’usage ;
+- `infrastructure/` : routes HTTP, validation des entrées et persistance Mongoose.
+
+## Qualité et tests
+
+Depuis la racine du dépôt, après installation des dépendances :
+
+| Commande | Utilisation |
+|---|---|
+| `pnpm --dir api lint` | Vérification ESLint |
+| `pnpm --dir api build` | Compilation TypeScript/NestJS dans `api/dist/` |
+| `pnpm --dir api test --runInBand` | Tests unitaires |
+| `pnpm --dir api test:cov` | Tests unitaires et rapport de couverture |
+| `pnpm --dir api test:e2e:local --runInBand` | Tests d’intégration avec MongoDB de test |
+
+Les tests unitaires se trouvent dans `src/**/*.spec.ts`. Les tests
+d’intégration se trouvent dans `test/*.e2e-spec.ts` et couvrent notamment
+l’authentification et les plans.
+
+### Tests d’intégration locaux
+
+Préparer `.env.test` avec `NODE_ENV=test`, des secrets JWT valides,
+`API_PORT=3001`, `MONGO_PORT=27018` et une URI visant `equilibre_test`.
+Les identifiants MongoDB doivent correspondre à ceux de ce même environnement.
+Après la copie du modèle, remplacer explicitement `NODE_ENV=development` par
+`NODE_ENV=test` : sinon l’API tente de charger `pino-pretty`, absent de l’image
+de production utilisée pour les tests.
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+pnpm docker:test
+pnpm --dir api test:e2e:local --runInBand
+pnpm docker:test:down
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Attendre que MongoDB de test soit sain avant de lancer les tests.
+Le script [`scripts/test-e2e-local.sh`](scripts/test-e2e-local.sh) charge
+`.env.test` à la racine et adapte l’URI vers `localhost:MONGO_PORT/equilibre_test`.
+Les suites démarrent leur propre application Nest de test et utilisent une
+véritable base MongoDB ; elles ne ciblent pas l’API du conteneur via son port HTTP.
 
-## Observability
+`pnpm docker:test` démarre l’environnement mais ne lance pas les tests.
+`pnpm docker:test:down` supprime l’environnement de test et ses volumes.
+Relancer uniquement Jest ne réinitialise pas automatiquement MongoDB.
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+## Protections de l’authentification
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+- Mots de passe hachés avec bcrypt ; limite de 72 octets UTF-8 à l’inscription
+  et à la connexion.
+- Rotation des refresh tokens et révocation lors de la déconnexion.
+- Limitation des requêtes : 100 par minute et par IP au niveau global,
+  5 par minute pour la connexion.
+- Contrôle JWT et rôles sur les routes de plans.
+- En-têtes HTTP Helmet et masquage des données sensibles dans les journaux.
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Ces mécanismes décrivent l’implémentation actuelle ; les tests restent la
+référence pour les scénarios effectivement vérifiés.

@@ -27,9 +27,8 @@ services:
     ports:
       - "${MONGO_PORT}:27017"
     restart: "no"
-    # Base EPHEMERE : les donnees vivent en memoire et disparaissent
-    # avec le conteneur. Chaque execution de la suite de tests repart
-    # d'une base vierge, ce qui rend les assertions sur l'etat final
-    # de la BDD deterministes.
+    # Base EPHEMERE : stockage en memoire, conserve tant que le conteneur tourne.
+    # Relancer Jest ne vide pas la base. Pour repartir de zero :
+    # pnpm docker:test:down puis pnpm docker:test.
     tmpfs:
       - /data/db

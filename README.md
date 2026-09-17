@@ -9,6 +9,8 @@ d'une librairie de référence, et suit son écart à la trajectoire fixée.
 
 Projet fil rouge de Licence Professionnelle Développement Full Stack — UHA 4.0.
 
+Documentation détaillée du backend : [README de l’API](api/README.md).
+
 ## Stack
 
 | Composant | Technologie |
@@ -35,7 +37,7 @@ corepack enable
 ## Démarrage
 
 ```bash
-git clone <url-du-depot>
+git clone https://git.uha4point0.fr/UHA40/fil-rouge-2026/4.0.3/equilibre-hach-kim.git
 cd equilibre-hach-kim
 
 # Fichiers d'environnement (non versionnés)
@@ -54,9 +56,23 @@ pnpm --dir api install
 pnpm docker:dev
 ```
 
-Dans `.env.test`, pensez à décaler les ports (`API_PORT=3001`,
-`MONGO_PORT=27018`) et à utiliser une base distincte (`equilibre_test`), afin
-que les deux environnements puissent tourner en parallèle.
+Après la copie de `.env.example`, modifier `.env.test` :
+
+```dotenv
+NODE_ENV=test
+API_PORT=3001
+MONGO_PORT=27018
+```
+
+Configurer également `MONGO_URI` pour utiliser la base distincte
+`equilibre_test`, avec les identifiants MongoDB de cet environnement.
+Les ports distincts permettent de démarrer les environnements de développement
+et de test en parallèle.
+
+`NODE_ENV=test` est indispensable : le modèle contient `NODE_ENV=development`.
+L’image de test utilise le stage de production, sans `pino-pretty`. Conserver
+le mode développement lui ferait charger ce module absent et empêcherait
+le démarrage de l’API.
 
 Vérification :
 
@@ -99,9 +115,19 @@ fichier de surcharge.
 | Mongo exposé | oui (27017) | oui (27018) | non |
 | Stage Docker | `development` (mode watch) | `production` | `production` |
 
-L'environnement de test utilise une base éphémère : chaque exécution repart
-d'une base vierge, ce qui rend les tests d'intégration déterministes sans
-code de nettoyage.
+L’environnement de test stocke MongoDB en mémoire (`tmpfs`). Les données
+restent présentes tant que le conteneur tourne : relancer Jest ne vide pas
+la base. Pour repartir d’une base vide, supprimer puis relancer
+l’environnement de test :
+
+```bash
+pnpm docker:test:down
+pnpm docker:test
+# Attendre que MongoDB soit healthy avant de lancer les tests
+pnpm --dir api test:e2e:local --runInBand
+```
+
+Cette procédure efface les données de l’environnement de test.
 
 ## Structure
 

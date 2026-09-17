@@ -28,7 +28,10 @@ import {
       { name: UserDocumentClass.name, schema: UserSchema },
       { name: RefreshTokenDocumentClass.name, schema: RefreshTokenSchema },
     ]),
-    PassportModule,
+    // .register() est indispensable : PassportModule importe nu ne fournit
+    // aucun provider (AuthModuleOptions n'existe alors nulle part dans le
+    // graphe DI), meme si on l'exporte ensuite.
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -50,6 +53,11 @@ import {
     LogoutUseCase,
     JwtStrategy,
   ],
-  exports: [USER_REPOSITORY],
+  // PassportModule est exporte pour que tout module qui importe AuthModule
+  // (ex. PlansModule, pour USER_REPOSITORY) puisse aussi resoudre
+  // AuthModuleOptions -- sans ca, JwtAuthGuard utilise depuis un
+  // controleur d'un autre module echoue a l'instanciation (DI ne trouve
+  // pas AuthModuleOptions dans le contexte de ce module).
+  exports: [USER_REPOSITORY, PassportModule],
 })
 export class AuthModule {}

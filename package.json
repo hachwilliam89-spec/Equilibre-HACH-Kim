@@ -6,9 +6,10 @@
   "scripts": {
     "prepare": "husky",
     "lint": "pnpm --dir api lint",
-  "test": "pnpm --dir api test",
-  "test:e2e": "pnpm --dir api test:e2e",
-  "test:cov": "pnpm --dir api test:cov",
+    "test": "pnpm --dir api test",
+    "test:e2e": "pnpm --dir api test:e2e",
+    "test:e2e:local": "pnpm --dir api test:e2e:local",
+    "test:cov": "pnpm --dir api test:cov",
     "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build",
     "docker:dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev down",
     "docker:dev:logs": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev logs -f",
