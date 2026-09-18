@@ -102,3 +102,81 @@ Fonctionnalité: Soumission du plan par le coach
     Quand le coach soumet un plan de 80 kg vers 75 kg sur 35 jours
     Alors le code HTTP est 201
     Et la base contient 2 plan pour cette utilisatrice
+
+  @FR403-127 @preview
+  Plan du scénario: Consulter une proposition sans enregistrer de plan
+    Quand le coach demande une proposition de 82 kg vers <cible> kg sur 28 jours
+    Alors le code HTTP est 200
+    Et la proposition vaut <budget> kcal avec un avertissement <avertissement>
+    Et aucun document de plan n'a été modifié par la proposition
+
+    Exemples:
+      | cible | budget   | avertissement |
+      | 80    | 1885.825 | non           |
+      | 78    | 1571.5   | oui           |
+
+  @FR403-127 @preview
+  Scénario: Ajuster le budget après la proposition puis soumettre
+    Quand le coach demande une proposition de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 200
+    Et aucun document de plan n'a été modifié par la proposition
+    Étant donné un budget manuel de 1900 kcal
+    Quand le coach soumet un plan de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 201
+    Et le budget retourné et enregistré vaut 1900 kcal avec un plancher non
+    Et la base contient 1 plan pour cette utilisatrice
+
+  @FR403-127 @preview
+  Scénario: Refuser une proposition dont le rythme est invalide
+    Quand le coach demande une proposition de 82 kg vers 74 kg sur 28 jours
+    Alors le code HTTP est 400
+    Et aucun document de plan n'a été modifié par la proposition
+
+  @FR403-127 @preview
+  Scénario: Protéger les données lors du calcul de proposition
+    Étant donné un autre coach authentifié
+    Quand le coach demande une proposition de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 403
+    Et aucun document de plan n'a été modifié par la proposition
+
+  @FR403-127 @preview
+  Plan du scénario: Protéger la route de proposition par authentification et rôle
+    Quand une proposition est demandée avec un accès <acces>
+    Alors le code HTTP est <code>
+    Et aucun document de plan n'a été modifié par la proposition
+
+    Exemples:
+      | acces       | code |
+      | anonyme     | 401  |
+      | utilisateur | 403  |
+
+  @FR403-127 @preview
+  Scénario: Une proposition ne modifie pas le plan existant
+    Étant donné un plan actif enregistré
+    Quand le coach demande une proposition de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 200
+    Et aucun document de plan n'a été modifié par la proposition
+    Quand le coach soumet un plan de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 409
+    Et la base contient 1 plan pour cette utilisatrice
+
+  @FR403-127 @preview
+  Scénario: Revalider le profil à la soumission après la proposition
+    Quand le coach demande une proposition de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 200
+    Étant donné une taille de 220 cm dans le profil
+    Quand le coach soumet un plan de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 400
+    Et la base contient 0 plan pour cette utilisatrice
+
+  @FR403-127 @preview
+  Scénario: Un profil incomplet exige un budget manuel ou un complément du profil
+    Étant donné un profil sans âge ni sexe
+    Quand le coach demande une proposition de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 400
+    Et aucun document de plan n'a été modifié par la proposition
+    Étant donné un budget manuel de 1900 kcal
+    Quand le coach demande une proposition de 82 kg vers 80 kg sur 28 jours
+    Alors le code HTTP est 200
+    Et la proposition vaut 1900 kcal avec un avertissement non
+    Et aucun document de plan n'a été modifié par la proposition

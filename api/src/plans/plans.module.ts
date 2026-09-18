@@ -1,3 +1,4 @@
+import { PreparePlanUseCase } from './application/use-cases/prepare-plan.use-case';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
@@ -25,6 +26,7 @@ import { CancelPlanUseCase } from './application/use-cases/cancel-plan.use-case'
   providers: [
     { provide: PLAN_REPOSITORY, useClass: MongoosePlanRepository },
     CreatePlanUseCase,
+    PreparePlanUseCase,
     GetCurrentPlanUseCase,
     CancelPlanUseCase,
   ],
