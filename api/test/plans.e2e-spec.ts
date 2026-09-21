@@ -180,6 +180,26 @@ describe('Plans (e2e)', () => {
   ): Collection<PlanRow> =>
     testApp.get<Connection>(getConnectionToken()).collection<PlanRow>('plans');
 
+  describe('Authentification requise', () => {
+    // Le garde JwtAuthGuard est applique au niveau du controleur (@UseGuards
+    // au-dessus de la classe) : un seul jeu de cas suffit pour couvrir
+    // chaque route de plans, pas la peine de dupliquer le meme test guard
+    // par guard par endpoint.
+    it.each<[string, string]>([
+      ['post', '/api/plans'],
+      ['post', '/api/plans/preview'],
+      ['get', '/api/plans/me'],
+      ['get', `/api/plans/users/${randomUUID()}`],
+      ['post', `/api/plans/${randomUUID()}/cancel`],
+    ])('refuse %s %s sans jeton', async (method, path) => {
+      const req = request(app.getHttpServer()) as unknown as Record<
+        'get' | 'post',
+        (url: string) => request.Test
+      >;
+      await req[method as 'get' | 'post'](path).expect(HttpStatus.UNAUTHORIZED);
+    });
+  });
+
   describe('POST /api/plans', () => {
     it("refuse la creation si la taille du profil n'est pas renseignee", async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
@@ -193,6 +213,8 @@ describe('Plans (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .send(validPlanBody(userId))
         .expect(HttpStatus.BAD_REQUEST);
+
+      expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
     });
 
     it('refuse la suggestion automatique si le profil (age/sexe) est incomplet, sans budget fourni', async () => {
@@ -206,6 +228,8 @@ describe('Plans (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .send(validPlanBody(userId))
         .expect(HttpStatus.BAD_REQUEST);
+
+      expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
     });
 
     it('accepte un profil incomplet si le coach fournit un budget calorique manuel', async () => {
@@ -223,6 +247,10 @@ describe('Plans (e2e)', () => {
       expect((response.body as PlanResponseBody).budgetPlafonneAuBmr).toBe(
         false,
       );
+
+      const doc = await plansCollection(app).findOne({ userId });
+      expect(doc?.budgetCalorique).toBe(1600);
+      expect(doc?.budgetPlafonneAuBmr).toBe(false);
     });
 
     it('plafonne le budget suggere au BMR quand le calcul brut tombe en dessous', async () => {
