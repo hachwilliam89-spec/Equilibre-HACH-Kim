@@ -9,7 +9,10 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 
 /**
- * Tests d'integration bout en bout du module plans (US1) : vraie
+ * Contrôles d'intégration complémentaires à Cucumber : profils incomplets,
+ * droits de lecture/annulation, expiration à la lecture et cas calorique sédentaire.
+ * Les scénarios métier communs sont dans test/cucumber/features/plans.feature.
+ * Vraie
  * application Nest, vraie base MongoDB -- aucun mock, meme philosophie que
  * test/auth.e2e-spec.ts.
  *
@@ -178,154 +181,6 @@ describe('Plans (e2e)', () => {
     testApp.get<Connection>(getConnectionToken()).collection<PlanRow>('plans');
 
   describe('POST /api/plans', () => {
-    it('cree un plan valide et le persiste correctement en base (cas nominal)', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      const response = await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send(validPlanBody(userId))
-        .expect(HttpStatus.CREATED);
-
-      const body = response.body as PlanResponseBody;
-      expect(body.statut).toBe('actif');
-      expect(body.imcCible).toBeCloseTo(78 / 1.7 ** 2, 2);
-
-      const doc = await plansCollection(app).findOne({ _id: body.id });
-      expect(doc).not.toBeNull();
-      expect(doc?.userId).toBe(userId);
-      expect(doc?.coachId).toBe(coachId);
-      expect(doc?.statut).toBe('actif');
-    });
-
-    it('refuse une date cible anterieure a la date de debut', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          ...validPlanBody(userId),
-          dateDebut: '2026-01-29',
-          dateCible: '2026-01-01',
-        })
-        .expect(HttpStatus.BAD_REQUEST);
-    });
-
-    it('refuse une date cible egale a la date de debut', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          ...validPlanBody(userId),
-          dateDebut: '2026-01-01',
-          dateCible: '2026-01-01',
-        })
-        .expect(HttpStatus.BAD_REQUEST);
-    });
-
-    it('refuse un poids cible egal au poids de depart', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ ...validPlanBody(userId), poidsCible: 82 })
-        .expect(HttpStatus.BAD_REQUEST);
-    });
-
-    it('refuse un IMC cible sous le seuil de denutrition', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          ...validPlanBody(userId),
-          poidsDepart: 60,
-          poidsCible: 45, // IMC ~= 15.6 pour 1.70m
-        })
-        .expect(HttpStatus.BAD_REQUEST);
-    });
-
-    it('accepte un IMC cible pile a 18.5 (borne incluse)', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          ...validPlanBody(userId),
-          poidsDepart: 60,
-          poidsCible: 53.5, // IMC = 18.5 pour 1.70m
-          dateCible: daysFromNow(59), // ~8.4 semaines -> ~0.77kg/semaine
-        })
-        .expect(HttpStatus.CREATED);
-    });
-
-    it('accepte un IMC cible eleve (>30) tant que le rythme reste sain', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      const response = await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          ...validPlanBody(userId),
-          poidsDepart: 101,
-          poidsCible: 93, // IMC ~= 32.2 pour 1.70m
-          dateDebut: '2026-01-01',
-          dateCible: '2026-02-26', // 8 semaines, 1kg/semaine
-        })
-        .expect(HttpStatus.CREATED);
-      expect((response.body as PlanResponseBody).imcCible).toBeGreaterThan(30);
-    });
-
-    it('refuse un rythme de perte trop rapide', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ ...validPlanBody(userId), poidsCible: 74 }) // 2kg/semaine sur 4 semaines
-        .expect(HttpStatus.BAD_REQUEST);
-    });
-
-    it('accepte un rythme de perte pile a la limite (1kg/semaine)', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send(validPlanBody(userId)) // deja -1kg/semaine exactement
-        .expect(HttpStatus.CREATED);
-    });
-
-    it('refuse un rythme de prise de masse trop rapide', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          ...validPlanBody(userId),
-          poidsDepart: 70,
-          poidsCible: 74, // 1kg/semaine, > 0.5 autorise en prise de masse
-        })
-        .expect(HttpStatus.BAD_REQUEST);
-    });
-
     it("refuse la creation si la taille du profil n'est pas renseignee", async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
       const userId = await registerUtilisateur(app, coachId, {
@@ -370,18 +225,6 @@ describe('Plans (e2e)', () => {
       );
     });
 
-    it('retient le budget du coach plutot que la suggestion automatique', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      const response = await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ ...validPlanBody(userId), budgetCalorique: 2000 })
-        .expect(HttpStatus.CREATED);
-      expect((response.body as PlanResponseBody).budgetCalorique).toBe(2000);
-    });
-
     it('plafonne le budget suggere au BMR quand le calcul brut tombe en dessous', async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
       // Petit gabarit + niveau Sedentaire : TDEE faible, deficit proche du
@@ -422,62 +265,9 @@ describe('Plans (e2e)', () => {
         .send(validPlanBody(userId))
         .expect(HttpStatus.CONFLICT);
     });
-
-    it("autorise un nouveau plan apres l'annulation du precedent", async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-
-      const created = await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send(validPlanBody(userId))
-        .expect(HttpStatus.CREATED);
-
-      await request(app.getHttpServer())
-        .post(`/api/plans/${(created.body as PlanResponseBody).id}/cancel`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(HttpStatus.OK);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send(validPlanBody(userId))
-        .expect(HttpStatus.CREATED);
-    });
-
-    it('refuse de creer un plan pour un utilisateur non rattache a ce coach', async () => {
-      const { accessToken: coachAToken } = await registerAndLoginCoach(app);
-      const { coachId: coachBId } = await registerAndLoginCoach(app);
-      const userOfCoachB = await registerUtilisateur(app, coachBId);
-
-      await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${coachAToken}`)
-        .send(validPlanBody(userOfCoachB))
-        .expect(HttpStatus.BAD_REQUEST);
-    });
   });
 
   describe('POST /api/plans/:id/cancel', () => {
-    it('annule un plan actif et persiste le changement de statut', async () => {
-      const { coachId, accessToken } = await registerAndLoginCoach(app);
-      const userId = await registerUtilisateur(app, coachId);
-      const created = await request(app.getHttpServer())
-        .post('/api/plans')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send(validPlanBody(userId))
-        .expect(HttpStatus.CREATED);
-      const planId = (created.body as PlanResponseBody).id;
-
-      await request(app.getHttpServer())
-        .post(`/api/plans/${planId}/cancel`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(HttpStatus.OK);
-
-      const doc = await plansCollection(app).findOne({ _id: planId });
-      expect(doc?.statut).toBe('annule');
-    });
-
     it("refuse d'annuler un plan qui ne lui est pas rattache", async () => {
       const coachA = await registerAndLoginCoach(app);
       const userOfCoachA = await registerUtilisateur(app, coachA.coachId);
@@ -576,9 +366,9 @@ describe('Plans (e2e)', () => {
         .get(`/api/plans/users/${userId}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(HttpStatus.OK);
-      // Nest n'envoie pas de corps JSON "null" pour un retour null/undefined
-      // de controleur -- reponse vide, que supertest expose comme {}.
-      expect(response.body).toEqual({});
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.text).toBe('null');
+      expect(response.body).toBeNull();
 
       const docAfter = await plansCollection(app).findOne({ _id: planId });
       expect(docAfter?.statut).toBe('termine');

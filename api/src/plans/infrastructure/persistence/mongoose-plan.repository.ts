@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { AppException } from '../../../common/errors/app-exception';
+import { HttpStatus, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Plan } from '../../domain/entities/plan.entity';
@@ -6,28 +7,52 @@ import { PlanRepositoryPort } from '../../domain/ports/plan-repository.port';
 import { PlanDocument, PlanDocumentClass } from './plan.schema';
 
 @Injectable()
-export class MongoosePlanRepository implements PlanRepositoryPort {
+export class MongoosePlanRepository
+  implements PlanRepositoryPort, OnModuleInit
+{
   constructor(
     @InjectModel(PlanDocumentClass.name)
     private readonly planModel: Model<PlanDocument>,
   ) {}
 
+  async onModuleInit(): Promise<void> {
+    // Ne pas accepter de requêtes avant que l'index d'unicité soit prêt.
+    await this.planModel.init();
+  }
+
   async create(plan: Plan): Promise<Plan> {
     const props = plan.toProps();
-    const doc = await this.planModel.create({
-      _id: props.id,
-      userId: props.userId,
-      coachId: props.coachId,
-      poidsDepart: props.poidsDepart,
-      poidsCible: props.poidsCible,
-      dateDebut: props.dateDebut,
-      dateCible: props.dateCible,
-      imcCible: props.imcCible,
-      niveauActivite: props.niveauActivite,
-      budgetCalorique: props.budgetCalorique,
-      budgetPlafonneAuBmr: props.budgetPlafonneAuBmr,
-      statut: props.statut,
-    });
+    let doc: PlanDocument;
+    try {
+      doc = await this.planModel.create({
+        _id: props.id,
+        userId: props.userId,
+        coachId: props.coachId,
+        poidsDepart: props.poidsDepart,
+        poidsCible: props.poidsCible,
+        dateDebut: props.dateDebut,
+        dateCible: props.dateCible,
+        imcCible: props.imcCible,
+        niveauActivite: props.niveauActivite,
+        budgetCalorique: props.budgetCalorique,
+        budgetPlafonneAuBmr: props.budgetPlafonneAuBmr,
+        statut: props.statut,
+      });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 11000
+      ) {
+        throw new AppException(
+          'plan-already-active',
+          'Un plan actif existe deja pour cet utilisateur',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
     return this.toDomain(doc);
   }
 
@@ -46,8 +71,12 @@ export class MongoosePlanRepository implements PlanRepositoryPort {
 
     const plan = this.toDomain(doc);
     if (plan.hasExpired(new Date())) {
-      plan.terminate();
-      await this.save(plan);
+      await this.planModel
+        .updateOne(
+          { _id: plan.id, statut: 'actif' },
+          { $set: { statut: 'termine' } },
+        )
+        .exec();
       return null;
     }
 
