@@ -1,3 +1,5 @@
+import { PreparePlanUseCase } from '../../application/use-cases/prepare-plan.use-case';
+import { PlanPreviewDto } from './dto/plan-preview.dto';
 import {
   Body,
   Controller,
@@ -38,10 +40,58 @@ interface AuthenticatedRequest extends Request {
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PlansController {
   constructor(
+    private readonly preparePlanUseCase: PreparePlanUseCase,
     private readonly createPlanUseCase: CreatePlanUseCase,
     private readonly getCurrentPlanUseCase: GetCurrentPlanUseCase,
     private readonly cancelPlanUseCase: CancelPlanUseCase,
   ) {}
+
+  @Post('preview')
+  @Roles('coach')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Calcul de la proposition sans enregistrement ni réservation de plan',
+  })
+  @ApiBody({ type: CreatePlanDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Proposition non enregistrée',
+    type: PlanPreviewDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Données, profil ou règles métier invalides',
+  })
+  @ApiResponse({ status: 401, description: 'Authentification requise' })
+  @ApiResponse({
+    status: 403,
+    description: 'Rôle interdit ou utilisateur non rattaché',
+  })
+  async preview(
+    @Req() req: AuthenticatedRequest,
+    @Body(new ZodValidationPipe(createPlanSchema)) body: CreatePlanDto,
+  ): Promise<PlanPreviewDto> {
+    const plan = await this.preparePlanUseCase.execute({
+      ...body,
+      coachId: req.user.sub,
+    });
+    const props = plan.toProps();
+    return {
+      userId: props.userId,
+      poidsDepart: props.poidsDepart,
+      poidsCible: props.poidsCible,
+      dateDebut: props.dateDebut.toISOString(),
+      dateCible: props.dateCible.toISOString(),
+      imcCible: props.imcCible,
+      niveauActivite: props.niveauActivite,
+      budgetCalorique: props.budgetCalorique,
+      budgetPlafonneAuBmr: props.budgetPlafonneAuBmr,
+      avertissement: props.budgetPlafonneAuBmr
+        ? 'La suggestion a été ramenée au BMR ; elle ne correspond plus au déficit calculé pour le rythme demandé.'
+        : null,
+    };
+  }
 
   @Post()
   @Roles('coach')

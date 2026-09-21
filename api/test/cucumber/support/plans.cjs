@@ -254,3 +254,62 @@ Then('le statut retourné et enregistré vaut {string}', async function (statut)
   assert.equal(this.response.body.statut, statut);
   assert.equal((await this.plans.findOne({ _id: this.planId })).statut, statut);
 });
+
+async function preview(world, token, payload) {
+  world.plansBeforePreview = await world.plans
+    .find({ userId: world.userId })
+    .sort({ _id: 1 })
+    .toArray();
+  const req = api(world).post('/api/plans/preview');
+  if (token) req.set('Authorization', `Bearer ${token}`);
+  world.response = await req.send(payload);
+}
+When(
+  'le coach demande une proposition de {int} kg vers {int} kg sur {int} jours',
+  async function (depart, cible, jours) {
+    await preview(this, this.coachToken, body(this, depart, cible, jours));
+  },
+);
+When(
+  'une proposition est demandée avec un accès {word}',
+  async function (acces) {
+    assert.ok(['anonyme', 'utilisateur'].includes(acces));
+    await preview(
+      this,
+      acces === 'utilisateur' ? this.userToken : null,
+      body(this),
+    );
+  },
+);
+Then(
+  "aucun document de plan n'a été modifié par la proposition",
+  async function () {
+    assert.deepEqual(
+      await this.plans.find({ userId: this.userId }).sort({ _id: 1 }).toArray(),
+      this.plansBeforePreview,
+    );
+  },
+);
+Then(
+  'la proposition vaut {float} kcal avec un avertissement {word}',
+  function (budget, flag) {
+    const result = this.response.body;
+    assert.ok(Math.abs(result.budgetCalorique - budget) < 0.000001);
+    assert.equal(result.budgetPlafonneAuBmr, flag === 'oui');
+    if (flag === 'oui') assert.match(result.avertissement, /BMR/);
+    else assert.equal(result.avertissement, null);
+    assert.equal(result.userId, this.userId);
+    assert.ok(
+      Math.abs(
+        result.imcCible - result.poidsCible / (this.tailleCm / 100) ** 2,
+      ) < 0.000001,
+    );
+    assert.equal(Object.hasOwn(result, 'id'), false);
+    assert.equal(Object.hasOwn(result, 'statut'), false);
+  },
+);
+Given('un profil sans âge ni sexe', async function () {
+  await this.connection
+    .collection('users')
+    .updateOne({ _id: this.userId }, { $unset: { age: '', sexe: '' } });
+});

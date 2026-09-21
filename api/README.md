@@ -86,6 +86,7 @@ réponses documentées sont consultables dans Swagger.
 | POST | `/api/auth/login` | Connexion ; retourne les jetons |
 | POST | `/api/auth/refresh` | Renouvellement avec rotation du refresh token |
 | POST | `/api/auth/logout` | Révocation du refresh token fourni ; réponse 204 |
+| POST | `/api/plans/preview` | Proposition sans enregistrement ; coach authentifié |
 | POST | `/api/plans` | Soumission d’un plan ; coach authentifié |
 | GET | `/api/plans/me` | Plan actif de l’utilisateur connecté, ou `null` |
 | GET | `/api/plans/users/:userId` | Plan actif d’un utilisateur rattaché au coach, ou `null` |
@@ -194,7 +195,7 @@ Les sorties du terminal donnent le nombre de scénarios et d’étapes réussis.
 Avec l’environnement déjà exporté, `pnpm test:cucumber` lance la même suite.
 Le runner exige `NODE_ENV=test` et une URI visant la base `equilibre_test`.
 
-La suite actuelle couvre 21 scénarios de l’US1 : dates, poids, IMC et rythme,
+La suite actuelle couvre 31 scénarios de l’US1 : dates, poids, IMC et rythme,
 budget automatique ou manuel, accès du coach, absence de plan, concurrence,
 annulation et expiration. Elle ne constitue pas encore une couverture de
 chaque retour possible de toutes les routes, ni du parcours mobile.
@@ -219,3 +220,31 @@ pnpm test --runInBand
 pnpm test:e2e:local --runInBand
 pnpm test:cucumber:local
 ```
+
+## Proposition de plan avant soumission
+
+Le mobile appelle `POST /api/plans/preview` avec le JWT du coach et les mêmes
+champs que pour `POST /api/plans` : `userId`, `poidsDepart`, `poidsCible`,
+`dateDebut`, `dateCible`, `niveauActivite` et, éventuellement, `budgetCalorique`.
+La réponse **200** fournit l’IMC cible, le budget proposé, les objectifs et les
+dates. Elle ne contient ni identifiant de plan ni statut : aucun plan n’est enregistré.
+
+- `budgetPlafonneAuBmr = true` indique que la suggestion a été ramenée au BMR ;
+  `avertissement` contient alors le message à afficher. Sinon il vaut `null`.
+- Un budget manuel est conservé comme dans la soumission définitive.
+- Sans âge ou sexe et sans budget manuel, la réponse **400** demande de compléter
+  le profil ou de saisir le budget ; une taille manquante reste bloquante.
+- Une requête non authentifiée renvoie **401** ; un rôle interdit ou un utilisateur
+  non rattaché renvoie **403** ; des dates ou règles métier invalides renvoient **400**.
+
+Le coach peut demander plusieurs propositions, y compris lorsqu’un plan existe :
+la simulation ne modifie aucun document et ne réserve pas de plan actif.
+Après ajustement, le mobile transmet les valeurs finales à `POST /api/plans`.
+Cette soumission recalcule et revalide le plan avec le profil actuel et contrôle
+l’unicité du plan actif (**409** si un plan actif existe déjà). La simulation ne
+remplace donc pas la validation finale.
+
+Les scénarios Cucumber marqués `@preview` vérifient le calcul, le plancher BMR,
+les accès, les données invalides, le profil incomplet, l’absence d’écriture et
+le parcours proposition → budget manuel → soumission. Ils vérifient également
+qu’une modification du profil après la proposition est prise en compte à la soumission.
