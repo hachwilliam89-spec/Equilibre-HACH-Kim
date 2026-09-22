@@ -129,7 +129,7 @@ Depuis la racine du dépôt, après installation des dépendances :
 | `pnpm --dir api test:e2e:local --runInBand` | Tests d’intégration avec MongoDB de test |
 
 Les tests unitaires se trouvent dans `src/**/*.spec.ts`. Les tests
-d’intégration se trouvent dans `test/*.e2e-spec.ts` et couvrent notamment
+d’intégration se trouvent dans `test/*.integration-spec.ts` et couvrent notamment
 l’authentification et les plans.
 
 ### Tests d’intégration locaux
