@@ -99,6 +99,9 @@ Documentation Swagger : http://localhost:3000/api/docs
 | `pnpm docker:prod` | Démarre la production depuis l'image de la registry |
 | `pnpm docker:prod:down` | Arrête la production |
 | `pnpm lint` | Lance ESLint sur l'API |
+| `pnpm test` | Tests unitaires |
+| `pnpm test:cov` | Tests unitaires avec rapport de couverture |
+| `pnpm test:e2e:local` | Tests d'intégration Jest/Supertest avec MongoDB de test ; nécessite `pnpm docker:test` |
 | `pnpm test:cucumber:local` | Exécute les scénarios Gherkin de l’US1 avec MongoDB de test ; nécessite `pnpm docker:test` |
 
 ## Environnements
@@ -159,8 +162,8 @@ règles métier se testent en TypeScript pur, sans base de données ni mock.
 
 ## Conventions
 
-**Branches** — une branche par tâche, nommée `PRO403-X-Description` où `X` est
-le numéro du ticket. Fusion dans `develop` avec `--no-ff`, pour que le
+**Branches** — une branche par tâche, nommée `FR403-X-Description` où `X` est
+le numéro du ticket Jira. Fusion dans `develop` avec `--no-ff`, pour que le
 regroupement des commits reste visible dans l'historique.
 
 **Commits** — format conventional commits, vérifié automatiquement par
