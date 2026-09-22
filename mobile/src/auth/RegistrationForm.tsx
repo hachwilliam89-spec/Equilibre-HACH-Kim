@@ -47,7 +47,7 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
           </View>
           {role === "utilisateur" && <>
             <Text style={s.label}>Code du coach</Text>
-            <TextInput accessibilityLabel="Code du coach" style={s.input} value={coachCode} onChangeText={setCoachCode} autoCapitalize="none" autoCorrect={false} editable={!busy} />
+            <TextInput accessibilityLabel="Code du coach" style={s.input} value={coachCode} onChangeText={(value) => setCoachCode(value.toUpperCase())} autoCapitalize="characters" autoCorrect={false} editable={!busy} />
             <Text style={s.text}>Saisissez le code transmis par votre coach.</Text>
           </>}
           {error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
