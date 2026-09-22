@@ -21,7 +21,7 @@ import { hashToken } from '../src/common/security/hash-token';
  *  - JWT_SECRET et JWT_REFRESH_SECRET (32 caracteres minimum) dans
  *    l'environnement.
  */
-describe('Auth (e2e)', () => {
+describe('Auth (integration)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
@@ -37,7 +37,11 @@ describe('Auth (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    // Garde defensive : si beforeAll a echoue (Mongo injoignable), `app`
+    // reste undefined et masquerait la vraie erreur derriere un
+    // "Cannot read properties of undefined" ici -- meme raisonnement pour
+    // les 3 afterAll dedies plus bas (refreshApp/logoutApp/throttleApp).
+    if (app) await app.close();
   });
 
   // Un email unique par appel : evite toute collision avec des donnees
@@ -145,7 +149,7 @@ describe('Auth (e2e)', () => {
       expect(doc?.passwordHash).toMatch(/^\$2[aby]\$/);
     });
 
-    it('refuse un utilisateur sans coachId (regle metier validee des le DTO)', async () => {
+    it('refuse un utilisateur sans code ni rattachement (validation du DTO)', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/auth/register')
         .send({
@@ -158,7 +162,9 @@ describe('Auth (e2e)', () => {
       const body = response.body as {
         errors: Array<{ field: string; message: string }>;
       };
-      expect(body.errors.some((error) => error.field === 'coachId')).toBe(true);
+      expect(body.errors.some((error) => error.field === 'coachCode')).toBe(
+        true,
+      );
     });
 
     it('refuse un email deja utilise', async () => {
@@ -237,7 +243,7 @@ describe('Auth (e2e)', () => {
     });
 
     afterAll(async () => {
-      await refreshApp.close();
+      if (refreshApp) await refreshApp.close();
     });
 
     it('renouvelle access et refresh token (rotation), et persiste la revocation en base', async () => {
@@ -357,7 +363,7 @@ describe('Auth (e2e)', () => {
     });
 
     afterAll(async () => {
-      await logoutApp.close();
+      if (logoutApp) await logoutApp.close();
     });
 
     it('revoque le refresh token en base : un renouvellement ulterieur echoue', async () => {
@@ -409,7 +415,7 @@ describe('Auth (e2e)', () => {
     });
 
     afterAll(async () => {
-      await throttleApp.close();
+      if (throttleApp) await throttleApp.close();
     });
 
     it('bloque au-dela de 5 tentatives de connexion par minute et par IP', async () => {

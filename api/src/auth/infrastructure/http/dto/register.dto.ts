@@ -21,10 +21,19 @@ export const registerSchema = z
       })
       .describe('Mot de passe (8 a 72 octets)'),
     role: z.enum(['coach', 'utilisateur']).describe('Role du compte'),
+    coachCode: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^EQ-[A-F0-9]{8}$/)
+      .optional()
+      .describe('Code fourni par le coach, exemple EQ-7A9B2C4D'),
     coachId: z
       .string()
       .optional()
-      .describe('Identifiant du coach rattache (requis si role = utilisateur)'),
+      .describe(
+        'Identifiant du coach rattache (ancien champ compatible ; utiliser coachCode)',
+      ),
     tailleCm: z
       .number()
       .positive()
@@ -40,9 +49,17 @@ export const registerSchema = z
   // utilisateur doit etre rattache a un coach. On la valide ici aussi, en
   // amont, pour renvoyer une erreur 400 claire plutot qu'une exception
   // domaine generique.
-  .refine((data) => data.role !== 'utilisateur' || !!data.coachId, {
-    message: 'Un utilisateur doit etre rattache a un coach (coachId requis)',
-    path: ['coachId'],
+  .refine(
+    (data) => data.role !== 'utilisateur' || !!data.coachCode || !!data.coachId,
+    {
+      message:
+        'Un utilisateur doit etre rattache a un coach (coachCode requis)',
+      path: ['coachCode'],
+    },
+  )
+  .refine((data) => !(data.coachCode && data.coachId), {
+    message: 'Fournir uniquement coachCode',
+    path: ['coachCode'],
   });
 
 export class RegisterDto extends createZodDto(registerSchema) {}

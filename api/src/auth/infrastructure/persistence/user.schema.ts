@@ -28,6 +28,9 @@ export class UserDocumentClass {
   @Prop({ enum: ['homme', 'femme'] })
   sexe?: 'homme' | 'femme';
 
+  @Prop({ type: String })
+  coachCode?: string;
+
   // Reference vers un autre document User (role coach) -- pertinent si role='utilisateur'
   @Prop({ type: String, ref: 'UserDocumentClass' })
   coachId?: string;
@@ -40,3 +43,8 @@ export class UserDocumentClass {
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserDocumentClass);
+
+UserSchema.index(
+  { coachCode: 1 },
+  { unique: true, partialFilterExpression: { coachCode: { $type: 'string' } } },
+);
