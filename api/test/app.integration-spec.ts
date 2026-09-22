@@ -4,7 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
-describe('AppController (e2e)', () => {
+describe('AppController (integration)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
@@ -27,6 +27,6 @@ describe('AppController (e2e)', () => {
   });
 
   afterEach(async () => {
-    await app.close();
+    if (app) await app.close();
   });
 });

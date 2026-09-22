@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -12,6 +13,51 @@ export class MongooseUserRepository implements UserRepositoryPort {
     @InjectModel(UserDocumentClass.name)
     private readonly userModel: Model<UserDocument>,
   ) {}
+
+  async findByCoachCode(code: string): Promise<User | null> {
+    const doc = await this.userModel
+      .findOne({ coachCode: code, role: 'coach' })
+      .exec();
+    return doc ? this.toDomain(doc) : null;
+  }
+
+  async ensureCoachCode(id: string): Promise<string> {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const current = await this.userModel
+        .findOne({ _id: id, role: 'coach' })
+        .exec();
+      if (!current)
+        throw new AppException(
+          'invalid-coach',
+          'Coach introuvable',
+          HttpStatus.BAD_REQUEST,
+        );
+      if (current.coachCode) return current.coachCode;
+      const code = `EQ-${randomBytes(4).toString('hex').toUpperCase()}`;
+      try {
+        const updated = await this.userModel
+          .findOneAndUpdate(
+            { _id: id, role: 'coach', coachCode: { $exists: false } },
+            { $set: { coachCode: code } },
+            { returnDocument: 'after' },
+          )
+          .exec();
+        if (updated?.coachCode) return updated.coachCode;
+      } catch (error: unknown) {
+        if (!(
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 11000
+        ))
+          throw error;
+      }
+    }
+    throw new AppException(
+      'coach-code-unavailable',
+      'Code temporairement indisponible',
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
 
   async findByEmail(email: string): Promise<User | null> {
     const doc = await this.userModel

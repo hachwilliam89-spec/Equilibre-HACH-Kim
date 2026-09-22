@@ -46,7 +46,8 @@ export class AuthController {
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
-    description: 'Connexion reussie, tokens retournes',
+    description:
+      'Connexion reussie : accessToken, refreshToken, role, userId et coachCode pour un coach',
   })
   @ApiResponse({ status: 400, description: 'Donnees invalides (voir errors)' })
   @ApiResponse({ status: 401, description: 'Identifiants invalides' })

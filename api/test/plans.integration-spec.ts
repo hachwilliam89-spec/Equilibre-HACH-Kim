@@ -14,12 +14,12 @@ import { AppModule } from '../src/app.module';
  * Les scénarios métier communs sont dans test/cucumber/features/plans.feature.
  * Vraie
  * application Nest, vraie base MongoDB -- aucun mock, meme philosophie que
- * test/auth.e2e-spec.ts.
+ * test/auth.integration-spec.ts.
  *
- * Memes prerequis que auth.e2e-spec.ts : MONGO_URI, JWT_SECRET,
+ * Memes prerequis que auth.integration-spec.ts : MONGO_URI, JWT_SECRET,
  * JWT_REFRESH_SECRET dans l'environnement (voir pnpm test:e2e:local).
  */
-describe('Plans (e2e)', () => {
+describe('Plans (integration)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
@@ -33,7 +33,11 @@ describe('Plans (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    // Garde defensive : si beforeAll a echoue (Mongo injoignable, par
+    // exemple), `app` reste undefined -- sans ce garde, afterAll levait sa
+    // propre erreur ("Cannot read properties of undefined") qui masquait
+    // la vraie cause dans le rapport Jest.
+    if (app) await app.close();
   });
 
   const uniqueEmail = () => `test-${randomUUID()}@equilibre.app`;
@@ -49,7 +53,7 @@ describe('Plans (e2e)', () => {
   // POST /api/auth/login -- cette route est deliberement limitee a 5
   // tentatives/minute/IP (anti brute-force, voir auth.controller.ts) et la
   // plupart des tests de ce fichier n'ont besoin que d'un token valide, pas
-  // de retester le login lui-meme (deja couvert par auth.e2e-spec.ts).
+  // de retester le login lui-meme (deja couvert par auth.integration-spec.ts).
   const mintAccessToken = (
     testApp: INestApplication<App>,
     userId: string,
@@ -200,6 +204,46 @@ describe('Plans (e2e)', () => {
     });
   });
 
+  describe('Roles autorises', () => {
+    it.each(['soumission', 'annulation', 'lecture coach'])(
+      'refuse la route %s au role utilisateur sans modifier les plans',
+      async (action) => {
+        const coach = await registerAndLoginCoach(app);
+        const user = await registerAndLoginUtilisateur(app, coach.coachId);
+        const created = await request(app.getHttpServer())
+          .post('/api/plans')
+          .set('Authorization', `Bearer ${coach.accessToken}`)
+          .send(validPlanBody(user.userId))
+          .expect(HttpStatus.CREATED);
+        const planId = (created.body as PlanResponseBody).id;
+        const before = await plansCollection(app)
+          .find({ userId: user.userId })
+          .toArray();
+        const client = request(app.getHttpServer());
+        const call =
+          action === 'soumission'
+            ? client.post('/api/plans').send(validPlanBody(user.userId))
+            : action === 'annulation'
+              ? client.post(`/api/plans/${planId}/cancel`)
+              : client.get(`/api/plans/users/${user.userId}`);
+        await call
+          .set('Authorization', `Bearer ${user.accessToken}`)
+          .expect(HttpStatus.FORBIDDEN);
+        expect(
+          await plansCollection(app).find({ userId: user.userId }).toArray(),
+        ).toEqual(before);
+      },
+    );
+
+    it('refuse la lecture /me au role coach', async () => {
+      const coach = await registerAndLoginCoach(app);
+      await request(app.getHttpServer())
+        .get('/api/plans/me')
+        .set('Authorization', `Bearer ${coach.accessToken}`)
+        .expect(HttpStatus.FORBIDDEN);
+    });
+  });
+
   describe('POST /api/plans', () => {
     it("refuse la creation si la taille du profil n'est pas renseignee", async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
@@ -208,12 +252,17 @@ describe('Plans (e2e)', () => {
         sexe: 'femme',
       });
 
-      await request(app.getHttpServer())
+      const response = await request(app.getHttpServer())
         .post('/api/plans')
         .set('Authorization', `Bearer ${accessToken}`)
         .send(validPlanBody(userId))
         .expect(HttpStatus.BAD_REQUEST);
 
+      // Le code HTTP seul ne prouve pas que c'est bien la regle "taille
+      // manquante" qui a rejete la requete plutot qu'une autre validation.
+      expect((response.body as { type: string }).type).toContain(
+        'missing-taille',
+      );
       expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
     });
 
@@ -223,12 +272,15 @@ describe('Plans (e2e)', () => {
         tailleCm: 170,
       });
 
-      await request(app.getHttpServer())
+      const response = await request(app.getHttpServer())
         .post('/api/plans')
         .set('Authorization', `Bearer ${accessToken}`)
         .send(validPlanBody(userId))
         .expect(HttpStatus.BAD_REQUEST);
 
+      expect((response.body as { type: string }).type).toContain(
+        'incomplete-metabolic-profile',
+      );
       expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
     });
 
@@ -277,6 +329,38 @@ describe('Plans (e2e)', () => {
       expect(body.budgetPlafonneAuBmr).toBe(true);
     });
 
+    it('suggere un surplus (prise de masse) via la vraie API, budget non plafonne', async () => {
+      // Formule de surplus testee unitairement dans metabolic-calculations.spec.ts ;
+      // ce test verifie qu'elle est bien branchee bout en bout (endpoint,
+      // profil utilisateur reel, persistance), pas seulement en isolation.
+      // BMR (Mifflin-St Jeor, femme 30 ans, 70kg, 1.70m) = 1451.5
+      // TDEE (Sedentaire x1.2) = 1741.8 ; surplus 0.5kg/sem = 550 kcal/j
+      const { coachId, accessToken } = await registerAndLoginCoach(app);
+      const userId = await registerUtilisateur(app, coachId, {
+        tailleCm: 170,
+        age: 30,
+        sexe: 'femme',
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/api/plans')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          ...validPlanBody(userId),
+          poidsDepart: 70,
+          poidsCible: 72, // +2kg sur 4 semaines = 0.5kg/semaine (limite haute autorisee)
+          niveauActivite: 'sedentaire',
+        })
+        .expect(HttpStatus.CREATED);
+      const body = response.body as PlanResponseBody;
+      expect(body.budgetPlafonneAuBmr).toBe(false);
+      expect(body.budgetCalorique).toBeCloseTo(1741.8 + 550, 0);
+
+      const doc = await plansCollection(app).findOne({ userId });
+      expect(doc?.budgetCalorique).toBeCloseTo(1741.8 + 550, 0);
+      expect(doc?.budgetPlafonneAuBmr).toBe(false);
+    });
+
     it('refuse un plan si un plan actif existe deja pour cet utilisateur', async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
       const userId = await registerUtilisateur(app, coachId);
@@ -296,6 +380,16 @@ describe('Plans (e2e)', () => {
   });
 
   describe('POST /api/plans/:id/cancel', () => {
+    it('retourne 404 pour un plan inexistant avec un coach authentifie', async () => {
+      const coach = await registerAndLoginCoach(app);
+      const planId = randomUUID();
+      await request(app.getHttpServer())
+        .post(`/api/plans/${planId}/cancel`)
+        .set('Authorization', `Bearer ${coach.accessToken}`)
+        .expect(HttpStatus.NOT_FOUND);
+      expect(await plansCollection(app).findOne({ _id: planId })).toBeNull();
+    });
+
     it("refuse d'annuler un plan qui ne lui est pas rattache", async () => {
       const coachA = await registerAndLoginCoach(app);
       const userOfCoachA = await registerUtilisateur(app, coachA.coachId);
@@ -306,11 +400,19 @@ describe('Plans (e2e)', () => {
         .expect(HttpStatus.CREATED);
 
       const coachB = await registerAndLoginCoach(app);
+      const before = await plansCollection(app).findOne({
+        userId: userOfCoachA,
+      });
 
       await request(app.getHttpServer())
         .post(`/api/plans/${(created.body as PlanResponseBody).id}/cancel`)
         .set('Authorization', `Bearer ${coachB.accessToken}`)
         .expect(HttpStatus.FORBIDDEN);
+      const after = await plansCollection(app).findOne({
+        userId: userOfCoachA,
+      });
+      expect(after?.statut).toBe('actif');
+      expect(after).toEqual(before);
     });
   });
 
