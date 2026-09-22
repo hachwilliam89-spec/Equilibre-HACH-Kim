@@ -17,7 +17,7 @@ Documentation détaillée du backend : [README de l’API](api/README.md).
 |---|---|
 | API | NestJS (Node.js / TypeScript), architecture hexagonale par module |
 | Base de données | MongoDB 8.0 via Mongoose |
-| Mobile | React Native (Expo) — à venir |
+| Mobile | React Native (Expo) — connexion et session initialisées |
 | Authentification | JWT + refresh token |
 | Conteneurisation | Docker / Docker Compose |
 | Qualité | ESLint 9 (flat config) + Prettier, Husky, commitlint |
@@ -145,7 +145,7 @@ Cette procédure efface les données de l’environnement de test.
 │   │   └── health/          endpoint de santé (Terminus)
 │   ├── Dockerfile           build multi-stage : deps, development, builder, production
 │   └── .dockerignore
-├── mobile/                  application React Native (à venir)
+├── mobile/                  application React Native (connexion et session)
 ├── docker-compose.yml       configuration commune
 ├── docker-compose.dev.yml   surcharge développement
 ├── docker-compose.test.yml  surcharge test
@@ -190,3 +190,7 @@ Un lint en échec bloque le commit.
   de passe
 - En production, MongoDB n'est pas exposé : il n'est joignable que par l'API,
   via le réseau interne Docker
+
+## Application mobile
+
+Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le formulaire du plan (FR403-128) reste à implémenter.
