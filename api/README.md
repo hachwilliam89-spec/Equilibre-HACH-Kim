@@ -248,3 +248,11 @@ Les scénarios Cucumber marqués `@preview` vérifient le calcul, le plancher BM
 les accès, les données invalides, le profil incomplet, l’absence d’écriture et
 le parcours proposition → budget manuel → soumission. Ils vérifient également
 qu’une modification du profil après la proposition est prise en compte à la soumission.
+
+## Code de rattachement du coach
+
+À la connexion d’un coach, `POST /api/auth/login` renvoie aussi `coachCode`, par exemple `EQ-7A9B2C4D`. Le code est attribué à la première connexion, y compris pour les comptes existants, puis reste stable. MongoDB garantit son unicité par un index unique partiel ; une attribution concurrente conserve le même code.
+
+Pour inscrire un utilisateur, envoyer `email`, `password`, `role: "utilisateur"` et `coachCode` à `POST /api/auth/register`. Les espaces extérieurs et la casse du code sont normalisés. Le serveur recherche le coach puis conserve son UUID dans `coachId`. Un code inconnu ou mal formé est refusé (400) ; un e-mail déjà utilisé renvoie 409.
+
+Le champ historique `coachId` reste accepté pour compatibilité avec les clients/tests existants, mais ne doit pas être fourni avec `coachCode`. Le formulaire mobile utilise uniquement `coachCode`. Le code sert au rattachement, pas à l’authentification.

@@ -18,6 +18,7 @@ export interface LoginResult {
   refreshToken: string;
   role: 'coach' | 'utilisateur';
   userId: string;
+  coachCode?: string;
 }
 
 @Injectable()
@@ -51,6 +52,10 @@ export class LoginUseCase {
       );
     }
 
+    const coachCode =
+      user.role === 'coach'
+        ? await this.userRepository.ensureCoachCode(user.id)
+        : undefined;
     const payload = { sub: user.id, role: user.role };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
 
@@ -80,6 +85,12 @@ export class LoginUseCase {
     });
     await this.refreshTokenRepository.save(record);
 
-    return { accessToken, refreshToken, role: user.role, userId: user.id };
+    return {
+      accessToken,
+      refreshToken,
+      role: user.role,
+      userId: user.id,
+      ...(coachCode ? { coachCode } : {}),
+    };
   }
 }

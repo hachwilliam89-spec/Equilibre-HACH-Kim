@@ -145,7 +145,7 @@ describe('Auth (e2e)', () => {
       expect(doc?.passwordHash).toMatch(/^\$2[aby]\$/);
     });
 
-    it('refuse un utilisateur sans coachId (regle metier validee des le DTO)', async () => {
+    it('refuse un utilisateur sans code ni rattachement (validation du DTO)', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/auth/register')
         .send({
@@ -158,7 +158,9 @@ describe('Auth (e2e)', () => {
       const body = response.body as {
         errors: Array<{ field: string; message: string }>;
       };
-      expect(body.errors.some((error) => error.field === 'coachId')).toBe(true);
+      expect(body.errors.some((error) => error.field === 'coachCode')).toBe(
+        true,
+      );
     });
 
     it('refuse un email deja utilise', async () => {
