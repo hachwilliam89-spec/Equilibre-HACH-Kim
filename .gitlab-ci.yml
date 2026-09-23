@@ -137,7 +137,14 @@ docker:build:
   services:
     - docker:27-dind
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
+    # TLS desactive entre le client et le dind : plus simple qu'une
+    # configuration TLS partagee entre les deux conteneurs du job, et
+    # suffisant sur un runner de projet isole (pas d'autre job concurrent
+    # susceptible d'ecouter sur ce daemon). DOCKER_HOST doit alors etre
+    # explicite : sans lui le client docker:27-cli tente localhost, pas le
+    # service "docker" (l'alias par defaut de docker:27-dind).
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
     GHCR_IMAGE: ghcr.io/hachwilliam89-spec/equilibre-api
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
