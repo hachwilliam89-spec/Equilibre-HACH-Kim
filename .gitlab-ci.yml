@@ -112,6 +112,33 @@ api:build:
       - api/dist
     expire_in: 1 day
 
+# Construit l'image Docker de l'API et la pousse vers la Container Registry
+# integree a l'instance GitLab de l'ecole. Seul cet artefact (l'image, pas
+# les sources) est ensuite recupere par le serveur de deploiement (voir
+# Page 10 - CI/CD, section "Contraintes pour le deploiement").
+#
+# Uniquement sur develop/main : inutile de pousser une image a chaque
+# commit de branche de travail, seule une fusion validee doit produire un
+# artefact deployable.
+docker:build:
+  stage: build
+  image: docker:27-cli
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -t "$CI_REGISTRY_IMAGE/equilibre-api:$CI_COMMIT_SHORT_SHA" -t "$CI_REGISTRY_IMAGE/equilibre-api:latest" ./api
+    - docker push "$CI_REGISTRY_IMAGE/equilibre-api:$CI_COMMIT_SHORT_SHA"
+    - docker push "$CI_REGISTRY_IMAGE/equilibre-api:latest"
+    # CI_REGISTRY_IMAGE resout au meme chemin que celui affiche sur la page
+    # Deploy > Container Registry du projet (git.uha4point0.fr:5050/...) :
+    # aucune adresse en dur necessaire dans ce job.
+
 # ---------------------------------------------------------------------------
 # Mobile (Expo / React Native)
 # ---------------------------------------------------------------------------
