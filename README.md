@@ -182,6 +182,24 @@ fix(docker): corrige le chemin du Dockerfile
 
 Un lint en échec bloque le commit.
 
+## Intégration continue
+
+Pipeline GitLab CI (`.gitlab-ci.yml`, miroir GitHub Actions dans
+`.github/workflows/ci.yml`) déclenchée sur chaque commit, toutes branches.
+Trois étages, dans l'ordre : `quality` (lint + vérification des types),
+`test` (Jest), `build` (compilation TypeScript de l'API). `api/` et `mobile/` sont deux paquets indépendants ; chaque job
+installe ses propres dépendances avec `pnpm install --frozen-lockfile`, qui
+échoue si le lockfile ne correspond plus au `package.json`.
+
+Un job en échec bloque la fusion de la merge request. Aucun déploiement
+n'est encore déclenché depuis cette pipeline (étape CD à venir).
+
+Étage `test`, en plus des tests unitaires : `api:integration` (optionnel,
+étape 11 des consignes) exécute les tests d'intégration (`pnpm test:e2e`,
+sans mock) contre un vrai MongoDB, démarré comme service jetable de la
+pipeline. Identifiants et secrets JWT de ce job n'existent que pour sa
+durée ; ils n'ont aucune valeur en dehors de la CI.
+
 ## Sécurité
 
 - Aucun secret n'est versionné : les fichiers `.env.*` sont exclus, seul
@@ -197,4 +215,4 @@ Un lint en échec bloque le commit.
 
 ## Application mobile
 
-Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le formulaire du plan (FR403-128) reste à implémenter.
+Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le parcours coach de proposition et soumission du plan (FR403-128) est disponible pour recette sur iPhone.

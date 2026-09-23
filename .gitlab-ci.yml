@@ -1,0 +1,184 @@
+# Pipeline CI : verification automatique a chaque commit, sur toutes les
+# branches (etape 8 du fil rouge : trigger sur commit + stage de build).
+#
+# Le depot contient deux paquets Node independants (api/ et mobile/), chacun
+# avec son propre package.json et pnpm-lock.yaml. Chaque job installe ses
+# propres dependances dans son propre conteneur ephemere : pas d'etat
+# partage entre jobs, donc pas de risque qu'un job "profite" d'une
+# installation faite par un autre et masque une regression.
+#
+# Une seule regle : un job qui echoue bloque le merge request (bouton
+# "Merge" grise par GitLab si la pipeline n'est pas verte). Rien n'est
+# deploye automatiquement depuis cette pipeline pour l'instant (etape CD a
+# venir, sur un job separe, uniquement depuis develop/main).
+
+stages:
+  - quality   # lint + verification des types : rapide, echoue vite
+  - test      # tests unitaires (Jest), sans base de donnees
+  - build     # compilation TypeScript -> JavaScript (api/dist)
+
+# Meme image que le Dockerfile de l'API (node:24-alpine) : le comportement
+# en CI est celui qu'on retrouvera en construisant l'image de production.
+image: node:24-alpine
+
+# corepack est fourni avec Node >= 16.9. Il lit le champ "packageManager"
+# du package.json ("pnpm@10.25.0") et installe/active exactement cette
+# version : la pipeline utilise le meme pnpm que sur les machines de dev,
+# jamais "le pnpm disponible sur l'image du jour".
+.pnpm_setup:
+  before_script:
+    - corepack enable
+    - corepack prepare --activate
+
+# ---------------------------------------------------------------------------
+# API (NestJS)
+# ---------------------------------------------------------------------------
+
+api:lint:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd api
+    # --frozen-lockfile : echoue si package.json et pnpm-lock.yaml ne
+    # correspondent plus, plutot que d'installer silencieusement autre
+    # chose que ce qui est verrouille dans le depot.
+    - pnpm install --frozen-lockfile
+    - pnpm lint
+
+api:typecheck:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    # --noEmit : verifie les types sans ecrire de fichiers, plus rapide que
+    # d'attendre le stage de build pour decouvrir une erreur de typage.
+    - pnpm exec tsc --noEmit
+
+api:test:
+  extends: .pnpm_setup
+  stage: test
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    # Tests unitaires uniquement (jest, sans Mongo) : les use cases sont
+    # testes avec des doublures du repository, pas de service necessaire
+    # dans cette pipeline. Les tests d'integration (avec vraie base) restent
+    # a lancer manuellement via `pnpm docker:test` pour l'instant.
+    - pnpm test
+
+# Test d'integration optionnel (etape 11 des consignes) : contre une vraie
+# instance MongoDB (service Docker de la pipeline), sans mock, comme l'exige
+# le cahier des charges pour les tests d'integration. L'application demarree
+# par le test (via Nest TestingModule + supertest) est celle qui existe
+# reellement dans src/, pas une image construite a part : voir
+# test/coach-users.integration-spec.ts pour le detail de ce que ca couvre.
+api:integration:
+  extends: .pnpm_setup
+  stage: test
+  services:
+    # Alias explicite : "mongo" est le nom d'hote joignable depuis le job,
+    # exactement comme dans MONGO_URI ci-dessous et dans docker-compose.yml.
+    # Image figee a 7.0 (pas 8.0) : le runner (VPS OVH, noyau >= 6.19)
+    # declenche le bug connu SERVER-121912 (TCMalloc vendorise incompatible
+    # avec les noyaux recents) qui empeche mongo:8.0 de demarrer. Meme choix
+    # que dans docker-compose.yml pour rester coherent.
+    - name: mongo:7.0
+      alias: mongo
+  variables:
+    # Ces identifiants n'existent que pour la duree du job, dans un
+    # conteneur Mongo jetable : aucun risque a les avoir en clair ici,
+    # contrairement a des secrets de production.
+    MONGO_INITDB_ROOT_USERNAME: equilibre_ci
+    MONGO_INITDB_ROOT_PASSWORD: equilibre_ci_password
+    MONGO_URI: "mongodb://equilibre_ci:equilibre_ci_password@mongo:27017/equilibre_test?authSource=admin"
+    JWT_SECRET: "ci-pipeline-dummy-jwt-secret-do-not-use-in-prod"
+    JWT_REFRESH_SECRET: "ci-pipeline-dummy-jwt-refresh-secret-do-not-use"
+    NODE_ENV: "test"
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    - pnpm test:e2e
+
+api:build:
+  extends: .pnpm_setup
+  stage: build
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    - pnpm run build
+  artifacts:
+    paths:
+      - api/dist
+    expire_in: 1 day
+
+# Construit l'image Docker de l'API et la pousse vers une registry externe.
+# Seul cet artefact (l'image, pas les sources) est ensuite recupere par le
+# serveur de deploiement (voir Page 10 - CI/CD, section "Contraintes pour
+# le deploiement").
+#
+# La Container Registry integree a l'instance GitLab de l'ecole existe
+# mais son port (5050) n'est joignable que depuis le reseau du campus :
+# injoignable aussi bien depuis le runner (VPS OVH) que depuis le futur
+# serveur de deploiement, tous les deux hors campus. Image poussee vers
+# GitHub Container Registry (ghcr.io) a la place, joignable normalement en
+# HTTPS depuis n'importe quel reseau. Necessite deux variables CI/CD
+# (Settings > CI/CD > Variables, masquees) : GHCR_USER (identifiant
+# GitHub) et GHCR_TOKEN (Personal Access Token GitHub, scope
+# write:packages), a creer soi-meme sur github.com > Settings > Developer
+# settings > Personal access tokens.
+#
+# Uniquement sur develop/main : inutile de pousser une image a chaque
+# commit de branche de travail, seule une fusion validee doit produire un
+# artefact deployable.
+docker:build:
+  stage: build
+  image: docker:27-cli
+  services:
+    - docker:27-dind
+  variables:
+    # TLS desactive entre le client et le dind : plus simple qu'une
+    # configuration TLS partagee entre les deux conteneurs du job, et
+    # suffisant sur un runner de projet isole (pas d'autre job concurrent
+    # susceptible d'ecouter sur ce daemon). DOCKER_HOST doit alors etre
+    # explicite : sans lui le client docker:27-cli tente localhost, pas le
+    # service "docker" (l'alias par defaut de docker:27-dind).
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    GHCR_IMAGE: ghcr.io/hachwilliam89-spec/equilibre-api
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - docker login -u "$GHCR_USER" -p "$GHCR_TOKEN" ghcr.io
+  script:
+    - docker build -t "$GHCR_IMAGE:$CI_COMMIT_SHORT_SHA" -t "$GHCR_IMAGE:latest" ./api
+    - docker push "$GHCR_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker push "$GHCR_IMAGE:latest"
+
+# ---------------------------------------------------------------------------
+# Mobile (Expo / React Native)
+# ---------------------------------------------------------------------------
+
+mobile:lint:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd mobile
+    - pnpm install --frozen-lockfile
+    - pnpm lint
+
+mobile:typecheck:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd mobile
+    - pnpm install --frozen-lockfile
+    - pnpm typecheck
+
+mobile:test:
+  extends: .pnpm_setup
+  stage: test
+  script:
+    - cd mobile
+    - pnpm install --frozen-lockfile
+    - pnpm test

@@ -99,9 +99,9 @@ export default function Connection() {
                   : "ESPACE UTILISATEUR"}
               </Text>
               <Text style={s.title}>Vous êtes connecté.</Text>
+              {session.role === "coach" && <Pressable accessibilityRole="button" style={s.button} disabled={busy} onPress={() => router.push("/coach")}><Text style={s.buttonText}>Mes utilisateurs</Text></Pressable>}
               <Text style={s.text}>
-                Votre connexion est établie. Le parcours de suivi sera
-                disponible ici prochainement.
+                {session.role === "coach" ? "Retrouvez vos utilisateurs et préparez leur plan." : "Votre connexion est établie. Votre espace de suivi sera disponible prochainement."}
               </Text>
               {session.role === "coach" && (
                 <View>
