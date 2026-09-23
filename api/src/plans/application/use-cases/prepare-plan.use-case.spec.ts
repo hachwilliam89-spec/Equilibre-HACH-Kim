@@ -29,6 +29,7 @@ function buildUser(overrides: Partial<UserProps> = {}): User {
 
 function buildUserRepository(): jest.Mocked<UserRepositoryPort> {
   return {
+    findByCoachId: jest.fn(),
     findByCoachCode: jest.fn(),
     ensureCoachCode: jest.fn(),
     findByEmail: jest.fn(),
