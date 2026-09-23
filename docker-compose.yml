@@ -25,7 +25,13 @@ services:
       - equilibre-network
 
   mongo:
-    image: mongo:8.0
+    # Fige a 7.0 (pas 8.0) : MongoDB 8.x embarque une version de TCMalloc
+    # incompatible avec les noyaux Linux >= 6.19 (bug connu SERVER-121912,
+    # cf. https://jira.mongodb.org/browse/SERVER-121912). Notre VPS OVH
+    # tourne un noyau 7.0.x qui declenche ce bug : Mongo refuse de demarrer.
+    # 7.0 n'a pas ce souci et couvre nos besoins (pas de fonctionnalite 8.x
+    # utilisee). A revoir si Mongo publie un correctif.
+    image: mongo:7.0
     # --quiet supprime les lignes "Connection accepted/ended" que le
     # healthcheck genere a chaque sonde : sans lui les logs de Mongo
     # noient completement ceux de l'API.

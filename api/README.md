@@ -256,3 +256,7 @@ qu’une modification du profil après la proposition est prise en compte à la 
 Pour inscrire un utilisateur, envoyer `email`, `password`, `role: "utilisateur"` et `coachCode` à `POST /api/auth/register`. Les espaces extérieurs et la casse du code sont normalisés. Le serveur recherche le coach puis conserve son UUID dans `coachId`. Un code inconnu ou mal formé est refusé (400) ; un e-mail déjà utilisé renvoie 409.
 
 Le champ historique `coachId` reste accepté pour compatibilité avec les clients/tests existants, mais ne doit pas être fourni avec `coachCode`. Le formulaire mobile utilise uniquement `coachCode`. Le code sert au rattachement, pas à l’authentification.
+
+## Liste des utilisateurs du coach
+
+`GET /api/users/me/clients` nécessite un JWT et le rôle coach. Renvoie 200 et une liste (vide si aucun rattachement) avec uniquement `id`, `email`, `tailleCm`, `age`, `sexe`. Les champs de profil absents sont omis. Le filtre repose exclusivement sur l’identifiant du coach authentifié. Aucun hash de mot de passe ni jeton n’est retourné. Réponses 401 sans authentification valide, 403 pour un autre rôle.

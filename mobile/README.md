@@ -52,7 +52,7 @@ Un compte existant est nécessaire, inscrit via Swagger dans le même environnem
 - Jeton révoqué/expiré : retour au formulaire ; panne réseau : possibilité de réessayer sans effacer la session.
 - Logout : révocation serveur, puis suppression locale. Si le réseau échoue, l’écran reste connecté et propose de réessayer.
 - L’aperçu web ne conserve la session qu’en mémoire. Il nécessite une configuration CORS adaptée côté API ; ce n’est pas le parcours de validation mobile.
-- Le renouvellement automatique lors de futurs appels métier sera raccordé avec le module plans. Cet incrément restaure la session au démarrage.
+- Les appels métier du module plans renouvellent automatiquement une fois le jeton après un 401 ; les appels concurrents partagent ce renouvellement.
 
 ## Vérification
 
@@ -79,9 +79,28 @@ Les tests locaux valident les contrats du formulaire et des réponses, pas le re
 | Révoquer le refresh token puis rouvrir | Formulaire avec message de session expirée |
 | Se déconnecter puis relancer | Formulaire ; aucune restauration de l’ancienne session |
 
-## Suite : FR403-128
+## Parcours coach : FR403-128
 
-Le formulaire de proposition/soumission n’est pas encore implémenté. L’accueil connecté est une transition explicite. La sélection d’un utilisateur rattaché nécessite aussi une API de liste dédiée (absente des routes actuelles) ; ne pas remplacer cette sélection par des utilisateurs fictifs en production.
+Depuis l’accueil connecté, « Mes utilisateurs » affiche les comptes réellement rattachés au coach via `GET /api/users/me/clients`. La sélection ouvre le plan actif ou un état vide.
+
+Le formulaire comporte deux étapes : objectifs (poids, dates au format AAAA-MM-JJ, IMC et rythme indicatifs), puis activité, proposition de budget et validation. La proposition appelle `POST /api/plans/preview` sans enregistrement. Le coach peut ajuster le budget avant `POST /api/plans`, qui revalide les règles métier. Le plan enregistré apparaît ensuite avec la possibilité de l’annuler après confirmation.
+
+La taille est obligatoire ; sans âge ou sexe, le budget doit être saisi manuellement. La complétion du profil dans le mobile reste à implémenter : pour la recette, utiliser un utilisateur dont le profil est déjà renseigné. Aucun graphique de pesées ou d’alimentation fictives n’est affiché ; ces suivis dépendent des prochaines US.
+
+Les requêtes protégées renouvellent le jeton une seule fois en cas de 401. Un renouvellement refusé ramène à la connexion. Après une interruption réseau lors de la soumission, revenir au suivi et actualiser le plan avant de réessayer.
+
+### Recette iPhone
+
+1. Connecter un coach ; vérifier sa liste et l’absence des utilisateurs d’un autre coach.
+2. Ouvrir un utilisateur de taille 170 cm, âge 30 ans, sexe femme, sans plan actif.
+3. Saisir 80 kg → 78 kg du 2026-09-23 au 2026-10-21 ; continuer vers le budget.
+4. Choisir Sédentaire, calculer la proposition et vérifier qu’aucun plan n’est encore enregistré.
+5. Ajuster le budget, soumettre, puis actualiser : le plan doit rester visible.
+6. Vérifier le refus des dates identiques, du poids inchangé et d’un rythme excessif.
+7. Annuler : confirmer puis vérifier l’absence de plan actif.
+8. Avec un profil sans âge ou sexe mais avec taille, vérifier le parcours avec budget manuel.
+
+Les tests Jest mobiles couvrent les saisies, les décimales françaises, le renouvellement de session et les erreurs API. Ils ne remplacent pas cette recette visuelle sur iPhone.
 
 Sources : [installation Expo Router](https://docs.expo.dev/router/installation/), [SecureStore SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/securestore/).
 

@@ -13,13 +13,21 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"utilisateur" | "coach">("utilisateur");
   const [coachCode, setCoachCode] = useState("");
+  const [taille, setTaille] = useState("");
+  const [age, setAge] = useState("");
+  const [sexe, setSexe] = useState<"homme" | "femme" | undefined>();
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async () => {
     if (pending.current) return;
-    const parsed = registrationSchema.safeParse({ email, password, role, coachCode });
+    const parsed = registrationSchema.safeParse({
+      email, password, role, coachCode,
+      tailleCm: Number(taille.trim().replace(",", ".")),
+      age: age.trim() ? Number(age.trim()) : undefined,
+      sexe,
+    });
     if (!parsed.success) { setError(parsed.error.issues[0].message); return; }
     pending.current = true;
     setBusy(true);
@@ -49,6 +57,16 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
             <Text style={s.label}>Code du coach</Text>
             <TextInput accessibilityLabel="Code du coach" style={s.input} value={coachCode} onChangeText={(value) => setCoachCode(value.toUpperCase())} autoCapitalize="characters" autoCorrect={false} editable={!busy} />
             <Text style={s.text}>Saisissez le code transmis par votre coach.</Text>
+            <Text style={s.label}>Taille (cm) · obligatoire</Text>
+            <TextInput accessibilityLabel="Taille en centimètres" style={s.input} value={taille} onChangeText={setTaille} keyboardType="decimal-pad" editable={!busy} />
+            <Text style={s.text}>Votre coach en a besoin pour préparer votre plan.</Text>
+            <Text style={s.label}>Âge · facultatif</Text>
+            <TextInput accessibilityLabel="Âge en années" style={s.input} value={age} onChangeText={setAge} keyboardType="number-pad" editable={!busy} />
+            <Text style={s.label}>Sexe biologique · facultatif</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {([undefined, "femme", "homme"] as const).map((choice) => <Pressable key={choice ?? "non-renseigne"} accessibilityRole="radio" accessibilityState={{ checked: sexe === choice, disabled: busy }} disabled={busy} onPress={() => setSexe(choice)} style={[s.input, sexe === choice && { backgroundColor: "#e4efea", borderColor: "#087454" }]}><Text>{choice === undefined ? "Non renseigné" : choice === "femme" ? "Femme" : "Homme"}</Text></Pressable>)}
+            </View>
+            <Text style={s.text}>L’âge et le sexe servent au calcul du budget calorique. Sans ces informations, votre coach le saisira manuellement.</Text>
           </>}
           {error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
           <Pressable accessibilityRole="button" disabled={busy} style={[s.button, busy && s.disabled]} onPress={submit}><Text style={s.buttonText}>{busy ? "Inscription…" : "Créer mon compte"}</Text></Pressable>

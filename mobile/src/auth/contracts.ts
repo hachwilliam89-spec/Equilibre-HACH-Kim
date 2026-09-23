@@ -27,6 +27,9 @@ export const registrationSchema = z.discriminatedUnion("role", [
   credentialsSchema.extend({
     role: z.literal("utilisateur"),
     coachCode: z.string().trim().toUpperCase().regex(/^EQ-[A-F0-9]{8}$/, "Saisis le code du coach au format EQ-7A9B2C4D."),
+    tailleCm: z.number({ error: "Saisis une taille valide en cm." }).positive("La taille doit être positive."),
+    age: z.number({ error: "Saisis un âge valide." }).int("L’âge doit être un nombre entier.").positive("L’âge doit être positif.").optional(),
+    sexe: z.enum(["homme", "femme"]).optional(),
   }),
 ]);
 export type Registration = z.infer<typeof registrationSchema>;

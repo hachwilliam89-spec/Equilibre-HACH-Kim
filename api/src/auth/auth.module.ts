@@ -1,3 +1,4 @@
+import { CoachUsersController } from './infrastructure/http/coach-users.controller';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -40,7 +41,7 @@ import {
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, CoachUsersController],
   providers: [
     { provide: USER_REPOSITORY, useClass: MongooseUserRepository },
     {
