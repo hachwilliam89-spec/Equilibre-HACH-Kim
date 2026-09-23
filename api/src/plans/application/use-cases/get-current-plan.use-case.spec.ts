@@ -44,6 +44,8 @@ function buildRepos() {
     save: jest.fn(),
   };
   const userRepository: jest.Mocked<UserRepositoryPort> = {
+    findByCoachCode: jest.fn(),
+    ensureCoachCode: jest.fn(),
     findByEmail: jest.fn(),
     findById: jest.fn(),
     create: jest.fn(),
