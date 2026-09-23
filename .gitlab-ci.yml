@@ -67,6 +67,35 @@ api:test:
     # a lancer manuellement via `pnpm docker:test` pour l'instant.
     - pnpm test
 
+# Test d'integration optionnel (etape 11 des consignes) : contre une vraie
+# instance MongoDB (service Docker de la pipeline), sans mock, comme l'exige
+# le cahier des charges pour les tests d'integration. L'application demarree
+# par le test (via Nest TestingModule + supertest) est celle qui existe
+# reellement dans src/, pas une image construite a part : voir
+# test/coach-users.integration-spec.ts pour le detail de ce que ca couvre.
+api:integration:
+  extends: .pnpm_setup
+  stage: test
+  services:
+    # Alias explicite : "mongo" est le nom d'hote joignable depuis le job,
+    # exactement comme dans MONGO_URI ci-dessous et dans docker-compose.yml.
+    - name: mongo:8.0
+      alias: mongo
+  variables:
+    # Ces identifiants n'existent que pour la duree du job, dans un
+    # conteneur Mongo jetable : aucun risque a les avoir en clair ici,
+    # contrairement a des secrets de production.
+    MONGO_INITDB_ROOT_USERNAME: equilibre_ci
+    MONGO_INITDB_ROOT_PASSWORD: equilibre_ci_password
+    MONGO_URI: "mongodb://equilibre_ci:equilibre_ci_password@mongo:27017/equilibre_test?authSource=admin"
+    JWT_SECRET: "ci-pipeline-dummy-jwt-secret-do-not-use-in-prod"
+    JWT_REFRESH_SECRET: "ci-pipeline-dummy-jwt-refresh-secret-do-not-use"
+    NODE_ENV: "test"
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    - pnpm test:e2e
+
 api:build:
   extends: .pnpm_setup
   stage: build

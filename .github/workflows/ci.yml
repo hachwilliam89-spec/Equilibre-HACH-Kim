@@ -63,6 +63,33 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run build
 
+  api-integration:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8.0
+        ports: ["27017:27017"]
+        env:
+          MONGO_INITDB_ROOT_USERNAME: equilibre_ci
+          MONGO_INITDB_ROOT_PASSWORD: equilibre_ci_password
+    env:
+      # GitHub Actions expose les services via localhost (port mappe),
+      # a la difference de GitLab CI qui joint le service par son alias.
+      MONGO_URI: "mongodb://equilibre_ci:equilibre_ci_password@localhost:27017/equilibre_test?authSource=admin"
+      JWT_SECRET: "ci-pipeline-dummy-jwt-secret-do-not-use-in-prod"
+      JWT_REFRESH_SECRET: "ci-pipeline-dummy-jwt-refresh-secret-do-not-use"
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: corepack enable
+      - working-directory: api
+        run: |
+          corepack prepare --activate
+          pnpm install --frozen-lockfile
+          pnpm test:e2e
+
   mobile-lint:
     runs-on: ubuntu-latest
     steps:
