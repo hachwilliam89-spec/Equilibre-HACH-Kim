@@ -79,7 +79,11 @@ api:integration:
   services:
     # Alias explicite : "mongo" est le nom d'hote joignable depuis le job,
     # exactement comme dans MONGO_URI ci-dessous et dans docker-compose.yml.
-    - name: mongo:8.0
+    # Image figee a 7.0 (pas 8.0) : le runner (VPS OVH, noyau >= 6.19)
+    # declenche le bug connu SERVER-121912 (TCMalloc vendorise incompatible
+    # avec les noyaux recents) qui empeche mongo:8.0 de demarrer. Meme choix
+    # que dans docker-compose.yml pour rester coherent.
+    - name: mongo:7.0
       alias: mongo
   variables:
     # Ces identifiants n'existent que pour la duree du job, dans un

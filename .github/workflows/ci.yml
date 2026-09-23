@@ -66,8 +66,11 @@ jobs:
   api-integration:
     runs-on: ubuntu-latest
     services:
+      # Image figee a 7.0 (pas 8.0) : evite le bug SERVER-121912 (TCMalloc
+      # vendorise incompatible avec les noyaux Linux >= 6.19), cf. commentaire
+      # equivalent dans .gitlab-ci.yml et docker-compose.yml.
       mongo:
-        image: mongo:8.0
+        image: mongo:7.0
         ports: ["27017:27017"]
         env:
           MONGO_INITDB_ROOT_USERNAME: equilibre_ci
