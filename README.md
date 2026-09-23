@@ -197,4 +197,4 @@ Un lint en échec bloque le commit.
 
 ## Application mobile
 
-Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le formulaire du plan (FR403-128) reste à implémenter.
+Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le parcours coach de proposition et soumission du plan (FR403-128) est disponible pour recette sur iPhone.
