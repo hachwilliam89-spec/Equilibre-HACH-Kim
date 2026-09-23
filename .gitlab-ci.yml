@@ -1,0 +1,108 @@
+# Pipeline CI : verification automatique a chaque commit, sur toutes les
+# branches (etape 8 du fil rouge : trigger sur commit + stage de build).
+#
+# Le depot contient deux paquets Node independants (api/ et mobile/), chacun
+# avec son propre package.json et pnpm-lock.yaml. Chaque job installe ses
+# propres dependances dans son propre conteneur ephemere : pas d'etat
+# partage entre jobs, donc pas de risque qu'un job "profite" d'une
+# installation faite par un autre et masque une regression.
+#
+# Une seule regle : un job qui echoue bloque le merge request (bouton
+# "Merge" grise par GitLab si la pipeline n'est pas verte). Rien n'est
+# deploye automatiquement depuis cette pipeline pour l'instant (etape CD a
+# venir, sur un job separe, uniquement depuis develop/main).
+
+stages:
+  - quality   # lint + verification des types : rapide, echoue vite
+  - test      # tests unitaires (Jest), sans base de donnees
+  - build     # compilation TypeScript -> JavaScript (api/dist)
+
+# Meme image que le Dockerfile de l'API (node:24-alpine) : le comportement
+# en CI est celui qu'on retrouvera en construisant l'image de production.
+image: node:24-alpine
+
+# corepack est fourni avec Node >= 16.9. Il lit le champ "packageManager"
+# du package.json ("pnpm@10.25.0") et installe/active exactement cette
+# version : la pipeline utilise le meme pnpm que sur les machines de dev,
+# jamais "le pnpm disponible sur l'image du jour".
+.pnpm_setup:
+  before_script:
+    - corepack enable
+    - corepack prepare --activate
+
+# ---------------------------------------------------------------------------
+# API (NestJS)
+# ---------------------------------------------------------------------------
+
+api:lint:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd api
+    # --frozen-lockfile : echoue si package.json et pnpm-lock.yaml ne
+    # correspondent plus, plutot que d'installer silencieusement autre
+    # chose que ce qui est verrouille dans le depot.
+    - pnpm install --frozen-lockfile
+    - pnpm lint
+
+api:typecheck:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    # --noEmit : verifie les types sans ecrire de fichiers, plus rapide que
+    # d'attendre le stage de build pour decouvrir une erreur de typage.
+    - pnpm exec tsc --noEmit
+
+api:test:
+  extends: .pnpm_setup
+  stage: test
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    # Tests unitaires uniquement (jest, sans Mongo) : les use cases sont
+    # testes avec des doublures du repository, pas de service necessaire
+    # dans cette pipeline. Les tests d'integration (avec vraie base) restent
+    # a lancer manuellement via `pnpm docker:test` pour l'instant.
+    - pnpm test
+
+api:build:
+  extends: .pnpm_setup
+  stage: build
+  script:
+    - cd api
+    - pnpm install --frozen-lockfile
+    - pnpm run build
+  artifacts:
+    paths:
+      - api/dist
+    expire_in: 1 day
+
+# ---------------------------------------------------------------------------
+# Mobile (Expo / React Native)
+# ---------------------------------------------------------------------------
+
+mobile:lint:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd mobile
+    - pnpm install --frozen-lockfile
+    - pnpm lint
+
+mobile:typecheck:
+  extends: .pnpm_setup
+  stage: quality
+  script:
+    - cd mobile
+    - pnpm install --frozen-lockfile
+    - pnpm typecheck
+
+mobile:test:
+  extends: .pnpm_setup
+  stage: test
+  script:
+    - cd mobile
+    - pnpm install --frozen-lockfile
+    - pnpm test
