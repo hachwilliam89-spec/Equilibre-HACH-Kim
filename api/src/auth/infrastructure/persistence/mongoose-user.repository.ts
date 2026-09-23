@@ -14,6 +14,14 @@ export class MongooseUserRepository implements UserRepositoryPort {
     private readonly userModel: Model<UserDocument>,
   ) {}
 
+  async findByCoachId(coachId: string): Promise<User[]> {
+    const docs = await this.userModel
+      .find({ coachId, role: 'utilisateur' })
+      .sort({ email: 1 })
+      .exec();
+    return docs.map((doc) => this.toDomain(doc));
+  }
+
   async findByCoachCode(code: string): Promise<User | null> {
     const doc = await this.userModel
       .findOne({ coachCode: code, role: 'coach' })

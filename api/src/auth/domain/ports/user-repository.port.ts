@@ -5,6 +5,7 @@ import { User } from '../entities/user.entity';
  * L'implémentation concrète (Mongoose) vit dans infrastructure/persistence.
  */
 export interface UserRepositoryPort {
+  findByCoachId: (coachId: string) => Promise<User[]>;
   findByCoachCode: (code: string) => Promise<User | null>;
   ensureCoachCode: (id: string) => Promise<string>;
   findByEmail: (email: string) => Promise<User | null>;
