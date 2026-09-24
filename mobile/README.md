@@ -111,3 +111,21 @@ La page d’accès conserve le logo Equilibre et son slogan, avec les onglets «
 L’espace coach affiche son code et le bouton « Copier mon code ». Le code est renvoyé à la connexion et conservé avec la session. Pour une session antérieure à cette fonctionnalité, se déconnecter puis se reconnecter après mise à jour de l’API.
 
 Recette iPhone : connecter un coach, copier son code, se déconnecter, inscrire un utilisateur avec ce code, puis se connecter avec ce nouveau compte. Vérifier aussi le refus d’un code inconnu et d’un e-mail déjà utilisé.
+
+## Sélecteurs de dates, taille et poids
+
+Les dates se choisissent dans le calendrier natif sur mobile et dans un champ
+date sur le Web. Elles sont affichées en JJ/MM/AAAA et transmises à l’API en
+AAAA-MM-JJ. Si le début devient égal ou postérieur à la cible, celle-ci est
+effacée et une nouvelle sélection est demandée.
+
+Les poids se sélectionnent au dixième de kilogramme et la taille au centimètre.
+Le lien « Saisir au clavier » permet une saisie directe.
+Annuler un sélecteur conserve la valeur précédente.
+
+Les composants sont inclus dans Expo Go pour le SDK 57. Un binaire personnalisé
+existant doit être reconstruit pour intégrer les nouvelles dépendances natives.
+
+Recette confirmée par Hach Kim le 24/09/2026 sur iPhone 17 :
+sélection, annulation conservant la valeur, saisie au clavier et modification
+de la date de début au-delà de la cible. La recette Android reste à effectuer.
