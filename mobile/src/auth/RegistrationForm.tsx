@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { MeasurementField } from "../ui/MeasurementField";
 import { register } from "./api";
 import { registrationSchema } from "./contracts";
 import { useSession } from "./session";
@@ -57,8 +58,7 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
             <Text style={s.label}>Code du coach</Text>
             <TextInput accessibilityLabel="Code du coach" style={s.input} value={coachCode} onChangeText={(value) => setCoachCode(value.toUpperCase())} autoCapitalize="characters" autoCorrect={false} editable={!busy} />
             <Text style={s.text}>Saisissez le code transmis par votre coach.</Text>
-            <Text style={s.label}>Taille (cm) · obligatoire</Text>
-            <TextInput accessibilityLabel="Taille en centimètres" style={s.input} value={taille} onChangeText={setTaille} keyboardType="decimal-pad" editable={!busy} />
+            <MeasurementField label="Taille (cm) · obligatoire" unit="cm" value={taille} onChange={setTaille} disabled={busy} />
             <Text style={s.text}>Votre coach en a besoin pour préparer votre plan.</Text>
             <Text style={s.label}>Âge · facultatif</Text>
             <TextInput accessibilityLabel="Âge en années" style={s.input} value={age} onChangeText={setAge} keyboardType="number-pad" editable={!busy} />

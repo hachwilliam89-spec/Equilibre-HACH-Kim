@@ -244,6 +244,173 @@ describe('Plans (integration)', () => {
     });
   });
 
+  describe('Compléments de recette US1', () => {
+    it.each([
+      ['sedentaire', 1571.5, true],
+      ['actif', 1610.8125, false],
+      ['sportif', 1885.825, false],
+      ['athlete', 2160.8375, false],
+    ])(
+      'calcule et conserve le budget au niveau %s',
+      async (niveau, budget, plancher) => {
+        const coach = await registerAndLoginCoach(app);
+        const user = await registerAndLoginUtilisateur(app, coach.coachId);
+        const payload = {
+          ...validPlanBody(user.userId),
+          poidsCible: 80,
+          niveauActivite: niveau,
+        };
+        const preview = await request(app.getHttpServer())
+          .post('/api/plans/preview')
+          .set('Authorization', `Bearer ${coach.accessToken}`)
+          .send(payload)
+          .expect(200);
+        expect((preview.body as PlanResponseBody).budgetCalorique).toBeCloseTo(
+          budget,
+          6,
+        );
+        expect((preview.body as PlanResponseBody).budgetPlafonneAuBmr).toBe(
+          plancher,
+        );
+        expect(
+          await plansCollection(app).countDocuments({ userId: user.userId }),
+        ).toBe(0);
+        const created = await request(app.getHttpServer())
+          .post('/api/plans')
+          .set('Authorization', `Bearer ${coach.accessToken}`)
+          .send(payload)
+          .expect(201);
+        const read = await request(app.getHttpServer())
+          .get('/api/plans/me')
+          .set('Authorization', `Bearer ${user.accessToken}`)
+          .expect(200);
+        expect(read.body).toEqual(created.body);
+        expect((read.body as PlanResponseBody).imcCible).toBeCloseTo(
+          80 / 1.7 ** 2,
+          6,
+        );
+        const stored = await plansCollection(app).findOne({
+          userId: user.userId,
+        });
+        expect(stored?.budgetCalorique).toBeCloseTo(budget, 6);
+        expect(stored?.niveauActivite).toBe(niveau);
+      },
+    );
+
+    it.each<[string, RegisterProfile]>([
+      ['âge absent', { tailleCm: 170, sexe: 'femme' }],
+      ['sexe absent', { tailleCm: 170, age: 30 }],
+    ])(
+      '%s : refuse le calcul automatique puis accepte le budget manuel',
+      async (_, profile) => {
+        const coach = await registerAndLoginCoach(app);
+        const userId = await registerUtilisateur(app, coach.coachId, profile);
+        const payload = {
+          ...validPlanBody(userId),
+          poidsDepart: 80,
+          poidsCible: 78,
+          niveauActivite: 'actif',
+        };
+        for (const path of ['/api/plans/preview', '/api/plans']) {
+          const rejected = await request(app.getHttpServer())
+            .post(path)
+            .set('Authorization', `Bearer ${coach.accessToken}`)
+            .send(payload)
+            .expect(400);
+          expect((rejected.body as { type: string }).type).toContain(
+            'incomplete-metabolic-profile',
+          );
+        }
+        expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
+        const manual = { ...payload, budgetCalorique: 1800 };
+        await request(app.getHttpServer())
+          .post('/api/plans/preview')
+          .set('Authorization', `Bearer ${coach.accessToken}`)
+          .send(manual)
+          .expect(200);
+        expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
+        await request(app.getHttpServer())
+          .post('/api/plans')
+          .set('Authorization', `Bearer ${coach.accessToken}`)
+          .send(manual)
+          .expect(201);
+        expect(
+          (await plansCollection(app).findOne({ userId }))?.budgetCalorique,
+        ).toBe(1800);
+      },
+    );
+
+    it('calcule le surplus homme de la documentation et le persiste', async () => {
+      const coach = await registerAndLoginCoach(app);
+      const userId = await registerUtilisateur(app, coach.coachId, {
+        tailleCm: 170,
+        age: 30,
+        sexe: 'homme',
+      });
+      const result = await request(app.getHttpServer())
+        .post('/api/plans')
+        .set('Authorization', `Bearer ${coach.accessToken}`)
+        .send({
+          ...validPlanBody(userId),
+          poidsDepart: 70,
+          poidsCible: 72,
+          niveauActivite: 'actif',
+        })
+        .expect(201);
+      expect((result.body as PlanResponseBody).budgetCalorique).toBeCloseTo(
+        2774.0625,
+        6,
+      );
+      expect((result.body as PlanResponseBody).budgetPlafonneAuBmr).toBe(false);
+      expect(
+        (await plansCollection(app).findOne({ userId }))?.budgetCalorique,
+      ).toBeCloseTo(2774.0625, 6);
+    });
+
+    it('isole les données de deux utilisateurs et maintient l’annulation après relecture', async () => {
+      const coach = await registerAndLoginCoach(app);
+      const userA = await registerAndLoginUtilisateur(app, coach.coachId);
+      const userB = await registerAndLoginUtilisateur(app, coach.coachId);
+      const created = await request(app.getHttpServer())
+        .post('/api/plans')
+        .set('Authorization', `Bearer ${coach.accessToken}`)
+        .send(validPlanBody(userB.userId))
+        .expect(201);
+      const plan = created.body as PlanResponseBody;
+      const forbidden = await request(app.getHttpServer())
+        .get(`/api/plans/users/${userB.userId}`)
+        .set('Authorization', `Bearer ${userA.accessToken}`)
+        .expect(403);
+      expect(JSON.stringify(forbidden.body)).not.toContain(plan.id);
+      const own = await request(app.getHttpServer())
+        .get('/api/plans/me')
+        .query({ userId: userB.userId })
+        .set('Authorization', `Bearer ${userA.accessToken}`)
+        .expect(200);
+      expect(own.body).toBeNull();
+      expect(
+        (await plansCollection(app).findOne({ _id: plan.id }))?.statut,
+      ).toBe('actif');
+      await request(app.getHttpServer())
+        .post(`/api/plans/${plan.id}/cancel`)
+        .set('Authorization', `Bearer ${coach.accessToken}`)
+        .expect(200);
+      for (const [path, token] of [
+        ['/api/plans/me', userB.accessToken],
+        [`/api/plans/users/${userB.userId}`, coach.accessToken],
+      ]) {
+        const read = await request(app.getHttpServer())
+          .get(path)
+          .set('Authorization', `Bearer ${token}`)
+          .expect(200);
+        expect(read.body).toBeNull();
+      }
+      expect(
+        (await plansCollection(app).findOne({ _id: plan.id }))?.statut,
+      ).toBe('annule');
+    });
+  });
+
   describe('POST /api/plans', () => {
     it("refuse la creation si la taille du profil n'est pas renseignee", async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
