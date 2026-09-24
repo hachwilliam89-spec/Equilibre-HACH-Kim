@@ -75,6 +75,23 @@ Les fixtures sont supprimées uniquement pour les identifiants créés par la su
 Ces résultats sont locaux ; ils ne constituent pas une exécution de la CI distante,
 ni une recette mobile, ni un test de concurrence HTTP des futures routes d'écriture.
 
+## Recette manuelle et circuit de livraison
+
+Recette manuelle Swagger réalisée par Hach Kim le 24 septembre 2026 sur
+`localhost:3000`, code API `4dcd6d26` :
+
+- 12:31:21 UTC : sans authentification, réponse 401.
+- 12:32:11 UTC : utilisateur authentifié sans mesure, réponse 200 avec `[]`.
+- 12:33:20 UTC : coach authentifié, réponse 403.
+
+Les réponses ont été fournies dans la conversation de vérification. Aucun jeton
+ni mot de passe n'est conservé dans cette fiche. L'historique rempli, son tri et
+l'isolation sont vérifiés automatiquement, pas par cette recette manuelle.
+
+Circuit de livraison : MR de chaque ticket vers `FR403-US2-suivi-poids`, puis
+MR US2 vers `develop`, puis MR `develop` vers `main`, avec commits de fusion
+conservés sans squash. La création d'une MR ne vaut pas réussite de la CI.
+
 ## Prompt Rovo regroupé
 
 > Mets à jour la documentation Confluence Équilibre pour l'US2 et FR403-671,
@@ -87,7 +104,11 @@ ni une recette mobile, ni un test de concurrence HTTP des futures routes d'écri
 > contrat Swagger documenté. MongoDB garantit l'unicité des identifiants et d'une
 > valeur valide par utilisateur/jour ; concurrence testée au niveau repository.
 > Preuves : 93 tests unitaires, 5 tests d'intégration MongoDB, lint et build réussis
-> le 24 septembre 2026. Précise que les routes d'écriture et leurs contrôles métier,
+> le 24 septembre 2026. Ajoute la recette manuelle Swagger de Hach Kim sur l'API
+> locale : sans authentification 401 à 12:31:21 UTC, utilisateur sans mesure
+> 200 avec [] à 12:32:11 UTC, coach 403 à 12:33:20 UTC. Distingue ces trois
+> contrôles manuels des scénarios automatisés ; ne copie aucun secret.
+> Précise que les routes d'écriture et leurs contrôles métier,
 > notamment plan actif et refus de toute tentative après une valeur valide,
 > restent aux tickets suivants ; le test de concurrence HTTP reste à faire avec
 > ces routes. Ne présente pas ces preuves comme une CI distante ou une recette
