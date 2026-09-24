@@ -6,6 +6,10 @@ import { budgetSchema, goalsSchema, weeklyRate } from "../../plans/form";
 import { Button, Field, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
 
+import { DateField } from "../../ui/DateField";
+import { MeasurementField } from "../../ui/MeasurementField";
+import { displayDate, nextDate } from "../../ui/dates";
+
 const activities = { sedentaire: "Sédentaire", actif: "Actif", sportif: "Sportif", athlete: "Athlète" } as const;
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 export default function UserPlan() {
@@ -97,7 +101,7 @@ export default function UserPlan() {
         <Text style={s.label}>Plan actuel</Text>
         {plan ? <>
           <Text style={s.text}>{plan.poidsDepart} kg → {plan.poidsCible} kg</Text>
-          <Text style={s.text}>{plan.dateDebut.slice(0,10)} → {plan.dateCible.slice(0,10)}</Text>
+          <Text style={s.text}>{displayDate(plan.dateDebut)} → {displayDate(plan.dateCible)}</Text>
           <Text style={s.text}>IMC cible : {plan.imcCible.toFixed(1)}</Text>
           <Text style={s.text}>Budget : {plan.budgetCalorique.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour</Text>
           <Text style={s.text}>Statut : actif</Text>
@@ -110,7 +114,13 @@ export default function UserPlan() {
         </>}
       </View>}
       {step === "goals" && <View style={s.card}>
-        {([ ["poidsDepart", "Poids de départ (kg)"], ["poidsCible", "Poids cible (kg)"], ["dateDebut", "Date de début (AAAA-MM-JJ)"], ["dateCible", "Date cible (AAAA-MM-JJ)"] ] as const).map(([key,label]) => <Field key={key} label={label} value={fields[key]} onChange={(value) => { setFields((old) => ({ ...old, [key]: value })); setFieldErrors((old) => ({ ...old, [key]: "" })); }} error={fieldErrors[key]} numeric={key.startsWith("poids")} />)}
+        {([ ["poidsDepart", "Poids de départ (kg)"], ["poidsCible", "Poids cible (kg)"] ] as const).map(([key, label]) => <MeasurementField key={key} label={label} unit="kg" value={fields[key]} onChange={(value) => { setFields((old) => ({ ...old, [key]: value })); setFieldErrors((old) => ({ ...old, [key]: "" })); }} error={fieldErrors[key]} />)}
+        <DateField label="Date de début" value={fields.dateDebut} onChange={(value) => {
+          const resetTarget = !!fields.dateCible && fields.dateCible <= value;
+          setFields((old) => ({ ...old, dateDebut: value, dateCible: resetTarget ? "" : old.dateCible }));
+          setFieldErrors((old) => ({ ...old, dateDebut: "", dateCible: resetTarget ? "Choisissez une date cible après la nouvelle date de début." : "" }));
+        }} error={fieldErrors.dateDebut} />
+        <DateField label="Date cible" value={fields.dateCible} minimum={fields.dateDebut ? nextDate(fields.dateDebut) : undefined} onChange={(value) => { setFields((old) => ({ ...old, dateCible: value })); setFieldErrors((old) => ({ ...old, dateCible: "" })); }} error={fieldErrors.dateCible} />
         {rate !== null && <Text style={s.text}>Rythme : {rate.toFixed(2)} kg/semaine · IMC cible : {imc?.toFixed(1)}</Text>}
         <Button title="Continuer vers le budget" onPress={next} />
         <Button title="Abandonner" onPress={() => { setStep("detail"); setError(""); }} />
@@ -126,7 +136,7 @@ export default function UserPlan() {
         {preview && <>
           <Text style={s.label}>Récapitulatif du plan</Text>
           <Text style={s.text}>{preview.poidsDepart} kg → {preview.poidsCible} kg</Text>
-          <Text style={s.text}>{preview.dateDebut.slice(0,10)} → {preview.dateCible.slice(0,10)}</Text>
+          <Text style={s.text}>{displayDate(preview.dateDebut)} → {displayDate(preview.dateCible)}</Text>
           <Text style={s.text}>IMC cible : {preview.imcCible.toFixed(1)}</Text>
           {suggestedBudget !== null && <Text style={s.text}>Budget suggéré : {suggestedBudget.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour</Text>}
           {!!preview.avertissement && <Text style={s.text}>{preview.avertissement}</Text>}
