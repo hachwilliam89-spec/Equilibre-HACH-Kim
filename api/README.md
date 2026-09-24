@@ -13,9 +13,11 @@ par un coach. L’API utilise NestJS, TypeScript et MongoDB via Mongoose.
 - **plans** : soumission d’un plan pour un utilisateur rattaché, calcul de l’IMC
   cible, contrôle du rythme, calcul du budget calorique, consultation et annulation.
 - **health** : vérification de la disponibilité de MongoDB.
+- **measurements** : modèle de mesure, stockage et historique personnel,
+  tous plans, sources et statuts confondus (FR403-671).
 
-Le suivi des pesées et le journal alimentaire font partie du périmètre métier
-prévu, mais leurs modules ne sont pas encore présents dans cette API.
+L'ingestion des pesées, les corrections et le calcul du suivi restent à réaliser
+dans les tickets suivants de l'US2. Le journal alimentaire n'est pas encore présent.
 La déduction du niveau d’activité depuis une montre simulée relève de l’US4,
 hors MVP ; le niveau d’activité du plan est actuellement choisi manuellement.
 
@@ -89,6 +91,7 @@ réponses documentées sont consultables dans Swagger.
 | POST | `/api/plans/preview` | Proposition sans enregistrement ; coach authentifié |
 | POST | `/api/plans` | Soumission d’un plan ; coach authentifié |
 | GET | `/api/plans/me` | Plan actif de l’utilisateur connecté, ou `null` |
+| GET | `/api/measurements/me` | Historique complet de l’utilisateur connecté ; rôle utilisateur uniquement |
 | GET | `/api/plans/users/:userId` | Plan actif d’un utilisateur rattaché au coach, ou `null` |
 | POST | `/api/plans/:id/cancel` | Annulation d’un plan ; coach concerné |
 
@@ -103,6 +106,7 @@ un champ `refreshToken` dans le corps JSON.
 src/
 ├── auth/              Authentification
 ├── plans/             Plans de poids et budgets caloriques
+├── measurements/      Modèle de mesure, persistance et historique personnel
 ├── common/            Erreurs, filtres, rôles et sécurité transverses
 ├── config/            Validation de l’environnement
 ├── health/            Contrôle de santé MongoDB
@@ -110,7 +114,7 @@ src/
 └── main.ts            Démarrage, préfixe API, Helmet et Swagger
 ```
 
-Les modules `auth` et `plans` suivent une architecture hexagonale :
+Les modules `auth`, `plans` et `measurements` suivent une architecture hexagonale :
 
 - `domain/` : entités, règles métier et interfaces des repositories ;
 - `application/` : cas d’usage ;
