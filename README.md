@@ -186,13 +186,20 @@ Un lint en échec bloque le commit.
 
 Pipeline GitLab CI (`.gitlab-ci.yml`, miroir GitHub Actions dans
 `.github/workflows/ci.yml`) déclenchée sur chaque commit, toutes branches.
-Trois étages, dans l'ordre : `quality` (lint + vérification des types),
-`test` (Jest), `build` (compilation TypeScript de l'API). `api/` et `mobile/` sont deux paquets indépendants ; chaque job
+Cinq étages GitLab, dans l'ordre : `quality` (lint + vérification des types),
+`test` (Jest et contrat du déploiement), `build` (compilation TypeScript de l'API),
+`publish` (GHCR, branches protégées develop/main), `deploy` (recette manuelle, désactivée par défaut).
+`api/` et `mobile/` sont deux paquets indépendants ; chaque job
 installe ses propres dépendances avec `pnpm install --frozen-lockfile`, qui
 échoue si le lockfile ne correspond plus au `package.json`.
 
-Un job en échec bloque la fusion de la merge request. Aucun déploiement
-n'est encore déclenché depuis cette pipeline (étape CD à venir).
+Pour bloquer les fusions en échec, activer « Pipelines must succeed » et protéger
+develop/main dans GitLab. Les variables GHCR doivent être protégées et masquées.
+La publication produit une image taguée avec le SHA complet et un artefact `image.ref`
+par digest, utilisé par `deploy:recette`. GitHub reproduit les contrôles mais ne publie
+ni ne déploie l'image. Les contrôles locaux ne prouvent pas un passage de la CI distante.
+
+Voir [la procédure de recette](docs/deploiement-recette.md) avant d'activer la CD.
 
 Étage `test`, en plus des tests unitaires : `api:integration` (optionnel,
 étape 11 des consignes) exécute les tests d'intégration (`pnpm test:e2e`,

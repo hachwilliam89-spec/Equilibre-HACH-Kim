@@ -1,0 +1,5 @@
+# Bloc a ajouter au Caddy existant, connecte au reseau equilibre-proxy.
+equilibre.164-132-246-49.sslip.io {
+    encode gzip zstd
+    reverse_proxy equilibre-api-recette:3000
+}

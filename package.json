@@ -20,8 +20,8 @@
     "docker:test:down": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test down -v",
     "docker:test:logs": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test logs -f",
     "docker:test:logs:api": "docker compose -p equilibre-test -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test logs -f api",
-    "docker:prod": "docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d",
-    "docker:prod:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod down",
+    "docker:prod": "bash scripts/compose-prod.sh up -d",
+    "docker:prod:down": "bash scripts/compose-prod.sh down",
     "test:cucumber": "pnpm --dir api test:cucumber",
     "test:cucumber:local": "pnpm --dir api test:cucumber:local"
   },
