@@ -5,15 +5,16 @@
 
 services:
   api:
-    image: ${DOCKER_REGISTRY}/equilibre-api:${IMAGE_TAG:-latest}
+    image: ${API_IMAGE:?Renseigner API_IMAGE avec une reference image explicite}
     container_name: equilibre-api
     environment:
       # Force en dur : la production ne doit jamais tourner dans un autre mode.
       - NODE_ENV=production
-    # Seul port reellement necessaire. Derriere un reverse proxy Caddy,
-    # il ne sera pas expose publiquement.
-    ports:
-      - "${API_PORT}:3000"
+    # Aucun port hote : le Caddy existant joint l'API sur ce reseau dedie.
+    networks:
+      equilibre-network: {}
+      equilibre-proxy:
+        aliases: [equilibre-api-recette]
     restart: always
     # Pas de bind mount du code : l'image contient le build fige.
 
@@ -28,3 +29,9 @@ services:
 # Volume de production strictement separe de ceux de dev et de test.
 volumes:
   mongo-data-prod:
+
+# Cree une fois sur le serveur ; partage avec le seul service Caddy.
+networks:
+  equilibre-proxy:
+    external: true
+    name: equilibre-proxy
