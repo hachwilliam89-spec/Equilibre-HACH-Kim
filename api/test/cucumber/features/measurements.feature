@@ -89,3 +89,30 @@ Fonctionnalité: Blocage des doublons de mesure sur une même journée
     Quand l'utilisatrice consulte son suivi de poids
     Alors le code HTTP est 200
     Et le statut de suivi est "pas-de-donnees-recentes"
+
+  @FR403-670
+  Scénario: Corriger le poids en secours quand aucune mesure du jour
+    Quand l'utilisatrice envoie une correction manuelle de 79 kg
+    Alors le code HTTP est 201
+    Et la mesure est classee "valide"
+
+  @FR403-670
+  Scénario: Autoriser la correction quand la mesure du jour est suspecte
+    Étant donné une mesure suspecte du jour pour cette utilisatrice
+    Quand l'utilisatrice envoie une correction manuelle de 79 kg
+    Alors le code HTTP est 201
+    Et la mesure est classee "valide"
+
+  @FR403-670
+  Scénario: Refuser une correction si une mesure valide existe deja ce jour
+    Quand l'utilisatrice envoie un poids de 80 kg
+    Alors le code HTTP est 201
+    Quand l'utilisatrice envoie une correction manuelle de 79 kg
+    Alors le code HTTP est 409
+
+  @FR403-670
+  Scénario: Refuser une deuxieme correction manuelle le meme jour
+    Quand l'utilisatrice envoie une correction manuelle de 79 kg
+    Alors le code HTTP est 201
+    Quand l'utilisatrice envoie une correction manuelle de 78 kg
+    Alors le code HTTP est 409

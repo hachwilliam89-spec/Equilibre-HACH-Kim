@@ -159,3 +159,31 @@ Then('le suivi renvoie le resume du plan actif', function () {
   assert.ok(this.response.body.plan, 'resume du plan absent');
   assert.equal(this.response.body.plan.id, this.planId);
 });
+
+// FR403-670
+When(
+  "l'utilisatrice envoie une correction manuelle de {float} kg",
+  async function (poidsKg) {
+    this.response = await request(this.app.getHttpServer())
+      .post('/api/measurements/correction')
+      .set('Authorization', `Bearer ${this.userToken}`)
+      .send({ poidsKg });
+  },
+);
+
+Given(
+  'une mesure suspecte du jour pour cette utilisatrice',
+  async function () {
+    const received = new Date();
+    await measurements(this).insertOne({
+      _id: randomUUID(),
+      userId: this.userId,
+      planId: this.planId,
+      poidsKg: 90,
+      receivedAt: received,
+      jourUtc: received.toISOString().slice(0, 10),
+      source: 'automatique',
+      statut: 'suspecte',
+    });
+  },
+);
