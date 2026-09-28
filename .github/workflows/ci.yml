@@ -5,6 +5,9 @@
 
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
   pull_request:
@@ -51,7 +54,7 @@ jobs:
 
   api-build:
     runs-on: ubuntu-latest
-    needs: [api-lint, api-typecheck, api-test]
+    needs: [api-lint, api-typecheck, api-test, api-integration, mobile-lint, mobile-typecheck, mobile-test, deploy-test]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -131,3 +134,9 @@ jobs:
           corepack prepare --activate
           pnpm install --frozen-lockfile
           pnpm test
+
+  deploy-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-deploy-recette.sh

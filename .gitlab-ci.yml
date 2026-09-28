@@ -7,21 +7,21 @@
 # partage entre jobs, donc pas de risque qu'un job "profite" d'une
 # installation faite par un autre et masque une regression.
 #
-# Une seule regle : un job qui echoue bloque le merge request (bouton
-# "Merge" grise par GitLab si la pipeline n'est pas verte). Rien n'est
-# deploye automatiquement depuis cette pipeline pour l'instant (etape CD a
-# venir, sur un job separe, uniquement depuis develop/main).
+# Activer "Pipelines must succeed" et proteger develop/main dans GitLab.
+# La recette est un job manuel, active seulement apres provisionnement OVH.
 
 stages:
   - quality   # lint + verification des types : rapide, echoue vite
   - test      # tests unitaires (Jest), sans base de donnees
   - build     # compilation TypeScript -> JavaScript (api/dist)
+  - publish   # image issue du commit valide
+  - deploy    # recette manuelle
 
 # Meme image que le Dockerfile de l'API (node:24-alpine) : le comportement
 # en CI est celui qu'on retrouvera en construisant l'image de production.
 image: node:24-alpine
 
-# corepack est fourni avec Node >= 16.9. Il lit le champ "packageManager"
+# corepack est fourni avec cette image Node 24. Il lit le champ "packageManager"
 # du package.json ("pnpm@10.25.0") et installe/active exactement cette
 # version : la pipeline utilise le meme pnpm que sur les machines de dev,
 # jamais "le pnpm disponible sur l'image du jour".
@@ -62,9 +62,8 @@ api:test:
     - cd api
     - pnpm install --frozen-lockfile
     # Tests unitaires uniquement (jest, sans Mongo) : les use cases sont
-    # testes avec des doublures du repository, pas de service necessaire
-    # dans cette pipeline. Les tests d'integration (avec vraie base) restent
-    # a lancer manuellement via `pnpm docker:test` pour l'instant.
+    # testes avec des doublures du repository. Le job api:integration
+    # ci-dessous utilise une vraie base jetable.
     - pnpm test
 
 # Test d'integration optionnel (etape 11 des consignes) : contre une vraie
@@ -112,48 +111,67 @@ api:build:
       - api/dist
     expire_in: 1 day
 
-# Construit l'image Docker de l'API et la pousse vers une registry externe.
-# Seul cet artefact (l'image, pas les sources) est ensuite recupere par le
-# serveur de deploiement (voir Page 10 - CI/CD, section "Contraintes pour
-# le deploiement").
-#
-# La Container Registry integree a l'instance GitLab de l'ecole existe
-# mais son port (5050) n'est joignable que depuis le reseau du campus :
-# injoignable aussi bien depuis le runner (VPS OVH) que depuis le futur
-# serveur de deploiement, tous les deux hors campus. Image poussee vers
-# GitHub Container Registry (ghcr.io) a la place, joignable normalement en
-# HTTPS depuis n'importe quel reseau. Necessite deux variables CI/CD
-# (Settings > CI/CD > Variables, masquees) : GHCR_USER (identifiant
-# GitHub) et GHCR_TOKEN (Personal Access Token GitHub, scope
-# write:packages), a creer soi-meme sur github.com > Settings > Developer
-# settings > Personal access tokens.
-#
-# Uniquement sur develop/main : inutile de pousser une image a chaque
-# commit de branche de travail, seule une fusion validee doit produire un
-# artefact deployable.
+# GHCR remplace la registry ecole inaccessible depuis les reseaux testes.
+# GHCR_TOKEN doit etre masque ET protege, develop/main protegees.
+# Le filtrage du job ne protege pas a lui seul les variables du projet.
 docker:build:
-  stage: build
+  stage: publish
   image: docker:27-cli
   services:
     - docker:27-dind
   variables:
-    # TLS desactive entre le client et le dind : plus simple qu'une
-    # configuration TLS partagee entre les deux conteneurs du job, et
-    # suffisant sur un runner de projet isole (pas d'autre job concurrent
-    # susceptible d'ecouter sur ce daemon). DOCKER_HOST doit alors etre
-    # explicite : sans lui le client docker:27-cli tente localhost, pas le
-    # service "docker" (l'alias par defaut de docker:27-dind).
+    # Conserve le fonctionnement du runner existant. Isolation et privileges
+    # a auditer sur le VPS ; TLS reste preferable lorsque configure cote runner.
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     GHCR_IMAGE: ghcr.io/hachwilliam89-spec/equilibre-api
   rules:
-    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
   before_script:
-    - docker login -u "$GHCR_USER" -p "$GHCR_TOKEN" ghcr.io
+    - test -n "$GHCR_USER" && test -n "$GHCR_TOKEN"
+    - printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
   script:
-    - docker build -t "$GHCR_IMAGE:$CI_COMMIT_SHORT_SHA" -t "$GHCR_IMAGE:latest" ./api
-    - docker push "$GHCR_IMAGE:$CI_COMMIT_SHORT_SHA"
-    - docker push "$GHCR_IMAGE:latest"
+    - docker build -t "$GHCR_IMAGE:$CI_COMMIT_SHA" ./api
+    - docker push "$GHCR_IMAGE:$CI_COMMIT_SHA"
+    - docker pull "$GHCR_IMAGE:$CI_COMMIT_SHA"
+    - docker image inspect --format '{{index .RepoDigests 0}}' "$GHCR_IMAGE:$CI_COMMIT_SHA" > image.ref
+    - grep -Eq '^ghcr.io/hachwilliam89-spec/equilibre-api@sha256:[a-f0-9]{64}$' image.ref
+    - printf 'API_IMAGE=%s\n' "$(cat image.ref)" > image.env
+  artifacts:
+    paths: [image.ref]
+    reports:
+      dotenv: image.env
+    expire_in: 30 days
+
+# Pas de needs : attendre tous les stages precedents, pas seulement l'image.
+# L'image est lue depuis l'artefact de CETTE pipeline, jamais depuis latest.
+deploy:recette:
+  stage: deploy
+  image: alpine:3.22
+  dependencies: ["docker:build"]
+  resource_group: recette-ovh
+  interruptible: false
+  timeout: 15 minutes
+  environment:
+    name: recette
+  rules:
+    - if: '$DEPLOY_RECETTE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
+      when: manual
+      allow_failure: true
+  before_script:
+    - apk add --no-cache openssh-client bash
+    - test -s "$SSH_PRIVATE_KEY" && test -s "$SSH_KNOWN_HOSTS"
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - cp "$SSH_PRIVATE_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+  script:
+    - bash scripts/deploy-via-ssh.sh
+
+deploy:test:
+  stage: test
+  script:
+    - apk add --no-cache bash
+    - bash scripts/test-deploy-recette.sh
 
 # ---------------------------------------------------------------------------
 # Mobile (Expo / React Native)

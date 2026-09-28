@@ -30,6 +30,7 @@ const DEFAULT_TITLES: Record<number, string> = {
   403: 'Acces refuse',
   404: 'Ressource introuvable',
   409: 'Conflit',
+  429: 'Trop de requetes',
   500: 'Erreur interne',
 };
 
