@@ -448,4 +448,91 @@ describe('Mesures — réception et historique (MongoDB réel)', () => {
       }
     });
   });
+
+  describe('FR403-675 — affichage du statut de suivi', () => {
+    interface SuiviBody {
+      statut: string;
+      plan: { id: string; poidsDepart: number; poidsCible: number };
+      derniereMesure: { poidsKg: number; statut: string } | null;
+      poidsAttendu: number | null;
+      ecartKg: number | null;
+    }
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const getSuivi = (id: string = owner) =>
+      request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .auth(token(id), { type: 'bearer' });
+
+    it('est en attente de premiere mesure quand aucune mesure valide', async () => {
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('en-attente-premiere-mesure');
+      expect(body.plan.id).toBe(activePlan);
+      expect(body.plan.poidsCible).toBe(70);
+      expect(body.derniereMesure).toBeNull();
+      expect(body.poidsAttendu).toBeNull();
+      expect(body.ecartKg).toBeNull();
+    });
+
+    it('est dans les clous quand la derniere mesure suit la trajectoire', async () => {
+      await post({ poidsKg: 75 }).expect(201);
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('dans-les-clous');
+      expect(body.derniereMesure?.poidsKg).toBe(75);
+      expect(body.poidsAttendu).not.toBeNull();
+      expect(Math.abs(body.ecartKg as number)).toBeLessThanOrEqual(1);
+    });
+
+    it('detecte un ecart quand la derniere mesure sort de la tolerance', async () => {
+      await post({ poidsKg: 80 }).expect(201);
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('ecart-detecte');
+      expect(Math.abs(body.ecartKg as number)).toBeGreaterThan(1);
+    });
+
+    it('signale pas de donnees recentes au-dela d un jour', async () => {
+      await repository.create(
+        measure({ receivedAt: new Date(Date.now() - 2 * 86400000) }),
+      );
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('pas-de-donnees-recentes');
+      expect(body.derniereMesure).not.toBeNull();
+      expect(body.poidsAttendu).toBeNull();
+      expect(body.ecartKg).toBeNull();
+    });
+
+    it('ignore les mesures suspecte et hors-plan pour le statut', async () => {
+      await repository.create(
+        measure({ statut: 'suspecte', receivedAt: new Date() }),
+      );
+      await repository.create(
+        measure({ statut: 'hors-plan', receivedAt: new Date() }),
+      );
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('en-attente-premiere-mesure');
+    });
+
+    it('retourne 200 null quand l utilisateur n a aucun plan actif', async () => {
+      const sansPlan = await register('utilisateur', coach);
+      const response = await getSuivi(sansPlan).expect(200);
+      expect(response.body).toBeNull();
+    });
+
+    it('protege la route contre anonyme, JWT invalide et coach', async () => {
+      await request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .expect(401);
+      await request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .auth('invalid', { type: 'bearer' })
+        .expect(401);
+      await request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .auth(token(coach, 'coach'), { type: 'bearer' })
+        .expect(403);
+    });
+  });
 });

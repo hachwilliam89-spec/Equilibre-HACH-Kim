@@ -117,3 +117,45 @@ Then(
     );
   },
 );
+
+// FR403-675
+const consulterSuivi = (world) =>
+  request(world.app.getHttpServer())
+    .get('/api/measurements/me/suivi')
+    .set('Authorization', `Bearer ${world.userToken}`);
+
+async function insertValideDecale(world, poidsKg, planId, offsetJours) {
+  const received = new Date();
+  received.setUTCDate(received.getUTCDate() + offsetJours);
+  await measurements(world).insertOne({
+    _id: randomUUID(),
+    userId: world.userId,
+    planId,
+    poidsKg,
+    receivedAt: received,
+    jourUtc: received.toISOString().slice(0, 10),
+    source: 'automatique',
+    statut: 'valide',
+  });
+}
+
+Given(
+  'une mesure valide de {float} kg enregistrée avant-hier pour cette utilisatrice',
+  async function (poidsKg) {
+    await insertValideDecale(this, poidsKg, this.planId, -2);
+  },
+);
+
+When("l'utilisatrice consulte son suivi de poids", async function () {
+  this.response = await consulterSuivi(this);
+});
+
+Then('le statut de suivi est {string}', function (statut) {
+  assert.equal(this.response.status, 200, this.response.text);
+  assert.equal(this.response.body.statut, statut);
+});
+
+Then('le suivi renvoie le resume du plan actif', function () {
+  assert.ok(this.response.body.plan, 'resume du plan absent');
+  assert.equal(this.response.body.plan.id, this.planId);
+});
