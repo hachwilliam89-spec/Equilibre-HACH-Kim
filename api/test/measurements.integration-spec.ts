@@ -391,4 +391,61 @@ describe('Mesures — réception et historique (MongoDB réel)', () => {
       ).toBe(1);
     });
   });
+
+  describe('FR403-672 — classification suspecte / hors-plan', () => {
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const hier = () => new Date(Date.now() - 86400000);
+    const planModel = () =>
+      app.get<Model<PlanDocumentClass>>(getModelToken(PlanDocumentClass.name));
+
+    it('classe suspecte un ecart superieur a 3 kg avec la veille du meme plan', async () => {
+      await repository.create(measure({ receivedAt: hier(), poidsKg: 72 }));
+      const response = await post({ poidsKg: 76 }).expect(201);
+      expect((response.body as MeasurementProps).statut).toBe('suspecte');
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    });
+
+    it('garde valide un ecart inferieur ou egal a 3 kg avec la veille', async () => {
+      await repository.create(measure({ receivedAt: hier(), poidsKg: 72 }));
+      const response = await post({ poidsKg: 74 }).expect(201);
+      expect((response.body as MeasurementProps).statut).toBe('valide');
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(2);
+    });
+
+    it('ignore la veille d un autre plan pour le controle suspect', async () => {
+      await repository.create(
+        measure({ planId: oldPlan, receivedAt: hier(), poidsKg: 60 }),
+      );
+      const response = await post({ poidsKg: 76 }).expect(201);
+      expect((response.body as MeasurementProps).statut).toBe('valide');
+    });
+
+    it('classe hors-plan une mesure anterieure au debut du plan actif', async () => {
+      const original = await planModel().findById(activePlan).lean();
+      try {
+        await planModel().updateOne(
+          { _id: activePlan },
+          { $set: { dateDebut: new Date(Date.now() + 3 * 86400000) } },
+        );
+        const response = await post({ poidsKg: 71.5 }).expect(201);
+        expect((response.body as MeasurementProps).statut).toBe('hors-plan');
+        expect(
+          await model.countDocuments({ userId: owner, statut: 'valide' }),
+        ).toBe(0);
+        expect(await model.countDocuments({ userId: owner })).toBe(1);
+      } finally {
+        await planModel().replaceOne({ _id: activePlan }, original!, {
+          upsert: true,
+        });
+      }
+    });
+  });
 });
