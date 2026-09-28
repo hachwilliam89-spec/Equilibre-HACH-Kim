@@ -59,3 +59,33 @@ Fonctionnalité: Blocage des doublons de mesure sur une même journée
     Alors le code HTTP est 201
     Et la mesure est classee "hors-plan"
     Et la base contient 0 mesure valide pour cette utilisatrice
+
+  @FR403-675
+  Scénario: Afficher l'attente de premiere mesure
+    Quand l'utilisatrice consulte son suivi de poids
+    Alors le code HTTP est 200
+    Et le statut de suivi est "en-attente-premiere-mesure"
+    Et le suivi renvoie le resume du plan actif
+
+  @FR403-675
+  Scénario: Afficher un suivi dans les clous
+    Quand l'utilisatrice envoie un poids de 80 kg
+    Alors le code HTTP est 201
+    Quand l'utilisatrice consulte son suivi de poids
+    Alors le code HTTP est 200
+    Et le statut de suivi est "dans-les-clous"
+
+  @FR403-675
+  Scénario: Detecter un ecart de trajectoire dans le suivi
+    Quand l'utilisatrice envoie un poids de 85 kg
+    Alors le code HTTP est 201
+    Quand l'utilisatrice consulte son suivi de poids
+    Alors le code HTTP est 200
+    Et le statut de suivi est "ecart-detecte"
+
+  @FR403-675
+  Scénario: Signaler l'absence de donnees recentes
+    Étant donné une mesure valide de 80 kg enregistrée avant-hier pour cette utilisatrice
+    Quand l'utilisatrice consulte son suivi de poids
+    Alors le code HTTP est 200
+    Et le statut de suivi est "pas-de-donnees-recentes"
