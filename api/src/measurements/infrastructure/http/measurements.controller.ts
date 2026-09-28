@@ -27,6 +27,7 @@ import { Roles } from '../../../common/auth/roles.decorator';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { GetMeasurementHistoryUseCase } from '../../application/use-cases/get-measurement-history.use-case';
 import { GetWeightTrackingStatusUseCase } from '../../application/use-cases/get-weight-tracking-status.use-case';
+import { CorrectMeasurementUseCase } from '../../application/use-cases/correct-measurement.use-case';
 import { MeasurementDto } from './measurement.dto';
 import { SuiviDto } from './suivi.dto';
 
@@ -39,6 +40,7 @@ export class MeasurementsController {
     private readonly getHistory: GetMeasurementHistoryUseCase,
     private readonly receiveMeasurement: ReceiveMeasurementUseCase,
     private readonly getStatus: GetWeightTrackingStatusUseCase,
+    private readonly correctMeasurement: CorrectMeasurementUseCase,
   ) {}
 
   @Post()
@@ -73,6 +75,44 @@ export class MeasurementsController {
     body: ReceiveMeasurementDto,
   ): Promise<MeasurementDto> {
     const measurement = await this.receiveMeasurement.execute(
+      request.user.sub,
+      body.poidsKg,
+    );
+    const props = measurement.toProps();
+    return { ...props, receivedAt: props.receivedAt.toISOString() };
+  }
+
+  @Post('correction')
+  @Roles('utilisateur')
+  @ApiOperation({
+    summary: 'Correction manuelle du poids en secours',
+    description:
+      'Secours quand aucune mesure automatique valide du jour, ou quand celle du jour est suspecte. Source manuelle, jamais soumise au controle suspecte ; classee hors-plan hors periode du plan. Refusee 409 si une mesure valide existe deja ce jour.',
+  })
+  @ApiBody({ type: ReceiveMeasurementDto })
+  @ApiResponse({
+    status: 201,
+    type: MeasurementDto,
+    description:
+      'Correction enregistree (valide, ou hors-plan si hors periode)',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Poids absent, non numerique ou non positif',
+  })
+  @ApiResponse({ status: 401, description: 'Authentification requise' })
+  @ApiResponse({ status: 403, description: 'Reserve au role utilisateur' })
+  @ApiResponse({
+    status: 409,
+    description: 'Une mesure valide existe deja ce jour',
+  })
+  @ApiResponse({ status: 422, description: 'Aucun plan actif' })
+  async correction(
+    @Req() request: Request & { user: JwtPayload },
+    @Body(new ZodValidationPipe(receiveMeasurementSchema))
+    body: ReceiveMeasurementDto,
+  ): Promise<MeasurementDto> {
+    const measurement = await this.correctMeasurement.execute(
       request.user.sub,
       body.poidsKg,
     );
