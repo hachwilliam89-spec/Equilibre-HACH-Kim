@@ -4,6 +4,8 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { GetMeasurementHistoryUseCase } from './application/use-cases/get-measurement-history.use-case';
+import { GetWeightTrackingStatusUseCase } from './application/use-cases/get-weight-tracking-status.use-case';
+import { CorrectMeasurementUseCase } from './application/use-cases/correct-measurement.use-case';
 import { MEASUREMENT_REPOSITORY } from './domain/ports/measurement-repository.port';
 import { MeasurementsController } from './infrastructure/http/measurements.controller';
 import {
@@ -23,7 +25,9 @@ import { MongooseMeasurementRepository } from './infrastructure/persistence/mong
   controllers: [MeasurementsController],
   providers: [
     GetMeasurementHistoryUseCase,
+    GetWeightTrackingStatusUseCase,
     ReceiveMeasurementUseCase,
+    CorrectMeasurementUseCase,
     {
       provide: MEASUREMENT_REPOSITORY,
       useClass: MongooseMeasurementRepository,

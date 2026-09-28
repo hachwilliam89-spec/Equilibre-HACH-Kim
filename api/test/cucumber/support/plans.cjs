@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const {
   Before,
+  BeforeAll,
   After,
+  AfterAll,
   Given,
   When,
   Then,
@@ -11,10 +13,17 @@ const {
 } = require('@cucumber/cucumber');
 const { Test } = require('@nestjs/testing');
 const { getConnectionToken } = require('@nestjs/mongoose');
+const { ThrottlerStorage } = require('@nestjs/throttler');
 const request = require('supertest');
 const { AppModule } = require('../../../dist/app.module');
 
 setDefaultTimeout(30000);
+
+// L'app Nest et la connexion Mongo sont bootees une seule fois pour tout le run
+// (BeforeAll) : booter/fermer une app par scenario provoquait des echecs
+// intermittents (register 404 / socket) sous le churn de connexions.
+let sharedApp;
+let sharedConnection;
 
 const day = (offset) => {
   const date = new Date();
@@ -39,39 +48,53 @@ const submit = (world, payload) =>
     .set('Authorization', `Bearer ${world.coachToken}`)
     .send(payload);
 
-Before(async function () {
+BeforeAll(async function () {
   if (
     process.env.NODE_ENV !== 'test' ||
     !/\/equilibre_test(?:\?|$)/.test(process.env.MONGO_URI || '')
   ) {
     throw new Error('Cucumber exige NODE_ENV=test et la base equilibre_test.');
   }
-  this.accountIds = [];
   const module = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
-  this.app = module.createNestApplication();
-  this.app.setGlobalPrefix('api');
-  await this.app.init();
-  this.connection = this.app.get(getConnectionToken());
-  this.plans = this.connection.collection('plans');
+  sharedApp = module.createNestApplication();
+  sharedApp.setGlobalPrefix('api');
+  await sharedApp.init();
+  sharedConnection = sharedApp.get(getConnectionToken());
+});
+
+Before(function () {
+  // Isolation des scenarios : conserver les vrais quotas et le vrai guard,
+  // mais repartir sans les tentatives des scenarios precedents.
+  // Annuler les timers avant de vider les compteurs auxquels ils se referent.
+  const throttleStorage = sharedApp.get(ThrottlerStorage);
+  throttleStorage.onApplicationShutdown();
+  throttleStorage.storage.clear();
+  this.app = sharedApp;
+  this.connection = sharedConnection;
+  this.plans = sharedConnection.collection('plans');
+  this.accountIds = [];
 });
 
 After(async function () {
-  try {
-    if (this.connection && this.accountIds.length) {
-      // Nettoyage limité aux comptes de ce scénario, jamais à toute la base.
-      await this.plans.deleteMany({ userId: { $in: this.accountIds } });
-      await this.connection
-        .collection('refresh_tokens')
-        .deleteMany({ userId: { $in: this.accountIds } });
-      await this.connection
-        .collection('users')
-        .deleteMany({ _id: { $in: this.accountIds } });
-    }
-  } finally {
-    if (this.app) await this.app.close();
+  if (this.connection && this.accountIds.length) {
+    // Nettoyage limité aux comptes de ce scénario, jamais à toute la base.
+    await this.plans.deleteMany({ userId: { $in: this.accountIds } });
+    await this.connection
+      .collection('measurements')
+      .deleteMany({ userId: { $in: this.accountIds } });
+    await this.connection
+      .collection('refresh_tokens')
+      .deleteMany({ userId: { $in: this.accountIds } });
+    await this.connection
+      .collection('users')
+      .deleteMany({ _id: { $in: this.accountIds } });
   }
+});
+
+AfterAll(async function () {
+  if (sharedApp) await sharedApp.close();
 });
 
 async function account(world, extra) {

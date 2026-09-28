@@ -327,4 +327,363 @@ describe('Mesures — réception et historique (MongoDB réel)', () => {
       ).rejects.toThrow();
     }
   });
+
+  describe('FR403-674 — blocage des doublons du jour', () => {
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+
+    it('refuse une deuxième mesure valide le même jour avec un 409 explicite', async () => {
+      await post({ poidsKg: 71.5 }).expect(201);
+      const conflict = await post({ poidsKg: 70.2 }).expect(409);
+      expect(conflict.body).toMatchObject({
+        status: 409,
+        type: 'https://equilibre.app/problems/measurement-day-conflict',
+      });
+      const stored = await model.find({ userId: owner }).lean();
+      expect(stored).toHaveLength(1);
+      expect(stored[0].poidsKg).toBe(71.5);
+    });
+
+    it("accepte une mesure quand la seule mesure valide date d'un autre jour", async () => {
+      await repository.create(
+        measure({ receivedAt: new Date(Date.now() - 86400000) }),
+      );
+      await post({ poidsKg: 71.5 }).expect(201);
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(2);
+    });
+
+    it("n'oppose pas le blocage à une mesure suspecte ou hors-plan du même jour", async () => {
+      await repository.create(
+        measure({ statut: 'suspecte', receivedAt: new Date() }),
+      );
+      await repository.create(
+        measure({
+          statut: 'hors-plan',
+          source: 'manuelle',
+          receivedAt: new Date(),
+        }),
+      );
+      await post({ poidsKg: 71.5 }).expect(201);
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+      expect(await model.countDocuments({ userId: owner })).toBe(3);
+    });
+
+    it('arbitre deux réceptions simultanées le même jour : une 201, une 409', async () => {
+      const responses = await Promise.all([
+        post({ poidsKg: 71.5 }),
+        post({ poidsKg: 70.9 }),
+      ]);
+      expect(responses.map((res) => res.status).sort()).toEqual([201, 409]);
+      const conflict = responses.find((res) => res.status === 409)!;
+      expect(conflict.body).toMatchObject({
+        status: 409,
+        type: 'https://equilibre.app/problems/measurement-day-conflict',
+      });
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    });
+  });
+
+  describe('FR403-672 — classification suspecte / hors-plan', () => {
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const hier = () => new Date(Date.now() - 86400000);
+    const planModel = () =>
+      app.get<Model<PlanDocumentClass>>(getModelToken(PlanDocumentClass.name));
+
+    it('classe suspecte un ecart superieur a 3 kg avec la veille du meme plan', async () => {
+      await repository.create(measure({ receivedAt: hier(), poidsKg: 72 }));
+      const response = await post({ poidsKg: 76 }).expect(201);
+      expect((response.body as MeasurementProps).statut).toBe('suspecte');
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    });
+
+    it('garde valide un ecart inferieur ou egal a 3 kg avec la veille', async () => {
+      await repository.create(measure({ receivedAt: hier(), poidsKg: 72 }));
+      const response = await post({ poidsKg: 74 }).expect(201);
+      expect((response.body as MeasurementProps).statut).toBe('valide');
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(2);
+    });
+
+    it('ignore la veille d un autre plan pour le controle suspect', async () => {
+      await repository.create(
+        measure({ planId: oldPlan, receivedAt: hier(), poidsKg: 60 }),
+      );
+      const response = await post({ poidsKg: 76 }).expect(201);
+      expect((response.body as MeasurementProps).statut).toBe('valide');
+    });
+
+    it('classe hors-plan une mesure anterieure au debut du plan actif', async () => {
+      const original = await planModel().findById(activePlan).lean();
+      try {
+        await planModel().updateOne(
+          { _id: activePlan },
+          { $set: { dateDebut: new Date(Date.now() + 3 * 86400000) } },
+        );
+        const response = await post({ poidsKg: 71.5 }).expect(201);
+        expect((response.body as MeasurementProps).statut).toBe('hors-plan');
+        expect(
+          await model.countDocuments({ userId: owner, statut: 'valide' }),
+        ).toBe(0);
+        expect(await model.countDocuments({ userId: owner })).toBe(1);
+      } finally {
+        await planModel().replaceOne({ _id: activePlan }, original!, {
+          upsert: true,
+        });
+      }
+    });
+  });
+
+  describe('FR403-675 — affichage du statut de suivi', () => {
+    interface SuiviBody {
+      statut: string;
+      plan: { id: string; poidsDepart: number; poidsCible: number };
+      derniereMesure: { poidsKg: number; statut: string } | null;
+      poidsAttendu: number | null;
+      ecartKg: number | null;
+    }
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const getSuivi = (id: string = owner) =>
+      request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .auth(token(id), { type: 'bearer' });
+
+    it('est en attente de premiere mesure quand aucune mesure valide', async () => {
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('en-attente-premiere-mesure');
+      expect(body.plan.id).toBe(activePlan);
+      expect(body.plan.poidsCible).toBe(70);
+      expect(body.derniereMesure).toBeNull();
+      expect(body.poidsAttendu).toBeNull();
+      expect(body.ecartKg).toBeNull();
+    });
+
+    it('est dans les clous quand la derniere mesure suit la trajectoire', async () => {
+      await post({ poidsKg: 75 }).expect(201);
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('dans-les-clous');
+      expect(body.derniereMesure?.poidsKg).toBe(75);
+      expect(body.poidsAttendu).not.toBeNull();
+      expect(Math.abs(body.ecartKg as number)).toBeLessThanOrEqual(1);
+    });
+
+    it('detecte un ecart quand la derniere mesure sort de la tolerance', async () => {
+      await post({ poidsKg: 80 }).expect(201);
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('ecart-detecte');
+      expect(Math.abs(body.ecartKg as number)).toBeGreaterThan(1);
+    });
+
+    it('signale pas de donnees recentes au-dela d un jour', async () => {
+      await repository.create(
+        measure({ receivedAt: new Date(Date.now() - 2 * 86400000) }),
+      );
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('pas-de-donnees-recentes');
+      expect(body.derniereMesure).not.toBeNull();
+      expect(body.poidsAttendu).toBeNull();
+      expect(body.ecartKg).toBeNull();
+    });
+
+    it('ignore les mesures suspecte et hors-plan pour le statut', async () => {
+      await repository.create(
+        measure({ statut: 'suspecte', receivedAt: new Date() }),
+      );
+      await repository.create(
+        measure({ statut: 'hors-plan', receivedAt: new Date() }),
+      );
+      const body = (await getSuivi().expect(200)).body as SuiviBody;
+      expect(body.statut).toBe('en-attente-premiere-mesure');
+    });
+
+    it('retourne 200 null quand l utilisateur n a aucun plan actif', async () => {
+      const sansPlan = await register('utilisateur', coach);
+      const response = await getSuivi(sansPlan).expect(200);
+      expect(response.body).toBeNull();
+    });
+
+    it('protege la route contre anonyme, JWT invalide et coach', async () => {
+      await request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .expect(401);
+      await request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .auth('invalid', { type: 'bearer' })
+        .expect(401);
+      await request(app.getHttpServer())
+        .get('/api/measurements/me/suivi')
+        .auth(token(coach, 'coach'), { type: 'bearer' })
+        .expect(403);
+    });
+  });
+
+  describe('FR403-670 — correction manuelle en secours', () => {
+    const postCorrection = (payload: object, id: string = owner) =>
+      request(app.getHttpServer())
+        .post('/api/measurements/correction')
+        .auth(token(id), { type: 'bearer' })
+        .send(payload);
+    const postAuto = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const planModel = () =>
+      app.get<Model<PlanDocumentClass>>(getModelToken(PlanDocumentClass.name));
+
+    it('enregistre une correction valide quand aucune mesure du jour', async () => {
+      const response = await postCorrection({ poidsKg: 74 }).expect(201);
+      const body = response.body as MeasurementProps;
+      expect(body.source).toBe('manuelle');
+      expect(body.statut).toBe('valide');
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    });
+
+    it('autorise la correction quand la mesure du jour est suspecte', async () => {
+      await repository.create(
+        measure({ statut: 'suspecte', receivedAt: new Date() }),
+      );
+      const body = (await postCorrection({ poidsKg: 74 }).expect(201))
+        .body as MeasurementProps;
+      expect(body.statut).toBe('valide');
+      expect(body.source).toBe('manuelle');
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+      expect(await model.countDocuments({ userId: owner })).toBe(2);
+    });
+
+    it('refuse une correction quand une mesure auto valide existe deja ce jour', async () => {
+      await postAuto({ poidsKg: 74 }).expect(201);
+      const conflict = await postCorrection({ poidsKg: 73 }).expect(409);
+      expect(conflict.body).toMatchObject({
+        status: 409,
+        type: 'https://equilibre.app/problems/measurement-day-conflict',
+      });
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    });
+
+    it('refuse une deuxieme correction manuelle le meme jour', async () => {
+      await postCorrection({ poidsKg: 74 }).expect(201);
+      await postCorrection({ poidsKg: 73 }).expect(409);
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    });
+
+    it('classe hors-plan une correction hors periode sans la retenir', async () => {
+      const original = await planModel().findById(activePlan).lean();
+      try {
+        await planModel().updateOne(
+          { _id: activePlan },
+          { $set: { dateDebut: new Date(Date.now() + 3 * 86400000) } },
+        );
+        const body = (await postCorrection({ poidsKg: 74 }).expect(201))
+          .body as MeasurementProps;
+        expect(body.statut).toBe('hors-plan');
+        expect(body.source).toBe('manuelle');
+        expect(
+          await model.countDocuments({ userId: owner, statut: 'valide' }),
+        ).toBe(0);
+      } finally {
+        await planModel().replaceOne({ _id: activePlan }, original!, {
+          upsert: true,
+        });
+      }
+    });
+
+    it('rejette la correction sans plan actif', async () => {
+      const sansPlan = await register('utilisateur', coach);
+      const response = await postCorrection({ poidsKg: 74 }, sansPlan).expect(
+        422,
+      );
+      expect(response.body).toMatchObject({
+        type: 'https://equilibre.app/problems/no-active-plan',
+      });
+    });
+
+    it('protege la route et valide le corps', async () => {
+      await request(app.getHttpServer())
+        .post('/api/measurements/correction')
+        .send({ poidsKg: 74 })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/api/measurements/correction')
+        .auth('invalid', { type: 'bearer' })
+        .send({ poidsKg: 74 })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/api/measurements/correction')
+        .auth(token(coach, 'coach'), { type: 'bearer' })
+        .send({ poidsKg: 74 })
+        .expect(403);
+      await postCorrection({ poidsKg: 0 }).expect(400);
+      await postCorrection({ poidsKg: 74, source: 'manuelle' }).expect(400);
+    });
+  });
+
+  describe('FR403-676 — concurrence sur les mesures valides du jour', () => {
+    const postAuto = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const postCorrection = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements/correction')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const attenduUneSeuleValide = async (
+      responses: { status: number; body: unknown }[],
+    ) => {
+      expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
+      const conflict = responses.find((r) => r.status === 409)!;
+      expect(conflict.body).toMatchObject({
+        status: 409,
+        type: 'https://equilibre.app/problems/measurement-day-conflict',
+      });
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    };
+
+    it('arbitre deux corrections manuelles simultanees', async () => {
+      const responses = await Promise.all([
+        postCorrection({ poidsKg: 74 }),
+        postCorrection({ poidsKg: 73 }),
+      ]);
+      await attenduUneSeuleValide(responses);
+    });
+
+    it('arbitre une reception automatique et une correction simultanees', async () => {
+      const responses = await Promise.all([
+        postAuto({ poidsKg: 74 }),
+        postCorrection({ poidsKg: 73 }),
+      ]);
+      await attenduUneSeuleValide(responses);
+    });
+  });
 });
