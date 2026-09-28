@@ -6,11 +6,18 @@ export interface MeasurementRepositoryPort {
   /** Tous plans, sources et statuts ; réception décroissante. */
   findHistoryByUserId(userId: string): Promise<Measurement[]>;
   /**
-   * Mesure valide (ni suspecte, ni hors-plan) déjà enregistrée pour ce jour UTC,
-   * ou null. Sert au blocage des doublons (FR403-674) : une seule mesure valide
-   * par utilisateur et par jour, toutes sources confondues.
+   * Mesure valide (ni suspecte, ni hors-plan) enregistrée pour ce jour UTC,
+   * ou null.
+   * - Sans planId : blocage des doublons du jour (FR403-674), une seule mesure
+   *   valide par utilisateur et par jour, toutes sources confondues.
+   * - Avec planId : reference de la veille pour le meme plan (FR403-672),
+   *   servant au controle des mesures suspectes.
    */
-  findValidForDay(userId: string, jourUtc: string): Promise<Measurement | null>;
+  findValidForDay(
+    userId: string,
+    jourUtc: string,
+    planId?: string,
+  ): Promise<Measurement | null>;
 }
 
 export const MEASUREMENT_REPOSITORY = Symbol('MEASUREMENT_REPOSITORY');

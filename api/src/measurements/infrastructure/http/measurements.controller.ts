@@ -35,7 +35,7 @@ export class MeasurementsController {
   @ApiOperation({
     summary: 'Recevoir une mesure automatique pour le plan actif',
     description:
-      'Utilisateur issu du JWT ; horodatage et jour UTC calculés par le serveur. Le corps contient uniquement poidsKg.',
+      'Utilisateur issu du JWT ; horodatage et jour UTC calculés par le serveur. Le corps contient uniquement poidsKg. Le statut est classé automatiquement : valide, suspecte (écart > 3 kg avec la veille du même plan) ou hors-plan (hors de la période du plan actif).',
   })
   @ApiBody({ type: ReceiveMeasurementDto })
   @ApiResponse({
