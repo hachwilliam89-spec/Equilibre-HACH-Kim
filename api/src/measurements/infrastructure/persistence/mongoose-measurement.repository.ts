@@ -67,9 +67,15 @@ export class MongooseMeasurementRepository
   async findValidForDay(
     userId: string,
     jourUtc: string,
+    planId?: string,
   ): Promise<Measurement | null> {
     const document = await this.model
-      .findOne({ userId, jourUtc, statut: 'valide' })
+      .findOne({
+        userId,
+        jourUtc,
+        statut: 'valide',
+        ...(planId ? { planId } : {}),
+      })
       .exec();
     return document ? this.toDomain(document) : null;
   }

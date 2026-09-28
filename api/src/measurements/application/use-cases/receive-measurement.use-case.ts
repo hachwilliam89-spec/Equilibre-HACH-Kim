@@ -10,6 +10,9 @@ import {
   MEASUREMENT_REPOSITORY,
   type MeasurementRepositoryPort,
 } from '../../domain/ports/measurement-repository.port';
+import { classifyMeasurement } from '../../domain/services/measurement-classification';
+
+const UN_JOUR_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class ReceiveMeasurementUseCase {
@@ -29,6 +32,27 @@ export class ReceiveMeasurementUseCase {
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
+    const planProps = plan.toProps();
+    const jourUtc = receivedAt.toISOString().slice(0, 10);
+    const jourVeille = new Date(receivedAt.getTime() - UN_JOUR_MS)
+      .toISOString()
+      .slice(0, 10);
+
+    // FR403-672 : classification suspecte / hors-plan. La reference de la
+    // veille doit appartenir au meme plan actif.
+    const veille = await this.measurements.findValidForDay(
+      userId,
+      jourVeille,
+      plan.id,
+    );
+    const statut = classifyMeasurement({
+      jourUtc,
+      poidsKg,
+      planDateDebutJourUtc: planProps.dateDebut.toISOString().slice(0, 10),
+      planDateCibleJourUtc: planProps.dateCible.toISOString().slice(0, 10),
+      poidsValideVeille: veille ? veille.toProps().poidsKg : null,
+    });
+
     const measurement = Measurement.create({
       id: randomUUID(),
       userId,
@@ -36,16 +60,20 @@ export class ReceiveMeasurementUseCase {
       poidsKg,
       receivedAt,
       source: 'automatique',
-      // FR403-672 ajoutera la classification suspecte / hors-plan.
-      statut: 'valide',
+      statut,
     });
-    // FR403-674 : une seule mesure valide par jour UTC, toutes sources
-    // confondues. Pré-contrôle explicite dans le domaine applicatif ;
-    // l'index unique de la persistance reste le filet en cas de course.
-    const jourUtc = measurement.toProps().jourUtc;
-    const dejaValide = await this.measurements.findValidForDay(userId, jourUtc);
-    if (dejaValide) {
-      throw this.dayConflict();
+
+    // FR403-674 : le blocage du doublon ne concerne que les mesures valides
+    // (une seule par jour UTC). Une mesure suspecte ou hors-plan est stockee
+    // sans arbitrage. L'index unique partiel reste le filet anti-course.
+    if (statut === 'valide') {
+      const dejaValide = await this.measurements.findValidForDay(
+        userId,
+        jourUtc,
+      );
+      if (dejaValide) {
+        throw this.dayConflict();
+      }
     }
     return this.measurements.create(measurement);
   }
