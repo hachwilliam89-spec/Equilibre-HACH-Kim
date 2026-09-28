@@ -29,17 +29,32 @@ export class ReceiveMeasurementUseCase {
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
-    return this.measurements.create(
-      Measurement.create({
-        id: randomUUID(),
-        userId,
-        planId: plan.id,
-        poidsKg,
-        receivedAt,
-        source: 'automatique',
-        // FR403-672 ajoutera la classification suspecte / hors-plan.
-        statut: 'valide',
-      }),
+    const measurement = Measurement.create({
+      id: randomUUID(),
+      userId,
+      planId: plan.id,
+      poidsKg,
+      receivedAt,
+      source: 'automatique',
+      // FR403-672 ajoutera la classification suspecte / hors-plan.
+      statut: 'valide',
+    });
+    // FR403-674 : une seule mesure valide par jour UTC, toutes sources
+    // confondues. Pré-contrôle explicite dans le domaine applicatif ;
+    // l'index unique de la persistance reste le filet en cas de course.
+    const jourUtc = measurement.toProps().jourUtc;
+    const dejaValide = await this.measurements.findValidForDay(userId, jourUtc);
+    if (dejaValide) {
+      throw this.dayConflict();
+    }
+    return this.measurements.create(measurement);
+  }
+
+  private dayConflict(): AppException {
+    return new AppException(
+      'measurement-day-conflict',
+      'Une mesure valide existe déjà pour ce jour, tout nouvel enregistrement est refusé',
+      HttpStatus.CONFLICT,
     );
   }
 }
