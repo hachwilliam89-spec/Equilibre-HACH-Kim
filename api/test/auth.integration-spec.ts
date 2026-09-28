@@ -403,7 +403,41 @@ describe('Auth (integration)', () => {
     });
   });
 
-  describe('Limitation des requetes sur /api/auth/login', () => {
+  describe.each(['refresh', 'logout'])(
+    'Validation de /api/auth/%s',
+    (route) => {
+      it.each([
+        {},
+        { refreshToken: '' },
+        { refreshToken: 123 },
+        { refreshToken: null },
+      ])('renvoie 400 pour un corps invalide : %j', async (payload) => {
+        const response = await request(app.getHttpServer())
+          .post(`/api/auth/${route}`)
+          .send(payload)
+          .expect(HttpStatus.BAD_REQUEST)
+          .expect('Content-Type', /application\/problem\+json/);
+
+        expect(response.body).toMatchObject({
+          status: 400,
+          instance: `/api/auth/${route}`,
+        });
+        const body = response.body as { errors: { field: string }[] };
+        expect(
+          body.errors.some((error) => error.field === 'refreshToken'),
+        ).toBe(true);
+      });
+    },
+  );
+
+  it('logout accepte un token inconnu sans reveler son existence', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/logout')
+      .send({ refreshToken: 'token-inconnu' })
+      .expect(HttpStatus.NO_CONTENT);
+  });
+
+  describe('Limitation des requetes auth', () => {
     // Instance Nest dediee : le throttler garde ses compteurs en memoire
     // par instance d'application, donc partager l'app des describe
     // precedents ferait dependre ce test du nombre de connexions deja
@@ -435,6 +469,36 @@ describe('Auth (integration)', () => {
       const statuses = responses.map((response) => response.status);
       expect(statuses.slice(0, 5)).not.toContain(HttpStatus.TOO_MANY_REQUESTS);
       expect(statuses[5]).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(responses[5].body).toMatchObject({
+        status: 429,
+        title: 'Trop de requetes',
+        instance: '/api/auth/login',
+      });
+      expect(Number(responses[5].headers['retry-after'])).toBeGreaterThan(0);
     });
+
+    it.each(['refresh', 'logout'])(
+      'limite aussi /api/auth/%s a 100 requetes par minute',
+      async (route) => {
+        const attempt = () =>
+          request(throttleApp.getHttpServer())
+            .post(`/api/auth/${route}`)
+            .send({});
+
+        for (let i = 0; i < 100; i += 1) {
+          await attempt().expect(HttpStatus.BAD_REQUEST);
+        }
+
+        const response = await attempt()
+          .expect(HttpStatus.TOO_MANY_REQUESTS)
+          .expect('Content-Type', /application\/problem\+json/);
+        expect(response.body).toMatchObject({
+          status: 429,
+          title: 'Trop de requetes',
+          instance: `/api/auth/${route}`,
+        });
+        expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+      },
+    );
   });
 });
