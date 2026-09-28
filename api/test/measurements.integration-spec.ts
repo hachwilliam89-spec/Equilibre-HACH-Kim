@@ -19,7 +19,7 @@ import { MeasurementDocumentClass } from '../src/measurements/infrastructure/per
 import { UserDocumentClass } from '../src/auth/infrastructure/persistence/user.schema';
 import { PlanDocumentClass } from '../src/plans/infrastructure/persistence/plan.schema';
 
-describe('FR403-671 — historique des mesures (MongoDB réel)', () => {
+describe('Mesures — réception et historique (MongoDB réel)', () => {
   let app: INestApplication<App>;
   let repository: MeasurementRepositoryPort;
   let model: Model<MeasurementDocumentClass>;
@@ -63,8 +63,8 @@ describe('FR403-671 — historique des mesures (MongoDB réel)', () => {
         coachId: coach,
         poidsDepart: 75,
         poidsCible: 70,
-        dateDebut: new Date('2026-01-01'),
-        dateCible: new Date('2026-12-31'),
+        dateDebut: new Date(Date.now() - 86400000),
+        dateCible: new Date(Date.now() + 30 * 86400000),
         imcCible: 24.2,
         niveauActivite: 'actif',
         budgetCalorique: 2000,
@@ -118,6 +118,117 @@ describe('FR403-671 — historique des mesures (MongoDB réel)', () => {
         .deleteMany({ _id: { $in: users } });
       await app.close();
     }
+  });
+
+  describe('FR403-669 — réception automatique', () => {
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+
+    it('persiste le poids, le propriétaire JWT, le plan actif et la date serveur UTC', async () => {
+      const before = Date.now();
+      const response = await post({ poidsKg: 71.5 }).expect(201);
+      const after = Date.now();
+      const body = response.body as MeasurementProps & { receivedAt: string };
+      expect(body).toMatchObject({
+        userId: owner,
+        planId: activePlan,
+        poidsKg: 71.5,
+        source: 'automatique',
+        statut: 'valide',
+      });
+      expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+      const received = new Date(body.receivedAt);
+      expect(received.getTime()).toBeGreaterThanOrEqual(before);
+      expect(received.getTime()).toBeLessThanOrEqual(after);
+      expect(body.jourUtc).toBe(received.toISOString().slice(0, 10));
+      const stored = await model.findById(body.id).lean();
+      expect(stored).toMatchObject({
+        userId: owner,
+        planId: activePlan,
+        poidsKg: 71.5,
+        receivedAt: received,
+        jourUtc: body.jourUtc,
+        source: 'automatique',
+      });
+      expect((await get(owner).expect(200)).body).toEqual([body]);
+      expect((await get(other).expect(200)).body).toEqual([]);
+    });
+
+    it.each([
+      {},
+      { poidsKg: 0 },
+      { poidsKg: -1 },
+      { poidsKg: '72' },
+      { poidsKg: null },
+      { poidsKg: 72, userId: 'autre' },
+      { poidsKg: 72, planId: 'autre' },
+      { poidsKg: 72, receivedAt: '2020-01-01' },
+      { poidsKg: 72, jourUtc: '2020-01-01' },
+      { poidsKg: 72, source: 'manuelle' },
+      { poidsKg: 72, statut: 'valide' },
+    ])('rejette un corps invalide sans enregistrer : %j', async (payload) => {
+      await post(payload).expect(400);
+      expect(await model.countDocuments({ userId: owner })).toBe(0);
+    });
+
+    it('protège explicitement la nouvelle route contre anonyme, JWT invalide et coach', async () => {
+      await request(app.getHttpServer())
+        .post('/api/measurements')
+        .send({ poidsKg: 72 })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth('invalid', { type: 'bearer' })
+        .send({ poidsKg: 72 })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(coach, 'coach'), { type: 'bearer' })
+        .send({ poidsKg: 72 })
+        .expect(403);
+      expect(await model.countDocuments({ userId: { $in: users } })).toBe(0);
+    });
+
+    it.each(['sans-plan', 'annule', 'termine', 'expire'])(
+      'rejette le cas %s sans mesure orpheline',
+      async (state) => {
+        const planModel = app.get<Model<PlanDocumentClass>>(
+          getModelToken(PlanDocumentClass.name),
+        );
+        const original = await planModel.findById(activePlan).lean();
+        try {
+          if (state === 'sans-plan')
+            await planModel.deleteOne({ _id: activePlan });
+          else
+            await planModel.updateOne(
+              { _id: activePlan },
+              {
+                $set:
+                  state === 'expire'
+                    ? { dateCible: new Date(Date.now() - 2 * 86400000) }
+                    : { statut: state },
+              },
+            );
+          const response = await post({ poidsKg: 72 }).expect(422);
+          expect(response.body).toMatchObject({
+            status: 422,
+            type: 'https://equilibre.app/problems/no-active-plan',
+          });
+          expect(await model.countDocuments({ userId: owner })).toBe(0);
+          if (state === 'expire')
+            expect((await planModel.findById(activePlan))?.statut).toBe(
+              'termine',
+            );
+        } finally {
+          await planModel.replaceOne({ _id: activePlan }, original!, {
+            upsert: true,
+          });
+        }
+      },
+    );
   });
 
   it('refuse explicitement les accès anonyme, JWT invalide et coach', async () => {

@@ -1,3 +1,5 @@
+import { PlansModule } from '../plans/plans.module';
+import { ReceiveMeasurementUseCase } from './application/use-cases/receive-measurement.use-case';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
@@ -13,6 +15,7 @@ import { MongooseMeasurementRepository } from './infrastructure/persistence/mong
 @Module({
   imports: [
     AuthModule,
+    PlansModule,
     MongooseModule.forFeature([
       { name: MeasurementDocumentClass.name, schema: MeasurementSchema },
     ]),
@@ -20,6 +23,7 @@ import { MongooseMeasurementRepository } from './infrastructure/persistence/mong
   controllers: [MeasurementsController],
   providers: [
     GetMeasurementHistoryUseCase,
+    ReceiveMeasurementUseCase,
     {
       provide: MEASUREMENT_REPOSITORY,
       useClass: MongooseMeasurementRepository,
