@@ -644,4 +644,46 @@ describe('Mesures — réception et historique (MongoDB réel)', () => {
       await postCorrection({ poidsKg: 74, source: 'manuelle' }).expect(400);
     });
   });
+
+  describe('FR403-676 — concurrence sur les mesures valides du jour', () => {
+    const postAuto = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const postCorrection = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements/correction')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+    const attenduUneSeuleValide = async (
+      responses: { status: number; body: unknown }[],
+    ) => {
+      expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
+      const conflict = responses.find((r) => r.status === 409)!;
+      expect(conflict.body).toMatchObject({
+        status: 409,
+        type: 'https://equilibre.app/problems/measurement-day-conflict',
+      });
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    };
+
+    it('arbitre deux corrections manuelles simultanees', async () => {
+      const responses = await Promise.all([
+        postCorrection({ poidsKg: 74 }),
+        postCorrection({ poidsKg: 73 }),
+      ]);
+      await attenduUneSeuleValide(responses);
+    });
+
+    it('arbitre une reception automatique et une correction simultanees', async () => {
+      const responses = await Promise.all([
+        postAuto({ poidsKg: 74 }),
+        postCorrection({ poidsKg: 73 }),
+      ]);
+      await attenduUneSeuleValide(responses);
+    });
+  });
 });
