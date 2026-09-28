@@ -15,6 +15,17 @@ import { RegisterDto, registerSchema } from './dto/register.dto';
 import { ZodValidationPipe } from './dto/zod-validation.pipe';
 
 @ApiTags('auth')
+@ApiResponse({
+  status: 429,
+  description:
+    'Trop de requetes : 100/minute par route et par IP, sauf login (5/minute). Erreur au format application/problem+json.',
+  headers: {
+    'Retry-After': {
+      description: 'Delai en secondes avant une nouvelle tentative',
+      schema: { type: 'integer' },
+    },
+  },
+})
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -70,6 +81,10 @@ export class AuthController {
     status: 401,
     description: 'Refresh token invalide, expire ou revoque',
   })
+  @ApiResponse({
+    status: 400,
+    description: 'refreshToken absent, vide ou non textuel (voir errors)',
+  })
   async refresh(
     @Body(new ZodValidationPipe(refreshTokenSchema)) body: RefreshTokenDto,
   ) {
@@ -82,7 +97,12 @@ export class AuthController {
   @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({
     status: 204,
-    description: 'Deconnexion effectuee (idempotent)',
+    description:
+      'Deconnexion effectuee, meme si le token est inconnu ou deja revoque (idempotent)',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'refreshToken absent, vide ou non textuel (voir errors)',
   })
   async logout(
     @Body(new ZodValidationPipe(refreshTokenSchema)) body: RefreshTokenDto,
