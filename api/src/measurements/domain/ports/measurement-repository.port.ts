@@ -18,6 +18,14 @@ export interface MeasurementRepositoryPort {
     jourUtc: string,
     planId?: string,
   ): Promise<Measurement | null>;
+  /**
+   * Derniere mesure valide du plan (par reception decroissante), ou null.
+   * Sert au statut de suivi (FR403-675).
+   */
+  findLatestValidForPlan(
+    userId: string,
+    planId: string,
+  ): Promise<Measurement | null>;
 }
 
 export const MEASUREMENT_REPOSITORY = Symbol('MEASUREMENT_REPOSITORY');

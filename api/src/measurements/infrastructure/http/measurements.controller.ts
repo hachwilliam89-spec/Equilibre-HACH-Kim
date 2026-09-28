@@ -4,7 +4,15 @@ import {
   receiveMeasurementSchema,
 } from './receive-measurement.dto';
 import { ZodValidationPipe } from '../../../auth/infrastructure/http/dto/zod-validation.pipe';
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -12,13 +20,15 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard';
 import type { JwtPayload } from '../../../auth/infrastructure/http/jwt.strategy';
 import { Roles } from '../../../common/auth/roles.decorator';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { GetMeasurementHistoryUseCase } from '../../application/use-cases/get-measurement-history.use-case';
+import { GetWeightTrackingStatusUseCase } from '../../application/use-cases/get-weight-tracking-status.use-case';
 import { MeasurementDto } from './measurement.dto';
+import { SuiviDto } from './suivi.dto';
 
 @ApiTags('measurements')
 @ApiBearerAuth()
@@ -28,6 +38,7 @@ export class MeasurementsController {
   constructor(
     private readonly getHistory: GetMeasurementHistoryUseCase,
     private readonly receiveMeasurement: ReceiveMeasurementUseCase,
+    private readonly getStatus: GetWeightTrackingStatusUseCase,
   ) {}
 
   @Post()
@@ -91,5 +102,51 @@ export class MeasurementsController {
       const props = measurement.toProps();
       return { ...props, receivedAt: props.receivedAt.toISOString() };
     });
+  }
+
+  @Get('me/suivi')
+  @Roles('utilisateur')
+  @ApiOperation({
+    summary:
+      'Statut de suivi du poids (dernière mesure valide, écart de trajectoire, résumé du plan)',
+  })
+  @ApiResponse({
+    status: 200,
+    type: SuiviDto,
+    description: 'Statut de suivi, ou null si aucun plan actif',
+  })
+  @ApiResponse({ status: 401, description: 'Authentification requise' })
+  @ApiResponse({ status: 403, description: 'Réservé au rôle utilisateur' })
+  async getMonSuivi(
+    @Req() request: Request & { user: JwtPayload },
+    @Res() response: Response,
+  ): Promise<Response> {
+    const suivi = await this.getStatus.execute(request.user.sub);
+    if (!suivi) {
+      return response.json(null);
+    }
+    const planProps = suivi.plan.toProps();
+    const derniere = suivi.derniereMesure?.toProps() ?? null;
+    const body: SuiviDto = {
+      statut: suivi.statut,
+      plan: {
+        id: planProps.id,
+        poidsDepart: planProps.poidsDepart,
+        poidsCible: planProps.poidsCible,
+        dateDebut: planProps.dateDebut.toISOString(),
+        dateCible: planProps.dateCible.toISOString(),
+        imcCible: planProps.imcCible,
+        niveauActivite: planProps.niveauActivite,
+        budgetCalorique: planProps.budgetCalorique,
+        budgetPlafonneAuBmr: planProps.budgetPlafonneAuBmr,
+        statut: planProps.statut,
+      },
+      derniereMesure: derniere
+        ? { ...derniere, receivedAt: derniere.receivedAt.toISOString() }
+        : null,
+      poidsAttendu: suivi.ecart ? suivi.ecart.poidsAttendu : null,
+      ecartKg: suivi.ecart ? suivi.ecart.ecartKg : null,
+    };
+    return response.json(body);
   }
 }

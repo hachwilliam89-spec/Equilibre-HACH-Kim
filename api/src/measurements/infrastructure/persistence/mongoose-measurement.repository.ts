@@ -80,6 +80,17 @@ export class MongooseMeasurementRepository
     return document ? this.toDomain(document) : null;
   }
 
+  async findLatestValidForPlan(
+    userId: string,
+    planId: string,
+  ): Promise<Measurement | null> {
+    const document = await this.model
+      .findOne({ userId, planId, statut: 'valide' })
+      .sort({ receivedAt: -1, _id: -1 })
+      .exec();
+    return document ? this.toDomain(document) : null;
+  }
+
   private toDomain(document: MeasurementDocument): Measurement {
     return Measurement.restore({
       id: document._id,
