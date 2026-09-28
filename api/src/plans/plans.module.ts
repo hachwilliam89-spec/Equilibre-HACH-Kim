@@ -22,6 +22,7 @@ import { CancelPlanUseCase } from './application/use-cases/cancel-plan.use-case'
     // et du profil metabolique (taille/age/sexe), deja exporte par AuthModule.
     AuthModule,
   ],
+  exports: [PLAN_REPOSITORY],
   controllers: [PlansController],
   providers: [
     { provide: PLAN_REPOSITORY, useClass: MongoosePlanRepository },
