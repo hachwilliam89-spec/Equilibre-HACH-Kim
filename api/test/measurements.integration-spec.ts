@@ -327,4 +327,68 @@ describe('Mesures — réception et historique (MongoDB réel)', () => {
       ).rejects.toThrow();
     }
   });
+
+  describe('FR403-674 — blocage des doublons du jour', () => {
+    const post = (payload: object) =>
+      request(app.getHttpServer())
+        .post('/api/measurements')
+        .auth(token(owner), { type: 'bearer' })
+        .send(payload);
+
+    it('refuse une deuxième mesure valide le même jour avec un 409 explicite', async () => {
+      await post({ poidsKg: 71.5 }).expect(201);
+      const conflict = await post({ poidsKg: 70.2 }).expect(409);
+      expect(conflict.body).toMatchObject({
+        status: 409,
+        type: 'https://equilibre.app/problems/measurement-day-conflict',
+      });
+      const stored = await model.find({ userId: owner }).lean();
+      expect(stored).toHaveLength(1);
+      expect(stored[0].poidsKg).toBe(71.5);
+    });
+
+    it("accepte une mesure quand la seule mesure valide date d'un autre jour", async () => {
+      await repository.create(
+        measure({ receivedAt: new Date(Date.now() - 86400000) }),
+      );
+      await post({ poidsKg: 71.5 }).expect(201);
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(2);
+    });
+
+    it("n'oppose pas le blocage à une mesure suspecte ou hors-plan du même jour", async () => {
+      await repository.create(
+        measure({ statut: 'suspecte', receivedAt: new Date() }),
+      );
+      await repository.create(
+        measure({
+          statut: 'hors-plan',
+          source: 'manuelle',
+          receivedAt: new Date(),
+        }),
+      );
+      await post({ poidsKg: 71.5 }).expect(201);
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+      expect(await model.countDocuments({ userId: owner })).toBe(3);
+    });
+
+    it('arbitre deux réceptions simultanées le même jour : une 201, une 409', async () => {
+      const responses = await Promise.all([
+        post({ poidsKg: 71.5 }),
+        post({ poidsKg: 70.9 }),
+      ]);
+      expect(responses.map((res) => res.status).sort()).toEqual([201, 409]);
+      const conflict = responses.find((res) => res.status === 409)!;
+      expect(conflict.body).toMatchObject({
+        status: 409,
+        type: 'https://equilibre.app/problems/measurement-day-conflict',
+      });
+      expect(
+        await model.countDocuments({ userId: owner, statut: 'valide' }),
+      ).toBe(1);
+    });
+  });
 });

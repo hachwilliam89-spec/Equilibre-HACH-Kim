@@ -63,6 +63,9 @@ After(async function () {
       // Nettoyage limité aux comptes de ce scénario, jamais à toute la base.
       await this.plans.deleteMany({ userId: { $in: this.accountIds } });
       await this.connection
+        .collection('measurements')
+        .deleteMany({ userId: { $in: this.accountIds } });
+      await this.connection
         .collection('refresh_tokens')
         .deleteMany({ userId: { $in: this.accountIds } });
       await this.connection
