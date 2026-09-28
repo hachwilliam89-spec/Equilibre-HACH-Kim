@@ -51,7 +51,8 @@ export class MeasurementsController {
   @ApiResponse({ status: 403, description: 'Réservé au rôle utilisateur' })
   @ApiResponse({
     status: 409,
-    description: 'Conflit avec une mesure existante (index de persistance)',
+    description:
+      'Une mesure valide existe déjà pour ce jour (measurement-day-conflict) ou identifiant déjà pris',
   })
   @ApiResponse({ status: 422, description: 'Aucun plan actif' })
   @ApiResponse({ status: 429, description: 'Trop de requêtes' })

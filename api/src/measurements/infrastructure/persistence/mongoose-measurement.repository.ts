@@ -33,9 +33,22 @@ export class MongooseMeasurementRepository
         'code' in error &&
         error.code === 11000
       ) {
+        // Filet anti-course du blocage FR403-674 : deux insertions valides
+        // simultanées pour le même jour ne peuvent pas passer le pré-contrôle
+        // du use case ; l'index unique partiel tranche et renvoie le même
+        // conflit de jour. Le conflit d'identifiant reste distingué.
+        const keyPattern = (error as { keyPattern?: Record<string, unknown> })
+          .keyPattern;
+        if (keyPattern && 'jourUtc' in keyPattern) {
+          throw new AppException(
+            'measurement-day-conflict',
+            'Une mesure valide existe déjà pour ce jour, tout nouvel enregistrement est refusé',
+            HttpStatus.CONFLICT,
+          );
+        }
         throw new AppException(
           'measurement-conflict',
-          'Une mesure existe déjà pour cet identifiant ou une valeur valide pour ce jour',
+          'Une mesure existe déjà pour cet identifiant',
           HttpStatus.CONFLICT,
         );
       }
@@ -49,6 +62,16 @@ export class MongooseMeasurementRepository
       .sort({ receivedAt: -1, _id: -1 })
       .exec();
     return documents.map((document) => this.toDomain(document));
+  }
+
+  async findValidForDay(
+    userId: string,
+    jourUtc: string,
+  ): Promise<Measurement | null> {
+    const document = await this.model
+      .findOne({ userId, jourUtc, statut: 'valide' })
+      .exec();
+    return document ? this.toDomain(document) : null;
   }
 
   private toDomain(document: MeasurementDocument): Measurement {
