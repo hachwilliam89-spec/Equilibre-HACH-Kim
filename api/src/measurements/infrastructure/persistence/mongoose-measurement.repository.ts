@@ -1,67 +1,54 @@
-import { HttpStatus, Injectable, OnModuleInit } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { AppException } from '../../../common/errors/app-exception';
+import {
+  SUIVI_REPOSITORY,
+  type SuiviRepositoryPort,
+} from '../../../suivis/domain/ports/suivi-repository.port';
 import { Measurement } from '../../domain/entities/measurement.entity';
 import type { MeasurementRepositoryPort } from '../../domain/ports/measurement-repository.port';
-import {
-  MeasurementDocument,
-  MeasurementDocumentClass,
-} from './measurement.schema';
+
+const MAX_TENTATIVES = 5;
 
 @Injectable()
-export class MongooseMeasurementRepository
-  implements MeasurementRepositoryPort, OnModuleInit
-{
+export class MongooseMeasurementRepository implements MeasurementRepositoryPort {
   constructor(
-    @InjectModel(MeasurementDocumentClass.name)
-    private readonly model: Model<MeasurementDocumentClass>,
+    @Inject(SUIVI_REPOSITORY) private readonly suivis: SuiviRepositoryPort,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    await this.model.init();
-  }
-
   async create(measurement: Measurement): Promise<Measurement> {
-    const { id, ...props } = measurement.toProps();
-    try {
-      return this.toDomain(await this.model.create({ _id: id, ...props }));
-    } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === 11000
-      ) {
-        // Filet anti-course du blocage FR403-674 : deux insertions valides
-        // simultanées pour le même jour ne peuvent pas passer le pré-contrôle
-        // du use case ; l'index unique partiel tranche et renvoie le même
-        // conflit de jour. Le conflit d'identifiant reste distingué.
-        const keyPattern = (error as { keyPattern?: Record<string, unknown> })
-          .keyPattern;
-        if (keyPattern && 'jourUtc' in keyPattern) {
-          throw new AppException(
-            'measurement-day-conflict',
-            'Une mesure valide existe déjà pour ce jour, tout nouvel enregistrement est refusé',
-            HttpStatus.CONFLICT,
-          );
-        }
+    const { userId } = measurement.toProps();
+    for (let attempt = 0; attempt < MAX_TENTATIVES; attempt += 1) {
+      const suivi = await this.suivis.charger(userId);
+      if (!suivi) {
         throw new AppException(
-          'measurement-conflict',
-          'Une mesure existe déjà pour cet identifiant',
-          HttpStatus.CONFLICT,
+          'no-active-plan',
+          'Aucun plan actif pour enregistrer une mesure',
+          HttpStatus.UNPROCESSABLE_ENTITY,
         );
       }
-      throw error;
+      const version = suivi.toProps().version;
+      suivi.ajouterMesure(measurement);
+      if (await this.suivis.sauvegarderSiVersion(suivi, version)) {
+        return measurement;
+      }
     }
+    throw new AppException(
+      'measurement-concurrent-update',
+      'Le suivi a été modifié simultanément, veuillez réessayer',
+      HttpStatus.CONFLICT,
+    );
   }
 
   async findHistoryByUserId(userId: string): Promise<Measurement[]> {
-    const documents = await this.model
-      .find({ userId })
-      .sort({ receivedAt: -1, _id: -1 })
-      .exec();
-    return documents.map((document) => this.toDomain(document));
+    const mesures = await this.suivis.lireHistorique(userId);
+    return mesures.sort((a, b) => {
+      const aProps = a.toProps();
+      const bProps = b.toProps();
+      return (
+        bProps.receivedAt.getTime() - aProps.receivedAt.getTime() ||
+        bProps.id.localeCompare(aProps.id)
+      );
+    });
   }
 
   async findValidForDay(
@@ -69,38 +56,14 @@ export class MongooseMeasurementRepository
     jourUtc: string,
     planId?: string,
   ): Promise<Measurement | null> {
-    const document = await this.model
-      .findOne({
-        userId,
-        jourUtc,
-        statut: 'valide',
-        ...(planId ? { planId } : {}),
-      })
-      .exec();
-    return document ? this.toDomain(document) : null;
+    return this.suivis.lireMesureValideDuJour(userId, jourUtc, planId);
   }
 
   async findLatestValidForPlan(
     userId: string,
     planId: string,
   ): Promise<Measurement | null> {
-    const document = await this.model
-      .findOne({ userId, planId, statut: 'valide' })
-      .sort({ receivedAt: -1, _id: -1 })
-      .exec();
-    return document ? this.toDomain(document) : null;
-  }
-
-  private toDomain(document: MeasurementDocument): Measurement {
-    return Measurement.restore({
-      id: document._id,
-      userId: document.userId,
-      planId: document.planId,
-      poidsKg: document.poidsKg,
-      receivedAt: document.receivedAt,
-      jourUtc: document.jourUtc,
-      source: document.source,
-      statut: document.statut,
-    });
+    const latest = await this.suivis.lireDerniereMesureValide(userId);
+    return latest?.toProps().planId === planId ? latest : null;
   }
 }

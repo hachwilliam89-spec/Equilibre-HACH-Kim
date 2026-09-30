@@ -55,9 +55,7 @@ export class CorrectMeasurementUseCase {
       statut,
     });
 
-    // Secours : la correction n'est retenue (valide) que s'il n'existe pas
-    // deja une mesure valide ce jour (auto ou manuelle) — FR403-674. Une
-    // correction hors-plan n'est pas retenue et ne declenche pas ce controle.
+    // Précontrôle rapide ; l'agrégat Suivi reste l'autorité en cas de course.
     if (statut === 'valide') {
       const dejaValide = await this.measurements.findValidForDay(
         userId,
@@ -66,7 +64,7 @@ export class CorrectMeasurementUseCase {
       if (dejaValide) {
         throw new AppException(
           'measurement-day-conflict',
-          'Une mesure valide existe déjà pour ce jour, tout nouvel enregistrement est refusé',
+          'Mesure déjà enregistrée aujourd’hui',
           HttpStatus.CONFLICT,
         );
       }

@@ -25,7 +25,9 @@
     "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-integration.json",
     "test:e2e:local": "bash scripts/test-e2e-local.sh",
     "test:cucumber": "pnpm build && cucumber-js",
-    "test:cucumber:local": "bash scripts/test-cucumber-local.sh"
+    "test:cucumber:local": "bash scripts/test-cucumber-local.sh",
+    "migrate:suivis": "node scripts/migrate-suivis.mjs",
+    "test:migrate-suivis": "node scripts/test-migrate-suivis.mjs"
   },
   "lint-staged": {
     "{src,test}/**/*.ts": [
