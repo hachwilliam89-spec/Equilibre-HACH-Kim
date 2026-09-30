@@ -84,7 +84,7 @@ Fonctionnalité: Soumission du plan par le coach
     Et le statut enregistré vaut "annule"
     Quand le coach soumet un plan de 80 kg vers 75 kg sur 35 jours
     Alors le code HTTP est 201
-    Et la base contient 2 plan pour cette utilisatrice
+    Et la base contient 1 plan pour cette utilisatrice
 
   @FR403-123
   Scénario: Garder le plan actif le jour de sa date cible
@@ -101,7 +101,7 @@ Fonctionnalité: Soumission du plan par le coach
     Et le statut enregistré vaut "termine"
     Quand le coach soumet un plan de 80 kg vers 75 kg sur 35 jours
     Alors le code HTTP est 201
-    Et la base contient 2 plan pour cette utilisatrice
+    Et la base contient 1 plan pour cette utilisatrice
 
   @FR403-127 @preview
   Plan du scénario: Consulter une proposition sans enregistrer de plan

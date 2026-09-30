@@ -1,113 +1,85 @@
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { AppException } from '../../../common/errors/app-exception';
-import { HttpStatus, Injectable, OnModuleInit } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Suivi } from '../../../suivis/domain/entities/suivi.entity';
+import {
+  SUIVI_REPOSITORY,
+  type SuiviRepositoryPort,
+} from '../../../suivis/domain/ports/suivi-repository.port';
 import { Plan } from '../../domain/entities/plan.entity';
-import { PlanRepositoryPort } from '../../domain/ports/plan-repository.port';
-import { PlanDocument, PlanDocumentClass } from './plan.schema';
+import type { PlanRepositoryPort } from '../../domain/ports/plan-repository.port';
+
+const MAX_TENTATIVES = 5;
 
 @Injectable()
-export class MongoosePlanRepository
-  implements PlanRepositoryPort, OnModuleInit
-{
+export class MongoosePlanRepository implements PlanRepositoryPort {
   constructor(
-    @InjectModel(PlanDocumentClass.name)
-    private readonly planModel: Model<PlanDocument>,
+    @Inject(SUIVI_REPOSITORY) private readonly suivis: SuiviRepositoryPort,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    // Ne pas accepter de requêtes avant que l'index d'unicité soit prêt.
-    await this.planModel.init();
-  }
-
   async create(plan: Plan): Promise<Plan> {
-    const props = plan.toProps();
-    let doc: PlanDocument;
-    try {
-      doc = await this.planModel.create({
-        _id: props.id,
-        userId: props.userId,
-        coachId: props.coachId,
-        poidsDepart: props.poidsDepart,
-        poidsCible: props.poidsCible,
-        dateDebut: props.dateDebut,
-        dateCible: props.dateCible,
-        imcCible: props.imcCible,
-        niveauActivite: props.niveauActivite,
-        budgetCalorique: props.budgetCalorique,
-        budgetPlafonneAuBmr: props.budgetPlafonneAuBmr,
-        statut: props.statut,
-      });
-    } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === 11000
-      ) {
-        throw new AppException(
-          'plan-already-active',
-          'Un plan actif existe deja pour cet utilisateur',
-          HttpStatus.CONFLICT,
-        );
-      }
-      throw error;
+    for (let attempt = 0; attempt < MAX_TENTATIVES; attempt += 1) {
+      const existing = await this.suivis.charger(plan.userId);
+      const suivi = existing ?? Suivi.create(plan.userId);
+      suivi.activerPlan(plan);
+      const saved = existing
+        ? await this.suivis.sauvegarderSiVersion(
+            suivi,
+            existing.toProps().version,
+          )
+        : await this.suivis.creer(suivi);
+      if (saved) return plan;
     }
-    return this.toDomain(doc);
+    throw this.planConflict();
   }
 
   async findById(id: string): Promise<Plan | null> {
-    const doc = await this.planModel.findById(id).exec();
-    return doc ? this.toDomain(doc) : null;
+    const suivi = await this.suivis.chercherParPlanId(id);
+    if (!suivi) return null;
+    const props = suivi.toProps();
+    return (
+      (props.planActif?.id === id ? props.planActif : null) ??
+      props.plans.find((plan) => plan.id === id) ??
+      null
+    );
   }
 
   async findActiveByUserId(userId: string): Promise<Plan | null> {
-    const doc = await this.planModel
-      .findOne({ userId, statut: 'actif' })
-      .exec();
-    if (!doc) {
-      return null;
+    for (let attempt = 0; attempt < MAX_TENTATIVES; attempt += 1) {
+      const suivi = await this.suivis.charger(userId);
+      if (!suivi) return null;
+      const plan = suivi.toProps().planActif;
+      if (!plan) return null;
+      if (!plan.hasExpired(new Date())) return plan;
+      const version = suivi.toProps().version;
+      plan.terminate();
+      suivi.terminerPlan(plan);
+      if (await this.suivis.sauvegarderSiVersion(suivi, version)) return null;
     }
-
-    const plan = this.toDomain(doc);
-    if (plan.hasExpired(new Date())) {
-      await this.planModel
-        .updateOne(
-          { _id: plan.id, statut: 'actif' },
-          { $set: { statut: 'termine' } },
-        )
-        .exec();
-      return null;
-    }
-
-    return plan;
+    throw this.planConflict();
   }
 
   async save(plan: Plan): Promise<Plan> {
-    const props = plan.toProps();
-    const doc = await this.planModel.findByIdAndUpdate(
-      props.id,
-      { $set: props },
-      { returnDocument: 'after' },
-    );
-    return this.toDomain(doc!);
+    for (let attempt = 0; attempt < MAX_TENTATIVES; attempt += 1) {
+      const suivi = await this.suivis.chercherParPlanId(plan.id);
+      if (!suivi) {
+        throw new AppException(
+          'plan-not-found',
+          'Plan introuvable',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const version = suivi.toProps().version;
+      suivi.terminerPlan(plan);
+      if (await this.suivis.sauvegarderSiVersion(suivi, version)) return plan;
+    }
+    throw this.planConflict();
   }
 
-  private toDomain(doc: PlanDocument): Plan {
-    return Plan.restore({
-      id: doc._id.toString(),
-      userId: doc.userId,
-      coachId: doc.coachId,
-      poidsDepart: doc.poidsDepart,
-      poidsCible: doc.poidsCible,
-      dateDebut: doc.dateDebut,
-      dateCible: doc.dateCible,
-      imcCible: doc.imcCible,
-      niveauActivite: doc.niveauActivite,
-      budgetCalorique: doc.budgetCalorique,
-      budgetPlafonneAuBmr: doc.budgetPlafonneAuBmr,
-      statut: doc.statut,
-      createdAt: doc.createdAt,
-    });
+  private planConflict(): AppException {
+    return new AppException(
+      'plan-already-active',
+      'Un plan actif existe deja pour cet utilisateur',
+      HttpStatus.CONFLICT,
+    );
   }
 }

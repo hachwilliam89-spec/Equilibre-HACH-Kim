@@ -147,7 +147,7 @@ describe('Plans (integration)', () => {
   });
 
   interface PlanRow {
-    _id: string;
+    id: string;
     userId: string;
     coachId: string;
     poidsDepart: number;
@@ -159,6 +159,17 @@ describe('Plans (integration)', () => {
     budgetCalorique: number;
     budgetPlafonneAuBmr: boolean;
     statut: 'actif' | 'termine' | 'annule';
+    createdAt?: Date;
+  }
+
+  interface SuiviRow {
+    _id: string;
+    version: number;
+    planActif: PlanRow | null;
+    plans: PlanRow[];
+    mesures: unknown[];
+    derniereMesureValide: Record<string, unknown> | null;
+    blocageJournalier: Record<string, unknown> | null;
   }
 
   // Forme du corps JSON renvoye par l'API (PlanProps serialise) : `id`, pas
@@ -179,10 +190,33 @@ describe('Plans (integration)', () => {
     statut: 'actif' | 'termine' | 'annule';
   }
 
-  const plansCollection = (
+  const suivisCollection = (
     testApp: INestApplication<App>,
-  ): Collection<PlanRow> =>
-    testApp.get<Connection>(getConnectionToken()).collection<PlanRow>('plans');
+  ): Collection<SuiviRow> =>
+    testApp
+      .get<Connection>(getConnectionToken())
+      .collection<SuiviRow>('suivis');
+
+  const activePlan = async (userId: string): Promise<PlanRow | null> =>
+    (await suivisCollection(app).findOne({ _id: userId }))?.planActif ?? null;
+
+  const findPlan = async (planId: string): Promise<PlanRow | null> => {
+    const suivi = await suivisCollection(app).findOne({
+      $or: [{ 'planActif.id': planId }, { 'plans.id': planId }],
+    });
+    return (
+      (suivi?.planActif?.id === planId ? suivi.planActif : null) ??
+      suivi?.plans?.find((plan) => plan.id === planId) ??
+      null
+    );
+  };
+
+  const countPlans = async (userId: string): Promise<number> => {
+    const suivi = await suivisCollection(app).findOne({ _id: userId });
+    return suivi
+      ? (suivi.plans?.length ?? 0) + (suivi.planActif === null ? 0 : 1)
+      : 0;
+  };
 
   describe('Authentification requise', () => {
     // Le garde JwtAuthGuard est applique au niveau du controleur (@UseGuards
@@ -216,9 +250,9 @@ describe('Plans (integration)', () => {
           .send(validPlanBody(user.userId))
           .expect(HttpStatus.CREATED);
         const planId = (created.body as PlanResponseBody).id;
-        const before = await plansCollection(app)
-          .find({ userId: user.userId })
-          .toArray();
+        const before = await suivisCollection(app).findOne({
+          _id: user.userId,
+        });
         const client = request(app.getHttpServer());
         const call =
           action === 'soumission'
@@ -230,7 +264,7 @@ describe('Plans (integration)', () => {
           .set('Authorization', `Bearer ${user.accessToken}`)
           .expect(HttpStatus.FORBIDDEN);
         expect(
-          await plansCollection(app).find({ userId: user.userId }).toArray(),
+          await suivisCollection(app).findOne({ _id: user.userId }),
         ).toEqual(before);
       },
     );
@@ -272,9 +306,7 @@ describe('Plans (integration)', () => {
         expect((preview.body as PlanResponseBody).budgetPlafonneAuBmr).toBe(
           plancher,
         );
-        expect(
-          await plansCollection(app).countDocuments({ userId: user.userId }),
-        ).toBe(0);
+        expect(await countPlans(user.userId)).toBe(0);
         const created = await request(app.getHttpServer())
           .post('/api/plans')
           .set('Authorization', `Bearer ${coach.accessToken}`)
@@ -289,9 +321,7 @@ describe('Plans (integration)', () => {
           80 / 1.7 ** 2,
           6,
         );
-        const stored = await plansCollection(app).findOne({
-          userId: user.userId,
-        });
+        const stored = await activePlan(user.userId);
         expect(stored?.budgetCalorique).toBeCloseTo(budget, 6);
         expect(stored?.niveauActivite).toBe(niveau);
       },
@@ -321,22 +351,20 @@ describe('Plans (integration)', () => {
             'incomplete-metabolic-profile',
           );
         }
-        expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
+        expect(await countPlans(userId)).toBe(0);
         const manual = { ...payload, budgetCalorique: 1800 };
         await request(app.getHttpServer())
           .post('/api/plans/preview')
           .set('Authorization', `Bearer ${coach.accessToken}`)
           .send(manual)
           .expect(200);
-        expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
+        expect(await countPlans(userId)).toBe(0);
         await request(app.getHttpServer())
           .post('/api/plans')
           .set('Authorization', `Bearer ${coach.accessToken}`)
           .send(manual)
           .expect(201);
-        expect(
-          (await plansCollection(app).findOne({ userId }))?.budgetCalorique,
-        ).toBe(1800);
+        expect((await activePlan(userId))?.budgetCalorique).toBe(1800);
       },
     );
 
@@ -362,9 +390,10 @@ describe('Plans (integration)', () => {
         6,
       );
       expect((result.body as PlanResponseBody).budgetPlafonneAuBmr).toBe(false);
-      expect(
-        (await plansCollection(app).findOne({ userId }))?.budgetCalorique,
-      ).toBeCloseTo(2774.0625, 6);
+      expect((await activePlan(userId))?.budgetCalorique).toBeCloseTo(
+        2774.0625,
+        6,
+      );
     });
 
     it('isole les données de deux utilisateurs et maintient l’annulation après relecture', async () => {
@@ -388,9 +417,7 @@ describe('Plans (integration)', () => {
         .set('Authorization', `Bearer ${userA.accessToken}`)
         .expect(200);
       expect(own.body).toBeNull();
-      expect(
-        (await plansCollection(app).findOne({ _id: plan.id }))?.statut,
-      ).toBe('actif');
+      expect((await findPlan(plan.id))?.statut).toBe('actif');
       await request(app.getHttpServer())
         .post(`/api/plans/${plan.id}/cancel`)
         .set('Authorization', `Bearer ${coach.accessToken}`)
@@ -405,9 +432,7 @@ describe('Plans (integration)', () => {
           .expect(200);
         expect(read.body).toBeNull();
       }
-      expect(
-        (await plansCollection(app).findOne({ _id: plan.id }))?.statut,
-      ).toBe('annule');
+      expect(await findPlan(plan.id)).toBeNull();
     });
   });
 
@@ -430,7 +455,7 @@ describe('Plans (integration)', () => {
       expect((response.body as { type: string }).type).toContain(
         'missing-taille',
       );
-      expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
+      expect(await countPlans(userId)).toBe(0);
     });
 
     it('refuse la suggestion automatique si le profil (age/sexe) est incomplet, sans budget fourni', async () => {
@@ -448,7 +473,7 @@ describe('Plans (integration)', () => {
       expect((response.body as { type: string }).type).toContain(
         'incomplete-metabolic-profile',
       );
-      expect(await plansCollection(app).countDocuments({ userId })).toBe(0);
+      expect(await countPlans(userId)).toBe(0);
     });
 
     it('accepte un profil incomplet si le coach fournit un budget calorique manuel', async () => {
@@ -467,7 +492,7 @@ describe('Plans (integration)', () => {
         false,
       );
 
-      const doc = await plansCollection(app).findOne({ userId });
+      const doc = await activePlan(userId);
       expect(doc?.budgetCalorique).toBe(1600);
       expect(doc?.budgetPlafonneAuBmr).toBe(false);
     });
@@ -523,7 +548,7 @@ describe('Plans (integration)', () => {
       expect(body.budgetPlafonneAuBmr).toBe(false);
       expect(body.budgetCalorique).toBeCloseTo(1741.8 + 550, 0);
 
-      const doc = await plansCollection(app).findOne({ userId });
+      const doc = await activePlan(userId);
       expect(doc?.budgetCalorique).toBeCloseTo(1741.8 + 550, 0);
       expect(doc?.budgetPlafonneAuBmr).toBe(false);
     });
@@ -554,7 +579,7 @@ describe('Plans (integration)', () => {
         .post(`/api/plans/${planId}/cancel`)
         .set('Authorization', `Bearer ${coach.accessToken}`)
         .expect(HttpStatus.NOT_FOUND);
-      expect(await plansCollection(app).findOne({ _id: planId })).toBeNull();
+      expect(await findPlan(planId)).toBeNull();
     });
 
     it("refuse d'annuler un plan qui ne lui est pas rattache", async () => {
@@ -567,18 +592,18 @@ describe('Plans (integration)', () => {
         .expect(HttpStatus.CREATED);
 
       const coachB = await registerAndLoginCoach(app);
-      const before = await plansCollection(app).findOne({
-        userId: userOfCoachA,
+      const before = await suivisCollection(app).findOne({
+        _id: userOfCoachA,
       });
 
       await request(app.getHttpServer())
         .post(`/api/plans/${(created.body as PlanResponseBody).id}/cancel`)
         .set('Authorization', `Bearer ${coachB.accessToken}`)
         .expect(HttpStatus.FORBIDDEN);
-      const after = await plansCollection(app).findOne({
-        userId: userOfCoachA,
+      const after = await suivisCollection(app).findOne({
+        _id: userOfCoachA,
       });
-      expect(after?.statut).toBe('actif');
+      expect(after?.planActif?.statut).toBe('actif');
       expect(after).toEqual(before);
     });
   });
@@ -630,7 +655,7 @@ describe('Plans (integration)', () => {
         .expect(HttpStatus.FORBIDDEN);
     });
 
-    it('passe automatiquement un plan expire en statut termine, verifie en base', async () => {
+    it('retire automatiquement un plan expiré du suivi actif', async () => {
       const { coachId, accessToken } = await registerAndLoginCoach(app);
       const userId = await registerUtilisateur(app, coachId);
 
@@ -638,22 +663,31 @@ describe('Plans (integration)', () => {
       // pour verifier le passage automatique en 'termine' sans dependre
       // d'une horloge systeme manipulee.
       const planId = randomUUID();
-      await plansCollection(app).insertOne({
-        _id: planId,
-        userId,
-        coachId,
-        poidsDepart: 82,
-        poidsCible: 78,
-        dateDebut: new Date('2020-01-01') as unknown as string,
-        dateCible: new Date('2020-01-29') as unknown as string,
-        imcCible: 27,
-        niveauActivite: 'sportif',
-        budgetCalorique: 1800,
-        budgetPlafonneAuBmr: false,
-        statut: 'actif',
+      await suivisCollection(app).insertOne({
+        _id: userId,
+        version: 0,
+        planActif: {
+          id: planId,
+          userId,
+          coachId,
+          poidsDepart: 82,
+          poidsCible: 78,
+          dateDebut: new Date('2020-01-01') as unknown as string,
+          dateCible: new Date('2020-01-29') as unknown as string,
+          imcCible: 27,
+          niveauActivite: 'sportif',
+          budgetCalorique: 1800,
+          budgetPlafonneAuBmr: false,
+          statut: 'actif',
+          createdAt: new Date('2020-01-01'),
+        },
+        plans: [],
+        mesures: [],
+        derniereMesureValide: null,
+        blocageJournalier: null,
       });
 
-      const docBefore = await plansCollection(app).findOne({ _id: planId });
+      const docBefore = await findPlan(planId);
       expect(docBefore?.statut).toBe('actif'); // pas encore lu, donc pas encore rafraichi
 
       // findActiveByUserId (invoque par le repository a chaque lecture) doit
@@ -667,8 +701,8 @@ describe('Plans (integration)', () => {
       expect(response.text).toBe('null');
       expect(response.body).toBeNull();
 
-      const docAfter = await plansCollection(app).findOne({ _id: planId });
-      expect(docAfter?.statut).toBe('termine');
+      const docAfter = await findPlan(planId);
+      expect(docAfter).toBeNull();
     });
   });
 });

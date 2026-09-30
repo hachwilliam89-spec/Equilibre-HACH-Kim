@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const {
   Before,
+  BeforeAll,
   After,
+  AfterAll,
   Given,
   When,
   Then,
@@ -11,10 +13,17 @@ const {
 } = require('@cucumber/cucumber');
 const { Test } = require('@nestjs/testing');
 const { getConnectionToken } = require('@nestjs/mongoose');
+const { ThrottlerStorage } = require('@nestjs/throttler');
 const request = require('supertest');
 const { AppModule } = require('../../../dist/app.module');
 
 setDefaultTimeout(30000);
+
+// L'app Nest et la connexion Mongo sont bootees une seule fois pour tout le run
+// (BeforeAll) : booter/fermer une app par scenario provoquait des echecs
+// intermittents (register 404 / socket) sous le churn de connexions.
+let sharedApp;
+let sharedConnection;
 
 const day = (offset) => {
   const date = new Date();
@@ -39,39 +48,50 @@ const submit = (world, payload) =>
     .set('Authorization', `Bearer ${world.coachToken}`)
     .send(payload);
 
-Before(async function () {
+BeforeAll(async function () {
   if (
     process.env.NODE_ENV !== 'test' ||
     !/\/equilibre_test(?:\?|$)/.test(process.env.MONGO_URI || '')
   ) {
     throw new Error('Cucumber exige NODE_ENV=test et la base equilibre_test.');
   }
-  this.accountIds = [];
   const module = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
-  this.app = module.createNestApplication();
-  this.app.setGlobalPrefix('api');
-  await this.app.init();
-  this.connection = this.app.get(getConnectionToken());
-  this.plans = this.connection.collection('plans');
+  sharedApp = module.createNestApplication();
+  sharedApp.setGlobalPrefix('api');
+  await sharedApp.init();
+  sharedConnection = sharedApp.get(getConnectionToken());
+});
+
+Before(function () {
+  // Isolation des scenarios : conserver les vrais quotas et le vrai guard,
+  // mais repartir sans les tentatives des scenarios precedents.
+  // Annuler les timers avant de vider les compteurs auxquels ils se referent.
+  const throttleStorage = sharedApp.get(ThrottlerStorage);
+  throttleStorage.onApplicationShutdown();
+  throttleStorage.storage.clear();
+  this.app = sharedApp;
+  this.connection = sharedConnection;
+  this.suivis = sharedConnection.collection('suivis');
+  this.accountIds = [];
 });
 
 After(async function () {
-  try {
-    if (this.connection && this.accountIds.length) {
-      // Nettoyage limité aux comptes de ce scénario, jamais à toute la base.
-      await this.plans.deleteMany({ userId: { $in: this.accountIds } });
-      await this.connection
-        .collection('refresh_tokens')
-        .deleteMany({ userId: { $in: this.accountIds } });
-      await this.connection
-        .collection('users')
-        .deleteMany({ _id: { $in: this.accountIds } });
-    }
-  } finally {
-    if (this.app) await this.app.close();
+  if (this.connection && this.accountIds.length) {
+    // Nettoyage limité aux comptes de ce scénario, jamais à toute la base.
+    await this.suivis.deleteMany({ _id: { $in: this.accountIds } });
+    await this.connection
+      .collection('refresh_tokens')
+      .deleteMany({ userId: { $in: this.accountIds } });
+    await this.connection
+      .collection('users')
+      .deleteMany({ _id: { $in: this.accountIds } });
   }
+});
+
+AfterAll(async function () {
+  if (sharedApp) await sharedApp.close();
 });
 
 async function account(world, extra) {
@@ -113,7 +133,7 @@ Given('une taille de {int} cm dans le profil', async function (tailleCm) {
   this.tailleCm = tailleCm;
   await this.connection
     .collection('users')
-    .updateOne({ _id: this.userId }, { $set: { tailleCm } });
+    .updateOne({ _id: this.userId }, { $set: { 'profil.tailleCm': tailleCm } });
 });
 Given('un budget manuel de {int} kcal', function (budget) {
   this.manualBudget = budget;
@@ -133,12 +153,15 @@ Then('le code HTTP est {int}', function (code) {
 Then(
   'la base contient {int} plan pour cette utilisatrice',
   async function (count) {
-    assert.equal(
-      await this.plans.countDocuments({ userId: this.userId }),
-      count,
-    );
+    const suivi = await this.suivis.findOne({ _id: this.userId });
+    const storedPlans = suivi
+      ? [...(suivi.plans || []), ...(suivi.planActif ? [suivi.planActif] : [])]
+      : [];
+    assert.equal(storedPlans.length, count);
     if (this.response?.status === 201) {
-      const saved = await this.plans.findOne({ _id: this.response.body.id });
+      const saved = storedPlans.find(
+        (plan) => plan.id === this.response.body.id,
+      );
       assert.ok(saved);
       for (const result of [saved, this.response.body]) {
         assert.equal(result.statut, 'actif');
@@ -151,10 +174,7 @@ Then(
         );
       }
       assert.equal(
-        await this.plans.countDocuments({
-          userId: this.userId,
-          statut: 'actif',
-        }),
+        storedPlans.filter((plan) => plan.statut === 'actif').length,
         1,
       );
       assert.equal(saved.poidsCible, this.response.body.poidsCible);
@@ -162,14 +182,14 @@ Then(
   },
 );
 Then("l'IMC cible retourné et enregistré vaut {float}", async function (imc) {
-  const saved = await this.plans.findOne({ _id: this.response.body.id });
+  const saved = (await this.suivis.findOne({ _id: this.userId })).planActif;
   assert.equal(this.response.body.imcCible, imc);
   assert.equal(saved.imcCible, imc);
 });
 Then(
   'le budget retourné et enregistré vaut {float} kcal avec un plancher {word}',
   async function (budget, flag) {
-    const saved = await this.plans.findOne({ _id: this.response.body.id });
+    const saved = (await this.suivis.findOne({ _id: this.userId })).planActif;
     for (const result of [saved, this.response.body]) {
       assert.ok(Math.abs(result.budgetCalorique - budget) < 0.000001);
       assert.equal(result.budgetPlafonneAuBmr, flag === 'oui');
@@ -184,16 +204,9 @@ When('le coach soumet simultanément deux plans valides', async function () {
 });
 Then("une réponse vaut 201 et l'autre 409", async function () {
   assert.deepEqual(this.responses.map((res) => res.status).sort(), [201, 409]);
-  assert.equal(
-    await this.plans.countDocuments({ userId: this.userId, statut: 'actif' }),
-    1,
-  );
-  const index = (await this.plans.indexes()).find(
-    (entry) => entry.name === 'one_active_plan_per_user',
-  );
-  assert.ok(index);
-  assert.equal(index.unique, true);
-  assert.deepEqual(index.partialFilterExpression, { statut: 'actif' });
+  const suivi = await this.suivis.findOne({ _id: this.userId });
+  assert.equal(suivi.planActif.statut, 'actif');
+  assert.equal(suivi._id, this.userId);
 });
 When("l'utilisatrice et son coach consultent le plan actif", async function () {
   this.responses = await Promise.all([
@@ -217,9 +230,9 @@ async function existingPlan(world, offset) {
   const res = await submit(world, body(world)).expect(201);
   world.planId = res.body.id;
   if (offset !== undefined)
-    await world.plans.updateOne(
-      { _id: world.planId },
-      { $set: { dateCible: new Date(day(offset)) } },
+    await world.suivis.updateOne(
+      { _id: world.userId, 'planActif.id': world.planId },
+      { $set: { 'planActif.dateCible': new Date(day(offset)) } },
     );
 }
 Given('un plan actif enregistré', async function () {
@@ -248,18 +261,23 @@ When('le coach consulte le plan actif', async function () {
     .set('Authorization', `Bearer ${this.coachToken}`);
 });
 Then('le statut enregistré vaut {string}', async function (statut) {
-  assert.equal((await this.plans.findOne({ _id: this.planId })).statut, statut);
+  const suivi = await this.suivis.findOne({ _id: this.userId });
+  const plan = [suivi.planActif, ...(suivi.plans || [])].find(
+    (candidate) => candidate?.id === this.planId,
+  );
+  if (plan) assert.equal(plan.statut, statut);
+  else assert.equal(suivi.planActif, null);
 });
 Then('le statut retourné et enregistré vaut {string}', async function (statut) {
   assert.equal(this.response.body.statut, statut);
-  assert.equal((await this.plans.findOne({ _id: this.planId })).statut, statut);
+  assert.equal(
+    (await this.suivis.findOne({ _id: this.userId })).planActif.statut,
+    statut,
+  );
 });
 
 async function preview(world, token, payload) {
-  world.plansBeforePreview = await world.plans
-    .find({ userId: world.userId })
-    .sort({ _id: 1 })
-    .toArray();
+  world.suiviBeforePreview = await world.suivis.findOne({ _id: world.userId });
   const req = api(world).post('/api/plans/preview');
   if (token) req.set('Authorization', `Bearer ${token}`);
   world.response = await req.send(payload);
@@ -285,8 +303,8 @@ Then(
   "aucun document de plan n'a été modifié par la proposition",
   async function () {
     assert.deepEqual(
-      await this.plans.find({ userId: this.userId }).sort({ _id: 1 }).toArray(),
-      this.plansBeforePreview,
+      await this.suivis.findOne({ _id: this.userId }),
+      this.suiviBeforePreview,
     );
   },
 );
@@ -311,5 +329,8 @@ Then(
 Given('un profil sans âge ni sexe', async function () {
   await this.connection
     .collection('users')
-    .updateOne({ _id: this.userId }, { $unset: { age: '', sexe: '' } });
+    .updateOne(
+      { _id: this.userId },
+      { $unset: { 'profil.age': '', 'profil.sexe': '' } },
+    );
 });

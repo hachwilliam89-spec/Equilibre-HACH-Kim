@@ -12,10 +12,8 @@ import {
 } from '../../domain/ports/measurement-repository.port';
 import { classifyMeasurement } from '../../domain/services/measurement-classification';
 
-const UN_JOUR_MS = 24 * 60 * 60 * 1000;
-
 @Injectable()
-export class ReceiveMeasurementUseCase {
+export class CorrectMeasurementUseCase {
   constructor(
     @Inject(PLAN_REPOSITORY) private readonly plans: PlanRepositoryPort,
     @Inject(MEASUREMENT_REPOSITORY)
@@ -28,29 +26,23 @@ export class ReceiveMeasurementUseCase {
     if (!plan) {
       throw new AppException(
         'no-active-plan',
-        'Aucun plan actif pour enregistrer une mesure',
+        'Aucun plan actif pour enregistrer une correction',
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
     const planProps = plan.toProps();
     const jourUtc = receivedAt.toISOString().slice(0, 10);
-    const jourVeille = new Date(receivedAt.getTime() - UN_JOUR_MS)
-      .toISOString()
-      .slice(0, 10);
 
-    // FR403-672 : classification suspecte / hors-plan. La reference de la
-    // veille doit appartenir au meme plan actif.
-    const veille = await this.measurements.findValidForDay(
-      userId,
-      jourVeille,
-      plan.id,
-    );
+    // FR403-670 : une correction manuelle n'est jamais soumise au controle
+    // suspecte (override delibere). On reutilise la classification avec une
+    // veille nulle : elle ne renvoie donc que hors-plan (hors periode) ou
+    // valide.
     const statut = classifyMeasurement({
       jourUtc,
       poidsKg,
       planDateDebutJourUtc: planProps.dateDebut.toISOString().slice(0, 10),
       planDateCibleJourUtc: planProps.dateCible.toISOString().slice(0, 10),
-      poidsValideVeille: veille ? veille.toProps().poidsKg : null,
+      poidsValideVeille: null,
     });
 
     const measurement = Measurement.create({
@@ -59,7 +51,7 @@ export class ReceiveMeasurementUseCase {
       planId: plan.id,
       poidsKg,
       receivedAt,
-      source: 'automatique',
+      source: 'manuelle',
       statut,
     });
 
@@ -70,17 +62,13 @@ export class ReceiveMeasurementUseCase {
         jourUtc,
       );
       if (dejaValide) {
-        throw this.dayConflict();
+        throw new AppException(
+          'measurement-day-conflict',
+          'Mesure déjà enregistrée aujourd’hui',
+          HttpStatus.CONFLICT,
+        );
       }
     }
     return this.measurements.create(measurement);
-  }
-
-  private dayConflict(): AppException {
-    return new AppException(
-      'measurement-day-conflict',
-      'Mesure déjà enregistrée aujourd’hui',
-      HttpStatus.CONFLICT,
-    );
   }
 }
