@@ -197,6 +197,7 @@ export default function WeightTrackingScreen() {
       )}
 
       <Button title="Actualiser" disabled={loading} onPress={retry} />
+      <Button title="Mon profil" onPress={() => router.push("/user/profile")} />
       <Button title="Mon compte" onPress={() => router.replace("/")} />
     </Screen>
   );
