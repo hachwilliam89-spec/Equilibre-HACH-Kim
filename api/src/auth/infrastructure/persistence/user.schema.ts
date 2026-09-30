@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type UserDocument = UserDocumentClass & Omit<Document, '_id'>;
 
@@ -19,14 +19,22 @@ export class UserDocumentClass {
   @Prop({ required: true, enum: ['coach', 'utilisateur'] })
   role: 'coach' | 'utilisateur';
 
-  @Prop()
-  tailleCm?: number;
-
-  @Prop()
-  age?: number;
-
-  @Prop({ enum: ['homme', 'femme'] })
-  sexe?: 'homme' | 'femme';
+  @Prop({
+    type: new MongooseSchema(
+      {
+        tailleCm: Number,
+        age: Number,
+        sexe: { type: String, enum: ['homme', 'femme'] },
+      },
+      { _id: false },
+    ),
+    default: undefined,
+  })
+  profil?: {
+    tailleCm?: number;
+    age?: number;
+    sexe?: 'homme' | 'femme';
+  };
 
   @Prop({ type: String })
   coachCode?: string;
@@ -48,3 +56,4 @@ UserSchema.index(
   { coachCode: 1 },
   { unique: true, partialFilterExpression: { coachCode: { $type: 'string' } } },
 );
+UserSchema.index({ coachId: 1, role: 1 });

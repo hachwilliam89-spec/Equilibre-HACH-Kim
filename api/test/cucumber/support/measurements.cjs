@@ -8,8 +8,7 @@ const request = require('supertest');
 // des comptes (mesures incluses) sont fournis par le harnais partagé de
 // plans.cjs (les hooks Cucumber sont globaux).
 
-const measurements = (world) => world.connection.collection('measurements');
-const plans = (world) => world.connection.collection('plans');
+const suivis = (world) => world.connection.collection('suivis');
 
 const sendWeight = (world, poidsKg) =>
   request(world.app.getHttpServer())
@@ -20,8 +19,8 @@ const sendWeight = (world, poidsKg) =>
 async function insertValideHier(world, poidsKg, planId) {
   const received = new Date();
   received.setUTCDate(received.getUTCDate() - 1);
-  await measurements(world).insertOne({
-    _id: randomUUID(),
+  const measurement = {
+    id: randomUUID(),
     userId: world.userId,
     planId,
     poidsKg,
@@ -29,7 +28,15 @@ async function insertValideHier(world, poidsKg, planId) {
     jourUtc: received.toISOString().slice(0, 10),
     source: 'automatique',
     statut: 'valide',
-  });
+  };
+  await suivis(world).updateOne(
+    { _id: world.userId },
+    {
+      $push: { mesures: measurement },
+      $set: { derniereMesureValide: measurement },
+      $inc: { version: 1 },
+    },
+  );
 }
 
 When("l'utilisatrice envoie un poids de {float} kg", async function (poidsKg) {
@@ -70,9 +77,9 @@ Given(
 );
 
 Given('le plan actif demarre dans le futur', async function () {
-  await plans(this).updateOne(
-    { _id: this.planId },
-    { $set: { dateDebut: new Date(Date.now() + 3 * 86400000) } },
+  await suivis(this).updateOne(
+    { _id: this.userId, 'planActif.id': this.planId },
+    { $set: { 'planActif.dateDebut': new Date(Date.now() + 3 * 86400000) } },
   );
 });
 
@@ -85,15 +92,15 @@ Then(
   'le conflit de mesure porte le type measurement-day-conflict',
   function () {
     assert.equal(this.response.status, 409, this.response.text);
-    assert.match(this.response.body.type, /problems\/measurement-day-conflict$/);
+    assert.match(
+      this.response.body.type,
+      /problems\/measurement-day-conflict$/,
+    );
   },
 );
 
-Then('une réponse mesure vaut 201 et l\'autre 409', function () {
-  assert.deepEqual(
-    this.responses.map((res) => res.status).sort(),
-    [201, 409],
-  );
+Then("une réponse mesure vaut 201 et l'autre 409", function () {
+  assert.deepEqual(this.responses.map((res) => res.status).sort(), [201, 409]);
 });
 
 Then(
@@ -109,10 +116,9 @@ Then(
   'la base contient {int} mesure(s) valide(s) pour cette utilisatrice',
   async function (count) {
     assert.equal(
-      await measurements(this).countDocuments({
-        userId: this.userId,
-        statut: 'valide',
-      }),
+      (await suivis(this).findOne({ _id: this.userId })).mesures.filter(
+        (measurement) => measurement.statut === 'valide',
+      ).length,
       count,
     );
   },
@@ -127,8 +133,8 @@ const consulterSuivi = (world) =>
 async function insertValideDecale(world, poidsKg, planId, offsetJours) {
   const received = new Date();
   received.setUTCDate(received.getUTCDate() + offsetJours);
-  await measurements(world).insertOne({
-    _id: randomUUID(),
+  const measurement = {
+    id: randomUUID(),
     userId: world.userId,
     planId,
     poidsKg,
@@ -136,7 +142,15 @@ async function insertValideDecale(world, poidsKg, planId, offsetJours) {
     jourUtc: received.toISOString().slice(0, 10),
     source: 'automatique',
     statut: 'valide',
-  });
+  };
+  await suivis(world).updateOne(
+    { _id: world.userId },
+    {
+      $push: { mesures: measurement },
+      $set: { derniereMesureValide: measurement },
+      $inc: { version: 1 },
+    },
+  );
 }
 
 Given(
@@ -171,19 +185,24 @@ When(
   },
 );
 
-Given(
-  'une mesure suspecte du jour pour cette utilisatrice',
-  async function () {
-    const received = new Date();
-    await measurements(this).insertOne({
-      _id: randomUUID(),
-      userId: this.userId,
-      planId: this.planId,
-      poidsKg: 90,
-      receivedAt: received,
-      jourUtc: received.toISOString().slice(0, 10),
-      source: 'automatique',
-      statut: 'suspecte',
-    });
-  },
-);
+Given('une mesure suspecte du jour pour cette utilisatrice', async function () {
+  const received = new Date();
+  await suivis(this).updateOne(
+    { _id: this.userId },
+    {
+      $push: {
+        mesures: {
+          id: randomUUID(),
+          userId: this.userId,
+          planId: this.planId,
+          poidsKg: 90,
+          receivedAt: received,
+          jourUtc: received.toISOString().slice(0, 10),
+          source: 'automatique',
+          statut: 'suspecte',
+        },
+      },
+      $inc: { version: 1 },
+    },
+  );
+});

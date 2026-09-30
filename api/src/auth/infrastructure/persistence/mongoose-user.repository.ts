@@ -87,9 +87,7 @@ export class MongooseUserRepository implements UserRepositoryPort {
       email: props.email,
       passwordHash: props.passwordHash,
       role: props.role,
-      tailleCm: props.tailleCm,
-      age: props.age,
-      sexe: props.sexe,
+      profil: this.toProfile(props),
       coachId: props.coachId,
     });
     return this.toDomain(doc);
@@ -105,7 +103,15 @@ export class MongooseUserRepository implements UserRepositoryPort {
     const props = user.toProps();
     const doc = await this.userModel.findByIdAndUpdate(
       props.id,
-      { $set: props },
+      {
+        $set: {
+          email: props.email,
+          passwordHash: props.passwordHash,
+          role: props.role,
+          coachId: props.coachId,
+          profil: this.toProfile(props),
+        },
+      },
       { returnDocument: 'after' },
     );
     if (!doc) {
@@ -125,11 +131,26 @@ export class MongooseUserRepository implements UserRepositoryPort {
       email: doc.email,
       passwordHash: doc.passwordHash,
       role: doc.role,
-      tailleCm: doc.tailleCm,
-      age: doc.age,
-      sexe: doc.sexe,
+      tailleCm: doc.profil?.tailleCm,
+      age: doc.profil?.age,
+      sexe: doc.profil?.sexe,
       coachId: doc.coachId,
       createdAt: doc.createdAt,
     });
+  }
+
+  private toProfile(props: ReturnType<User['toProps']>) {
+    if (
+      props.tailleCm === undefined &&
+      props.age === undefined &&
+      props.sexe === undefined
+    ) {
+      return undefined;
+    }
+    return {
+      tailleCm: props.tailleCm,
+      age: props.age,
+      sexe: props.sexe,
+    };
   }
 }
