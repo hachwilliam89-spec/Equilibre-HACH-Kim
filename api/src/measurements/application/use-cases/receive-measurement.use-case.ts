@@ -63,9 +63,7 @@ export class ReceiveMeasurementUseCase {
       statut,
     });
 
-    // FR403-674 : le blocage du doublon ne concerne que les mesures valides
-    // (une seule par jour UTC). Une mesure suspecte ou hors-plan est stockee
-    // sans arbitrage. L'index unique partiel reste le filet anti-course.
+    // Précontrôle rapide ; l'agrégat Suivi reste l'autorité en cas de course.
     if (statut === 'valide') {
       const dejaValide = await this.measurements.findValidForDay(
         userId,
@@ -81,7 +79,7 @@ export class ReceiveMeasurementUseCase {
   private dayConflict(): AppException {
     return new AppException(
       'measurement-day-conflict',
-      'Une mesure valide existe déjà pour ce jour, tout nouvel enregistrement est refusé',
+      'Mesure déjà enregistrée aujourd’hui',
       HttpStatus.CONFLICT,
     );
   }
