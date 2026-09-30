@@ -100,8 +100,9 @@ export default function Connection() {
               </Text>
               <Text style={s.title}>Vous êtes connecté.</Text>
               {session.role === "coach" && <Pressable accessibilityRole="button" style={s.button} disabled={busy} onPress={() => router.push("/coach")}><Text style={s.buttonText}>Mes utilisateurs</Text></Pressable>}
+              {session.role === "utilisateur" && <Pressable accessibilityRole="button" style={s.button} disabled={busy} onPress={() => router.push("/user")}><Text style={s.buttonText}>Voir mon suivi de poids</Text></Pressable>}
               <Text style={s.text}>
-                {session.role === "coach" ? "Retrouvez vos utilisateurs et préparez leur plan." : "Votre connexion est établie. Votre espace de suivi sera disponible prochainement."}
+                {session.role === "coach" ? "Retrouvez vos utilisateurs et préparez leur plan." : "Consultez votre trajectoire et l’historique de vos mesures."}
               </Text>
               {session.role === "coach" && (
                 <View>
