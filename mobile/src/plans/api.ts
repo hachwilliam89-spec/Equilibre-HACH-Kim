@@ -38,7 +38,7 @@ export async function requestApi(path: string, method = "GET", body?: unknown, r
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: controller.signal,
     });
   } catch {
-    throw new Error("Connexion interrompue. Actualisez le plan avant de réessayer une soumission.");
+    throw new Error("Connexion interrompue. Vérifie ton réseau puis réessaie.");
   } finally { clearTimeout(timeout); }
   if (response.status === 401 && retry) {
     // Une requête concurrente peut déjà avoir renouvelé le jeton.
