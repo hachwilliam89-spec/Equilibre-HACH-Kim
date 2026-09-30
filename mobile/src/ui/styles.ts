@@ -112,4 +112,15 @@ export const styles = StyleSheet.create({
   },
   historyWeight: { color: "#173b33", fontSize: 18, fontWeight: "700" },
   historyMeta: { color: "#536861", fontSize: 14 },
+  choiceRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  choice: {
+    borderWidth: 1,
+    borderColor: "#b8cbc0",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "#fbfdfb",
+  },
+  choiceSelected: { backgroundColor: "#e4efea", borderColor: "#087454" },
+  success: { color: "#087454", fontSize: 14, lineHeight: 21, fontWeight: "600" },
 });

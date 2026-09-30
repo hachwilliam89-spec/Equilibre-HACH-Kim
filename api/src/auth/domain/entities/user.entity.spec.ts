@@ -65,4 +65,23 @@ describe('User (entite domaine)', () => {
     });
     expect(complete.hasCompleteMetabolicProfile()).toBe(true);
   });
+
+  it('met a jour le profil sans modifier les donnees du compte', () => {
+    const user = User.create({
+      ...baseProps,
+      role: 'utilisateur',
+      coachId: 'coach-id',
+    });
+    const updated = user.withProfile({
+      tailleCm: 172,
+      age: 31,
+      sexe: 'femme',
+    });
+
+    expect(updated.email).toBe(user.email);
+    expect(updated.coachId).toBe(user.coachId);
+    expect(updated.tailleCm).toBe(172);
+    expect(updated.age).toBe(31);
+    expect(updated.sexe).toBe('femme');
+  });
 });

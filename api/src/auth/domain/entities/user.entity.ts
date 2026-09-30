@@ -26,6 +26,12 @@ export interface UserProps {
   createdAt: Date;
 }
 
+export interface UserProfile {
+  tailleCm?: number;
+  age?: number;
+  sexe?: 'homme' | 'femme';
+}
+
 export class User {
   private constructor(private readonly props: UserProps) {}
 
@@ -76,6 +82,13 @@ export class User {
 
   get sexe(): 'homme' | 'femme' | undefined {
     return this.props.sexe;
+  }
+
+  withProfile(profile: UserProfile): User {
+    return User.create({
+      ...this.props,
+      ...profile,
+    });
   }
 
   toProps(): UserProps {
