@@ -65,6 +65,7 @@ Avant l'activation :
 | `DEPLOY_HOST` | Hôte ou IPv4 de recette, protégé, portée `recette` |
 | `DEPLOY_USER` | Utilisateur SSH de recette, protégé, portée `recette` |
 | `DEPLOY_RECETTE_ENABLED` | `true` seulement une fois le provisionnement terminé ; variable de portée globale car lue par `rules` |
+| `DEPLOY_SIMULATOR_ENABLED` | `true` après création de `.env.simulator` sur le VPS ; protégée et globale car lue par `rules` |
 
 Les clés multiligne de type File ne sont pas nécessairement masquables par GitLab ;
 ne pas les afficher. Ne pas faire `ssh-keyscan` au moment du job pour accepter sans
@@ -113,6 +114,22 @@ préalable la compatibilité des données avec l'ancienne version.
 Le retour arrière porte sur l'image API, pas sur la configuration Compose ni sur les
 données. Les changements de schéma/configuration demandent une procédure distincte.
 Ne jamais employer `down -v` pour déployer ou réparer une base à conserver.
+
+## Simulateur de balance quotidien
+
+La même étape `docker:build` publie une seconde image autonome :
+`ghcr.io/hachwilliam89-spec/equilibre-balance-simulator`. Son digest est
+conservé dans l’artefact `simulator-image.ref`. Le job manuel
+`deploy:simulator` est indépendant de `deploy:recette` : il ne remplace aucun
+service et ne touche ni à MongoDB ni à ses volumes.
+
+Avant le premier lancement, créer `~/equilibre-prod/.env.simulator` avec les
+identifiants d’un compte utilisateur de recette ayant un plan actif, puis
+appliquer le mode `600`. Ces valeurs ne sont pas des variables GitLab et ne
+quittent pas le VPS. Le job installe à 06:00, heure du serveur, une crontab qui
+exécute un conteneur éphémère par digest sur le réseau Docker privé. La
+procédure complète de vérification, suspension et mise à jour est décrite dans
+[la documentation du simulateur](simulateur-balance.md).
 
 ## Preuves à recueillir avant clôture
 

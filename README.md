@@ -51,6 +51,7 @@ openssl rand -hex 32   # à reporter dans JWT_REFRESH_SECRET
 # Dépendances (pour le lint et les tests locaux)
 pnpm install
 pnpm --dir api install
+pnpm --dir simulator install
 
 # Lancer l'environnement de développement
 pnpm docker:dev
@@ -102,6 +103,7 @@ Documentation Swagger : http://localhost:3000/api/docs
 | `pnpm test` | Tests unitaires |
 | `pnpm test:cov` | Tests unitaires avec rapport de couverture |
 | `pnpm test:simulator` | Tests unitaires du simulateur de balance Faker |
+| `pnpm test:deploy:simulator` | Tests de contrat du déploiement quotidien du simulateur |
 | `pnpm simulate:balance` | Génère et envoie une pesée automatique ponctuelle |
 | `pnpm simulate:balance:daily` | Lance une pesée immédiate puis quotidienne |
 | `pnpm test:e2e:local` | Tests d’intégration Jest/Supertest avec MongoDB de test ; nécessite `pnpm docker:test` |
@@ -152,7 +154,7 @@ Cette procédure efface les données de l’environnement de test.
 │   ├── Dockerfile           build multi-stage : deps, development, builder, production
 │   └── .dockerignore
 ├── mobile/                  application React Native (connexion et session)
-├── simulator/               simulateur de balance connectée avec Faker
+├── simulator/               paquet et image autonomes du simulateur Faker
 ├── docker-compose.yml       configuration commune
 ├── docker-compose.dev.yml   surcharge développement
 ├── docker-compose.test.yml  surcharge test
@@ -199,9 +201,11 @@ installe ses propres dépendances avec `pnpm install --frozen-lockfile`, qui
 
 Pour bloquer les fusions en échec, activer « Pipelines must succeed » et protéger
 develop/main dans GitLab. Les variables GHCR doivent être protégées et masquées.
-La publication produit une image taguée avec le SHA complet et un artefact `image.ref`
-par digest, utilisé par `deploy:recette`. GitHub reproduit les contrôles mais ne publie
-ni ne déploie l'image. Les contrôles locaux ne prouvent pas un passage de la CI distante.
+La publication produit les images API et simulateur taguées avec le SHA complet,
+puis les artefacts par digest `image.ref` et `simulator-image.ref`. Ils sont
+utilisés respectivement par `deploy:recette` et `deploy:simulator`. GitHub
+reproduit les contrôles et construit l’image du simulateur, mais ne publie ni ne
+déploie les images. Les contrôles locaux ne prouvent pas un passage de la CI distante.
 
 Voir [la procédure de recette](docs/deploiement-recette.md) avant d'activer la CD.
 

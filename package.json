@@ -10,7 +10,8 @@
     "test:e2e": "pnpm --dir api test:e2e",
     "test:e2e:local": "pnpm --dir api test:e2e:local",
     "test:cov": "pnpm --dir api test:cov",
-    "test:simulator": "node --test simulator/*.test.mjs",
+    "test:simulator": "pnpm --dir simulator test",
+    "test:deploy:simulator": "bash scripts/test-deploy-simulator.sh",
     "simulate:balance": "node --env-file=simulator/.env simulator/balance.mjs --once",
     "simulate:balance:daily": "node --env-file=simulator/.env simulator/balance.mjs",
     "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build",
@@ -35,7 +36,6 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
-    "@faker-js/faker": "^10.6.0",
     "husky": "^9.1.7"
   }
 }
