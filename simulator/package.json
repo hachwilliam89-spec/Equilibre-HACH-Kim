@@ -1,0 +1,14 @@
+{
+  "name": "equilibre-balance-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node balance.mjs --once",
+    "test": "node --test balance.test.mjs"
+  },
+  "packageManager": "pnpm@10.25.0",
+  "dependencies": {
+    "@faker-js/faker": "^10.6.0"
+  }
+}
