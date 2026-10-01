@@ -101,6 +101,9 @@ Documentation Swagger : http://localhost:3000/api/docs
 | `pnpm lint` | Lance ESLint sur l'API |
 | `pnpm test` | Tests unitaires |
 | `pnpm test:cov` | Tests unitaires avec rapport de couverture |
+| `pnpm test:simulator` | Tests unitaires du simulateur de balance Faker |
+| `pnpm simulate:balance` | Génère et envoie une pesée automatique ponctuelle |
+| `pnpm simulate:balance:daily` | Lance une pesée immédiate puis quotidienne |
 | `pnpm test:e2e:local` | Tests d’intégration Jest/Supertest avec MongoDB de test ; nécessite `pnpm docker:test` |
 | `pnpm test:cucumber:local` | Exécute les scénarios Gherkin de l’US1 avec MongoDB de test ; nécessite `pnpm docker:test` |
 
@@ -149,6 +152,7 @@ Cette procédure efface les données de l’environnement de test.
 │   ├── Dockerfile           build multi-stage : deps, development, builder, production
 │   └── .dockerignore
 ├── mobile/                  application React Native (connexion et session)
+├── simulator/               simulateur de balance connectée avec Faker
 ├── docker-compose.yml       configuration commune
 ├── docker-compose.dev.yml   surcharge développement
 ├── docker-compose.test.yml  surcharge test

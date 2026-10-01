@@ -200,3 +200,10 @@ mobile:test:
     - cd mobile
     - pnpm install --frozen-lockfile
     - pnpm test
+
+simulator:test:
+  extends: .pnpm_setup
+  stage: test
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm test:simulator
