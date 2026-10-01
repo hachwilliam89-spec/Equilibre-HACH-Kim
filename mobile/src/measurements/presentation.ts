@@ -43,6 +43,17 @@ export const measurementSourceLabel: Record<Measurement["source"], string> = {
   manuelle: "Manuelle",
 };
 
+export function canSubmitManualCorrection(
+  history: Pick<Measurement, "jourUtc" | "source" | "statut">[],
+  todayUtc = new Date().toISOString().slice(0, 10),
+): boolean {
+  return !history.some(
+    (measurement) =>
+      measurement.jourUtc === todayUtc &&
+      (measurement.statut === "valide" || measurement.source === "manuelle"),
+  );
+}
+
 export function formatWeight(value: number): string {
   return `${value.toFixed(1).replace(".", ",")} kg`;
 }
