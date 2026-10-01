@@ -2,12 +2,15 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import {
+  correctWeight,
   getMeasurementHistory,
   getWeightTracking,
+  manualCorrectionSchema,
   type Measurement,
   type WeightTracking,
 } from "../../measurements/api";
 import {
+  canSubmitManualCorrection,
   formatSignedWeight,
   formatUtcDay,
   formatWeight,
@@ -16,6 +19,7 @@ import {
   trackingPresentation,
 } from "../../measurements/presentation";
 import { Button, Screen } from "../../plans/ui";
+import { MeasurementField } from "../../ui/MeasurementField";
 import { styles as s } from "../../ui/styles";
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -35,7 +39,8 @@ function HistoryItem({ measurement }: { measurement: Measurement }) {
         <Text style={s.text}>{formatUtcDay(measurement.jourUtc)}</Text>
       </View>
       <Text style={s.historyMeta}>
-        {measurementSourceLabel[measurement.source]} · {measurementStatusLabel[measurement.statut]}
+        {measurementSourceLabel[measurement.source]} ·{" "}
+        {measurementStatusLabel[measurement.statut]}
       </Text>
     </View>
   );
@@ -47,6 +52,10 @@ export default function WeightTrackingScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [correctionWeight, setCorrectionWeight] = useState("");
+  const [correctionBusy, setCorrectionBusy] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionNotice, setCorrectionNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -78,6 +87,46 @@ export default function WeightTrackingScreen() {
     setReload((value) => value + 1);
   };
 
+  const submitCorrection = async () => {
+    if (correctionBusy) return;
+    const parsed = manualCorrectionSchema.safeParse({
+      poidsKg: Number(correctionWeight.trim().replace(",", ".")),
+    });
+    if (!parsed.success) {
+      setCorrectionError(parsed.error.issues[0].message);
+      setCorrectionNotice("");
+      return;
+    }
+    setCorrectionBusy(true);
+    setCorrectionError("");
+    setCorrectionNotice("");
+    try {
+      await correctWeight(parsed.data);
+      setCorrectionWeight("");
+      setCorrectionNotice("Votre poids a bien été enregistré.");
+      setLoading(true);
+      setError("");
+      setReload((value) => value + 1);
+    } catch (cause) {
+      setCorrectionError(
+        cause instanceof Error
+          ? cause.message
+          : "Impossible d’enregistrer votre poids. Réessaie.",
+      );
+    } finally {
+      setCorrectionBusy(false);
+    }
+  };
+
+  const correctionAvailable =
+    tracking !== null && canSubmitManualCorrection(history);
+  const suspectToday = history.some(
+    (measurement) =>
+      measurement.jourUtc === new Date().toISOString().slice(0, 10) &&
+      measurement.source === "automatique" &&
+      measurement.statut === "suspecte",
+  );
+
   return (
     <Screen>
       <View style={s.sectionHeader}>
@@ -106,7 +155,8 @@ export default function WeightTrackingScreen() {
         <View style={s.card}>
           <Text style={s.cardTitle}>Aucun plan actif</Text>
           <Text style={s.text}>
-            Votre coach doit activer un plan avant le démarrage du suivi de poids.
+            Votre coach doit activer un plan avant le démarrage du suivi de
+            poids.
           </Text>
         </View>
       ) : (
@@ -116,7 +166,10 @@ export default function WeightTrackingScreen() {
             accessibilityLabel={`Statut du suivi : ${trackingPresentation[tracking.statut].label}`}
             style={[
               s.statusCard,
-              { backgroundColor: trackingPresentation[tracking.statut].background },
+              {
+                backgroundColor:
+                  trackingPresentation[tracking.statut].background,
+              },
             ]}
           >
             <Text
@@ -167,16 +220,21 @@ export default function WeightTrackingScreen() {
             <Text style={s.cardTitle}>Plan actif</Text>
             <View style={s.summaryRow}>
               <Text style={s.text}>Poids de départ</Text>
-              <Text style={s.label}>{formatWeight(tracking.plan.poidsDepart)}</Text>
+              <Text style={s.label}>
+                {formatWeight(tracking.plan.poidsDepart)}
+              </Text>
             </View>
             <View style={s.summaryRow}>
               <Text style={s.text}>Poids cible</Text>
-              <Text style={s.label}>{formatWeight(tracking.plan.poidsCible)}</Text>
+              <Text style={s.label}>
+                {formatWeight(tracking.plan.poidsCible)}
+              </Text>
             </View>
             <View style={s.summaryRow}>
               <Text style={s.text}>Période</Text>
               <Text style={s.label}>
-                {formatUtcDay(tracking.plan.dateDebut)} au {formatUtcDay(tracking.plan.dateCible)}
+                {formatUtcDay(tracking.plan.dateDebut)} au{" "}
+                {formatUtcDay(tracking.plan.dateCible)}
               </Text>
             </View>
           </View>
@@ -187,13 +245,45 @@ export default function WeightTrackingScreen() {
         <View style={s.card}>
           <Text style={s.cardTitle}>Historique</Text>
           {history.length === 0 ? (
-            <Text style={s.text}>Aucune mesure enregistrée pour le moment.</Text>
+            <Text style={s.text}>
+              Aucune mesure enregistrée pour le moment.
+            </Text>
           ) : (
             history.map((measurement) => (
               <HistoryItem key={measurement.id} measurement={measurement} />
             ))
           )}
         </View>
+      )}
+
+      {!loading && !error && correctionAvailable && (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Saisir mon poids en secours</Text>
+          <Text style={s.text}>
+            {suspectToday
+              ? "La mesure de la balance a été détectée comme suspecte. Vous pouvez saisir votre poids manuellement."
+              : "Utilisez cette saisie si aucune mesure valide de la balance n’a été enregistrée aujourd’hui."}
+          </Text>
+          <MeasurementField
+            label="Poids du jour"
+            unit="kg"
+            value={correctionWeight}
+            onChange={setCorrectionWeight}
+            error={correctionError}
+            disabled={correctionBusy}
+          />
+          <Button
+            title={correctionBusy ? "Enregistrement…" : "Enregistrer mon poids"}
+            disabled={correctionBusy}
+            onPress={() => void submitCorrection()}
+          />
+        </View>
+      )}
+
+      {!!correctionNotice && (
+        <Text accessibilityLiveRegion="polite" style={s.success}>
+          {correctionNotice}
+        </Text>
       )}
 
       <Button title="Actualiser" disabled={loading} onPress={retry} />

@@ -1,4 +1,5 @@
 import {
+  canSubmitManualCorrection,
   formatSignedWeight,
   formatUtcDay,
   formatWeight,
@@ -6,6 +7,33 @@ import {
   measurementStatusLabel,
   trackingPresentation,
 } from "../src/measurements/presentation";
+
+const today = "2026-10-01";
+
+test("propose la correction sans mesure bloquante ou après une anomalie", () => {
+  expect(canSubmitManualCorrection([], today)).toBe(true);
+  expect(
+    canSubmitManualCorrection(
+      [{ jourUtc: today, source: "automatique", statut: "suspecte" }],
+      today,
+    ),
+  ).toBe(true);
+});
+
+test("masque la correction après une mesure valide ou une correction hors plan", () => {
+  expect(
+    canSubmitManualCorrection(
+      [{ jourUtc: today, source: "automatique", statut: "valide" }],
+      today,
+    ),
+  ).toBe(false);
+  expect(
+    canSubmitManualCorrection(
+      [{ jourUtc: today, source: "manuelle", statut: "hors-plan" }],
+      today,
+    ),
+  ).toBe(false);
+});
 
 test("présente tous les statuts sans dépendre uniquement de la couleur", () => {
   expect(Object.keys(trackingPresentation)).toHaveLength(4);
