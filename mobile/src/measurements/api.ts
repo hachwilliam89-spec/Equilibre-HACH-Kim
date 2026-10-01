@@ -40,17 +40,32 @@ export const weightTrackingSchema = z
   })
   .nullable();
 
+export const manualCorrectionSchema = z.object({
+  poidsKg: z
+    .number({ error: "Saisis un poids valide en kg." })
+    .positive("Le poids doit être strictement positif."),
+});
+
 export type Measurement = z.infer<typeof measurementSchema>;
 export type WeightTracking = z.infer<typeof weightTrackingSchema>;
+export type ManualCorrection = z.infer<typeof manualCorrectionSchema>;
 
 export async function getWeightTracking(): Promise<WeightTracking> {
-  return weightTrackingSchema.parse(
-    await requestApi("/measurements/me/suivi"),
-  );
+  return weightTrackingSchema.parse(await requestApi("/measurements/me/suivi"));
 }
 
 export async function getMeasurementHistory(): Promise<Measurement[]> {
-  return z
-    .array(measurementSchema)
-    .parse(await requestApi("/measurements/me"));
+  return z.array(measurementSchema).parse(await requestApi("/measurements/me"));
+}
+
+export async function correctWeight(
+  correction: ManualCorrection,
+): Promise<Measurement> {
+  return measurementSchema.parse(
+    await requestApi(
+      "/measurements/correction",
+      "POST",
+      manualCorrectionSchema.parse(correction),
+    ),
+  );
 }
