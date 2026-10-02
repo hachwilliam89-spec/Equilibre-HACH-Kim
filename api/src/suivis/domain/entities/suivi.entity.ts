@@ -125,6 +125,16 @@ export class Suivi {
     );
   }
 
+  trouverJournalParEntreeAlimentaire(entryId: string): DailyFoodJournal | null {
+    return (
+      this.props.journauxAlimentaires.find((journal) =>
+        journal
+          .toProps()
+          .entrees.some((entry) => entry.toProps().id === entryId),
+      ) ?? null
+    );
+  }
+
   retirerJournalAlimentaire(planId: string, jourUtc: string): void {
     this.props.journauxAlimentaires = this.props.journauxAlimentaires.filter(
       (journal) =>

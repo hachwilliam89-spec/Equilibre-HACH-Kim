@@ -35,3 +35,16 @@ La réponse `201` contient l'entrée et le journal avec ses totaux immédiatemen
 recalculés. Une quantité invalide renvoie `400`, un aliment inconnu `404`, et
 l'absence de plan actif `422`. En cas d'ajouts simultanés, la version du suivi
 empêche de perdre une entrée : l'API recharge le journal et réessaie l'écriture.
+
+## Retirer une entrée (FR403-752)
+
+`DELETE /api/food-journals/me/entries/{entryId}` retire une entrée de l'un des
+journaux conservés de l'utilisateur authentifié. Le serveur retrouve son
+journal par l'UUID de l'entrée, recalcule les calories et macronutriments du
+jour, puis renvoie le journal mis à jour (`200`). Il reste possible de corriger
+une journée dont le plan est terminé. L'entrée d'un autre utilisateur ou un
+identifiant inconnu renvoie `404` ; un UUID invalide renvoie `400`.
+
+Quand la dernière entrée est retirée, le journal peut rester présent avec des
+totaux à zéro. Il ne représente alors aucune consommation et devra être traité
+comme une journée sans données par le calcul du statut alimentaire.
