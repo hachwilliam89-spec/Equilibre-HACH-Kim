@@ -12,6 +12,7 @@ const validFood = {
 describe('Food', () => {
   it('normalise le nom pour une recherche sans casse ni accent', () => {
     expect(normalizeFoodName('  Pâtes   fraîches  ')).toBe('pates fraiches');
+    expect(normalizeFoodName('ŒUF')).toBe('oeuf');
   });
 
   it('cree un aliment de reference valide', () => {
