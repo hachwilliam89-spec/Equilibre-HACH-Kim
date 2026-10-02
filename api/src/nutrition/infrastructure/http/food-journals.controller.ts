@@ -2,10 +2,12 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   ParseUUIDPipe,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -16,7 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard';
 import type { JwtPayload } from '../../../auth/infrastructure/http/jwt.strategy';
 import { ZodValidationPipe } from '../../../auth/infrastructure/http/dto/zod-validation.pipe';
@@ -24,8 +26,10 @@ import { Roles } from '../../../common/auth/roles.decorator';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { AddFoodEntryUseCase } from '../../application/use-cases/add-food-entry.use-case';
 import { RemoveFoodEntryUseCase } from '../../application/use-cases/remove-food-entry.use-case';
+import { GetFoodBudgetStatusUseCase } from '../../application/use-cases/get-food-budget-status.use-case';
 import { AddFoodEntryDto, addFoodEntrySchema } from './add-food-entry.dto';
 import { FoodJournalDto, toFoodJournalDto } from './food-journal.dto';
+import { FoodBudgetStatusDto } from './food-budget-status.dto';
 
 @ApiTags('food-journals')
 @ApiBearerAuth()
@@ -35,6 +39,7 @@ export class FoodJournalsController {
   constructor(
     private readonly addFoodEntry: AddFoodEntryUseCase,
     private readonly removeFoodEntry: RemoveFoodEntryUseCase,
+    private readonly getFoodBudgetStatus: GetFoodBudgetStatusUseCase,
   ) {}
 
   @Post('me/entries')
@@ -95,5 +100,36 @@ export class FoodJournalsController {
       entryId,
     );
     return toFoodJournalDto(journal);
+  }
+
+  @Get('me/status')
+  @Roles('utilisateur')
+  @ApiOperation({
+    summary: 'Statut alimentaire par rapport au budget du plan actif',
+    description:
+      'Dernier journal non vide du plan actif : écart signé total − budget. Dépassement si écart > 150 kcal. Sans entrée aujourd’hui ni hier, statut pas-de-donnees-recentes. Réponse null sans plan actif.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: FoodBudgetStatusDto,
+    description: 'Statut alimentaire, ou null sans plan actif',
+  })
+  @ApiResponse({ status: 401, description: 'Authentification requise' })
+  @ApiResponse({ status: 403, description: 'Réservé au rôle utilisateur' })
+  @ApiResponse({ status: 429, description: 'Trop de requêtes' })
+  async status(
+    @Req() request: Request & { user: JwtPayload },
+    @Res() response: Response,
+  ): Promise<Response> {
+    const result = await this.getFoodBudgetStatus.execute(request.user.sub);
+    const body: FoodBudgetStatusDto | null = result
+      ? {
+          statut: result.statut,
+          budgetCalorique: result.budgetCalorique,
+          ecartKcal: result.ecartKcal,
+          journal: result.journal ? toFoodJournalDto(result.journal) : null,
+        }
+      : null;
+    return response.status(200).json(body);
   }
 }
