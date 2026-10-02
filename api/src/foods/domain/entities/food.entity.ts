@@ -19,6 +19,8 @@ export const normalizeFoodName = (value: string): string =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('fr-FR')
+    .replace(/œ/g, 'oe')
+    .replace(/æ/g, 'ae')
     .trim()
     .replace(/\s+/g, ' ');
 

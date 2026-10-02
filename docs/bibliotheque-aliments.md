@@ -15,6 +15,21 @@ par nom. Au démarrage de l'API, un seed fait des mises à jour avec `upsert` su
 des identifiants fixes. Le relancer corrige le référentiel sans créer de
 doublon.
 
+## Recherche dans l'API
+
+`GET /api/foods` est accessible à un coach ou un utilisateur connecté, même
+sans plan actif. Le paramètre facultatif `q` cherche une partie du nom sans
+tenir compte de la casse ni des accents (par exemple `pates` retrouve
+« Pâtes cuites » et `oeuf` retrouve « Œuf dur »). Sans `q`, la liste entière
+est consultable. Les caractères spéciaux sont cherchés littéralement.
+
+Les résultats sont triés par nom normalisé puis par identifiant, et paginés
+avec `page` (défaut 1) et `size` (défaut 20, maximum 50). La réponse est un
+tableau d'aliments avec leurs valeurs pour 100 g ; une recherche sans résultat
+renvoie `200` et un tableau vide. Les paramètres invalides renvoient `400`.
+La bibliothèque est en lecture seule : le calcul des valeurs pour la quantité
+consommée sera effectué lors de l'ajout d'une entrée au journal.
+
 ## Provenance des données
 
 Le MVP embarque un sous-ensemble court d'aliments courants, et non l'ensemble
