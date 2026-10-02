@@ -22,3 +22,16 @@ par le cas d'utilisation concerné.
 
 Les documents `suivis` créés avant l'US3 restent lisibles : l'absence du champ
 `journauxAlimentaires` est interprétée comme une liste vide.
+
+## Ajouter un aliment consommé (FR403-751)
+
+`POST /api/food-journals/me/entries` est réservé à l'utilisateur authentifié.
+Le corps contient l'identifiant UUID d'un aliment du référentiel (`foodId`) et
+sa quantité en grammes (`quantiteGrammes`, strictement positive, maximum
+10 000 g). Un plan actif est nécessaire. L'API détermine seule la date et le
+jour UTC de réception, puis crée ou complète le journal de ce jour.
+
+La réponse `201` contient l'entrée et le journal avec ses totaux immédiatement
+recalculés. Une quantité invalide renvoie `400`, un aliment inconnu `404`, et
+l'absence de plan actif `422`. En cas d'ajouts simultanés, la version du suivi
+empêche de perdre une entrée : l'API recharge le journal et réessaie l'écriture.
