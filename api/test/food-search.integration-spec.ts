@@ -51,9 +51,11 @@ describe('Recherche des aliments de référence (intégration)', () => {
 
   it('recherche sans casse ni accents et retourne uniquement les données publiques pour 100 g', async () => {
     const result = await search('utilisateur', { q: 'PÂTES' }).expect(200);
+    const pates = REFERENCE_FOODS.find((food) => food.nom === 'Pâtes cuites');
+    if (!pates) throw new Error('Aliment de référence manquant : Pâtes cuites');
     expect(result.body).toEqual([
       {
-        id: REFERENCE_FOODS.find((food) => food.nom === 'Pâtes cuites')?.id,
+        id: pates.id,
         nom: 'Pâtes cuites',
         caloriesKcalPour100g: 167,
         proteinesGPour100g: 6.1,
@@ -88,7 +90,7 @@ describe('Recherche des aliments de référence (intégration)', () => {
     ).toEqual([]);
   });
 
-  it.each([
+  const invalidQueries: Record<string, string>[] = [
     { page: '0' },
     { page: '-1' },
     { page: '1.5' },
@@ -97,9 +99,13 @@ describe('Recherche des aliments de référence (intégration)', () => {
     { size: 'abc' },
     { q: 'a'.repeat(101) },
     { unexpected: 'value' },
-  ])('refuse les paramètres invalides : %j', async (query) => {
-    await search('coach', query).expect(400);
-  });
+  ];
+  it.each(invalidQueries)(
+    'refuse les paramètres invalides : %j',
+    async (query) => {
+      await search('coach', query).expect(400);
+    },
+  );
 
   it('ne propose aucune écriture sur la bibliothèque', async () => {
     await request(app.getHttpServer())
