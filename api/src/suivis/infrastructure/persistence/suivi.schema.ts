@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import type { MeasurementProps } from '../../../measurements/domain/entities/measurement.entity';
 import type { PlanProps } from '../../../plans/domain/entities/plan.entity';
+import type { FoodEntryProps } from '../../../nutrition/domain/entities/food-entry.entity';
 
 const PlanEmbeddedSchema = new MongooseSchema(
   {
@@ -59,6 +60,46 @@ const MeasurementEmbeddedSchema = new MongooseSchema(
   { _id: false },
 );
 
+const FoodSnapshotEmbeddedSchema = new MongooseSchema(
+  {
+    id: { type: String, required: true },
+    nom: { type: String, required: true },
+    caloriesKcalPour100g: { type: Number, required: true, min: 0 },
+    proteinesGPour100g: { type: Number, required: true, min: 0 },
+    glucidesGPour100g: { type: Number, required: true, min: 0 },
+    lipidesGPour100g: { type: Number, required: true, min: 0 },
+  },
+  { _id: false },
+);
+
+const FoodEntryEmbeddedSchema = new MongooseSchema(
+  {
+    id: { type: String, required: true },
+    aliment: { type: FoodSnapshotEmbeddedSchema, required: true },
+    quantiteGrammes: { type: Number, required: true, min: 0 },
+    caloriesKcal: { type: Number, required: true, min: 0 },
+    proteinesG: { type: Number, required: true, min: 0 },
+    glucidesG: { type: Number, required: true, min: 0 },
+    lipidesG: { type: Number, required: true, min: 0 },
+    receivedAt: { type: Date, required: true },
+  },
+  { _id: false },
+);
+
+const DailyFoodJournalEmbeddedSchema = new MongooseSchema(
+  {
+    planId: { type: String, required: true },
+    jourUtc: { type: String, required: true },
+    budgetCalorique: { type: Number, required: true, min: 0 },
+    entrees: { type: [FoodEntryEmbeddedSchema], default: [] },
+    totalCaloriesKcal: { type: Number, required: true, min: 0 },
+    totalProteinesG: { type: Number, required: true, min: 0 },
+    totalGlucidesG: { type: Number, required: true, min: 0 },
+    totalLipidesG: { type: Number, required: true, min: 0 },
+  },
+  { _id: false },
+);
+
 @Schema({
   collection: 'suivis',
   _id: false,
@@ -92,6 +133,18 @@ export class SuiviDocumentClass {
     default: null,
   })
   blocageJournalier: { jourUtc: string; mesureId: string } | null;
+
+  @Prop({ type: [DailyFoodJournalEmbeddedSchema], default: [] })
+  journauxAlimentaires: {
+    planId: string;
+    jourUtc: string;
+    budgetCalorique: number;
+    entrees: FoodEntryProps[];
+    totalCaloriesKcal: number;
+    totalProteinesG: number;
+    totalGlucidesG: number;
+    totalLipidesG: number;
+  }[];
 }
 
 export type SuiviDocument = HydratedDocument<SuiviDocumentClass>;

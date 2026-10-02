@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Measurement } from '../../../measurements/domain/entities/measurement.entity';
 import { Plan } from '../../../plans/domain/entities/plan.entity';
 import { MAX_MESURES_SUIVI, Suivi, troisMoisAvantUtc } from './suivi.entity';
+import { DailyFoodJournal } from '../../../nutrition/domain/entities/daily-food-journal.entity';
 
 const userId = randomUUID();
 const plan = () =>
@@ -37,6 +38,46 @@ const measurement = (
   });
 
 describe('Suivi — agrégat documentaire', () => {
+  it('conserve un seul journal par plan et jour, ainsi que le plan auquel il appartient', () => {
+    const suivi = Suivi.create(userId);
+    const active = plan();
+    suivi.activerPlan(active);
+    const day = new Date('2026-09-30T12:00:00Z');
+    suivi.ajouterJournalAlimentaire(DailyFoodJournal.create(active, day), day);
+    try {
+      suivi.ajouterJournalAlimentaire(
+        DailyFoodJournal.create(active, day),
+        day,
+      );
+      throw new Error('Le second journal aurait dû être refusé');
+    } catch (error) {
+      expect(error).toMatchObject({ status: 409 });
+    }
+
+    active.terminate();
+    suivi.terminerPlan(active);
+    expect(suivi.toProps().plans.map((item) => item.id)).toContain(active.id);
+    expect(suivi.toProps().journauxAlimentaires).toHaveLength(1);
+  });
+
+  it('purge les journaux plus anciens que trois mois calendaires UTC', () => {
+    const suivi = Suivi.create(userId);
+    const active = plan();
+    suivi.activerPlan(active);
+    for (const day of ['2026-02-27', '2026-02-28', '2026-05-31']) {
+      suivi.ajouterJournalAlimentaire(
+        DailyFoodJournal.create(active, new Date(`${day}T12:00:00Z`)),
+        new Date(`${day}T12:00:00Z`),
+      );
+    }
+    suivi.purgerHistorique(new Date('2026-05-31T12:00:00Z'));
+    expect(
+      suivi
+        .toProps()
+        .journauxAlimentaires.map((item) => item.toProps().jourUtc),
+    ).toEqual(['2026-02-28', '2026-05-31']);
+  });
+
   it('ajoute atomiquement une mesure valide et son blocage journalier', () => {
     const suivi = Suivi.create(userId);
     const active = plan();
@@ -93,6 +134,7 @@ describe('Suivi — agrégat documentaire', () => {
       ],
       derniereMesureValide: null,
       blocageJournalier: null,
+      journauxAlimentaires: [],
     });
     suivi.purgerHistorique(new Date('2026-05-31T12:00:00Z'));
     expect(suivi.toProps().mesures).toHaveLength(1);
@@ -119,6 +161,7 @@ describe('Suivi — agrégat documentaire', () => {
       mesures,
       derniereMesureValide: null,
       blocageJournalier: null,
+      journauxAlimentaires: [],
     });
     expect(() =>
       suivi.ajouterMesure(
