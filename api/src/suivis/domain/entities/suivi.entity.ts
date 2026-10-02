@@ -2,6 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import { AppException } from '../../../common/errors/app-exception';
 import { Measurement } from '../../../measurements/domain/entities/measurement.entity';
 import { Plan } from '../../../plans/domain/entities/plan.entity';
+import { DailyFoodJournal } from '../../../nutrition/domain/entities/daily-food-journal.entity';
 
 export const MAX_MESURES_SUIVI = 1000;
 
@@ -18,6 +19,7 @@ export interface SuiviProps {
   mesures: Measurement[];
   derniereMesureValide: Measurement | null;
   blocageJournalier: BlocageJournalier | null;
+  journauxAlimentaires: DailyFoodJournal[];
 }
 
 export class Suivi {
@@ -32,6 +34,7 @@ export class Suivi {
       mesures: [],
       derniereMesureValide: null,
       blocageJournalier: null,
+      journauxAlimentaires: [],
     });
   }
 
@@ -40,6 +43,7 @@ export class Suivi {
       ...props,
       plans: [...props.plans],
       mesures: [...props.mesures],
+      journauxAlimentaires: [...props.journauxAlimentaires],
     });
   }
 
@@ -58,9 +62,13 @@ export class Suivi {
   terminerPlan(plan: Plan): void {
     if (this.props.planActif?.id === plan.id) {
       this.props.planActif = null;
-      const estReference = this.props.mesures.some(
-        (measurement) => measurement.toProps().planId === plan.id,
-      );
+      const estReference =
+        this.props.mesures.some(
+          (measurement) => measurement.toProps().planId === plan.id,
+        ) ||
+        this.props.journauxAlimentaires.some(
+          (journal) => journal.toProps().planId === plan.id,
+        );
       this.props.plans = estReference
         ? [
             ...this.props.plans.filter((candidate) => candidate.id !== plan.id),
@@ -72,6 +80,56 @@ export class Suivi {
     }
     this.props.plans = this.props.plans.map((candidate) =>
       candidate.id === plan.id ? plan : candidate,
+    );
+  }
+
+  ajouterJournalAlimentaire(
+    journal: DailyFoodJournal,
+    now: Date = new Date(`${journal.toProps().jourUtc}T00:00:00.000Z`),
+  ): void {
+    const props = journal.toProps();
+    if (this.props.planActif?.id !== props.planId) {
+      throw new AppException(
+        'no-active-plan',
+        'Aucun plan actif pour enregistrer un journal alimentaire',
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+    this.purgerHistorique(now);
+    if (
+      this.props.journauxAlimentaires.some(
+        (item) =>
+          item.toProps().planId === props.planId &&
+          item.toProps().jourUtc === props.jourUtc,
+      )
+    ) {
+      throw new AppException(
+        'food-journal-conflict',
+        'Un journal existe déjà pour ce plan et ce jour UTC',
+        HttpStatus.CONFLICT,
+      );
+    }
+    this.props.journauxAlimentaires.push(journal);
+  }
+
+  trouverJournalAlimentaire(
+    planId: string,
+    jourUtc: string,
+  ): DailyFoodJournal | null {
+    return (
+      this.props.journauxAlimentaires.find(
+        (journal) =>
+          journal.toProps().planId === planId &&
+          journal.toProps().jourUtc === jourUtc,
+      ) ?? null
+    );
+  }
+
+  retirerJournalAlimentaire(planId: string, jourUtc: string): void {
+    this.props.journauxAlimentaires = this.props.journauxAlimentaires.filter(
+      (journal) =>
+        journal.toProps().planId !== planId ||
+        journal.toProps().jourUtc !== jourUtc,
     );
   }
 
@@ -119,7 +177,14 @@ export class Suivi {
     this.props.mesures = this.props.mesures.filter(
       (measurement) => measurement.toProps().receivedAt >= limite,
     );
-    const planIds = new Set(this.props.mesures.map((m) => m.toProps().planId));
+    this.props.journauxAlimentaires = this.props.journauxAlimentaires.filter(
+      (journal) =>
+        journal.toProps().jourUtc >= limite.toISOString().slice(0, 10),
+    );
+    const planIds = new Set([
+      ...this.props.mesures.map((m) => m.toProps().planId),
+      ...this.props.journauxAlimentaires.map((j) => j.toProps().planId),
+    ]);
     this.props.plans = this.props.plans.filter((plan) => planIds.has(plan.id));
   }
 
@@ -128,6 +193,7 @@ export class Suivi {
       ...this.props,
       plans: [...this.props.plans],
       mesures: [...this.props.mesures],
+      journauxAlimentaires: [...this.props.journauxAlimentaires],
     };
   }
 }
