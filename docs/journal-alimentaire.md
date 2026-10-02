@@ -48,3 +48,18 @@ identifiant inconnu renvoie `404` ; un UUID invalide renvoie `400`.
 Quand la dernière entrée est retirée, le journal peut rester présent avec des
 totaux à zéro. Il ne représente alors aucune consommation et devra être traité
 comme une journée sans données par le calcul du statut alimentaire.
+
+## Statut par rapport au budget (FR403-753)
+
+`GET /api/food-journals/me/status` renvoie `null` sans plan actif. Sinon, il
+compare le total calorique du dernier journal **non vide** du plan actif au
+budget du plan. L'écart signé vaut `total du jour − budget`. Un écart supérieur
+à `+150 kcal` produit `depassement` ; la borne `+150` reste `dans-le-budget`.
+Les macronutriments sont affichés à titre informatif, sans seuil d'alerte.
+
+Si le dernier journal non vide date d'aujourd'hui ou d'hier UTC, son statut et
+son écart sont renvoyés avec la date du journal. Après deux journées sans
+entrée, le statut devient `pas-de-donnees-recentes` et l'écart vaut `null`.
+Un journal laissé vide après le retrait de sa dernière entrée ne compte pas
+comme une journée renseignée. Les alertes de dépassement persistant relèvent
+de l'US5 et ne sont pas déclenchées par cette lecture.

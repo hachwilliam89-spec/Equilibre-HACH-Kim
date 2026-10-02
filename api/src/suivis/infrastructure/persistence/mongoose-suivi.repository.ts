@@ -129,6 +129,39 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
       : null;
   }
 
+  async lireDernierJournalAlimentaireAvecEntrees(
+    userId: string,
+    planId: string,
+  ): Promise<DailyFoodJournal | null> {
+    const rows = await this.model
+      .aggregate<StoredFoodJournal>([
+        { $match: { _id: userId } },
+        {
+          $project: {
+            journaux: { $ifNull: ['$journauxAlimentaires', []] },
+          },
+        },
+        { $unwind: '$journaux' },
+        {
+          $match: {
+            'journaux.planId': planId,
+            'journaux.entrees.0': { $exists: true },
+          },
+        },
+        { $sort: { 'journaux.jourUtc': -1 } },
+        { $limit: 1 },
+        { $replaceRoot: { newRoot: '$journaux' } },
+      ])
+      .exec();
+    const journal = rows[0];
+    return journal
+      ? DailyFoodJournal.restore({
+          ...journal,
+          entrees: journal.entrees.map((entry) => FoodEntry.restore(entry)),
+        })
+      : null;
+  }
+
   async creer(suivi: Suivi): Promise<boolean> {
     try {
       await this.model.create(this.toDocument(suivi));
