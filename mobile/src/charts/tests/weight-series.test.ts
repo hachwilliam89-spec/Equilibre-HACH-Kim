@@ -1,4 +1,9 @@
-import { chartCoordinates, validWeightPoints, WEIGHT_CHART_FRAME } from "../weight-series";
+import {
+  chartCoordinates,
+  validWeightPoints,
+  WEIGHT_CHART_FRAME,
+  weightChartWindow,
+} from "../weight-series";
 import type { Measurement } from "../../measurements/api";
 
 const plan = {
@@ -55,4 +60,51 @@ it("espace les jours UTC régulièrement, même au changement d'heure", () => {
     [{ dayUtc: "2026-10-25", weightKg: 81 }],
   );
   expect(coordinates.actual[0].x).toBe(174);
+});
+
+it("propose 7, 30 et 90 jours dès le début du plan", () => {
+  const longPlan = { ...plan, dateCible: "2027-01-31" };
+  expect(weightChartWindow(longPlan, 7, "2026-10-03")).toEqual({
+    startUtc: "2026-10-01", endUtc: "2026-10-07",
+  });
+  expect(weightChartWindow(longPlan, 30, "2026-10-03")).toEqual({
+    startUtc: "2026-10-01", endUtc: "2026-10-30",
+  });
+  expect(weightChartWindow(longPlan, 90, "2026-10-03")).toEqual({
+    startUtc: "2026-10-01", endUtc: "2026-12-29",
+  });
+  expect(weightChartWindow(longPlan, "plan", "2026-10-03")).toEqual({
+    startUtc: "2026-10-01", endUtc: "2027-01-31",
+  });
+});
+
+it("fait glisser la fenêtre en jours UTC puis la borne à la fin du plan", () => {
+  const longPlan = { ...plan, dateCible: "2026-12-31" };
+  expect(weightChartWindow(longPlan, 7, "2026-10-25")).toEqual({
+    startUtc: "2026-10-19", endUtc: "2026-10-25",
+  });
+  expect(weightChartWindow(longPlan, 7, "2027-01-05")).toEqual({
+    startUtc: "2026-12-25", endUtc: "2026-12-31",
+  });
+  expect(weightChartWindow(plan, 90, "2026-10-01")).toEqual({
+    startUtc: "2026-10-01", endUtc: "2026-10-05",
+  });
+});
+
+it("recentre les mesures et l'échelle verticale sur la période choisie", () => {
+  const longPlan = { ...plan, dateCible: "2026-12-31" };
+  const points = [
+    { dayUtc: "2026-10-01", weightKg: 82 },
+    { dayUtc: "2026-10-04", weightKg: 81.5 },
+    { dayUtc: "2026-10-20", weightKg: 80 },
+  ];
+  const coordinates = chartCoordinates(
+    longPlan, points, weightChartWindow(longPlan, 7, "2026-10-04"),
+  );
+  expect(coordinates.visiblePoints).toEqual(points.slice(0, 2));
+  expect(coordinates.actual).toHaveLength(2);
+  expect(coordinates.actual[0].x).toBe(WEIGHT_CHART_FRAME.left);
+  expect(coordinates.actual[1].x).toBe(174);
+  expect(coordinates.target[1].y).toBeGreaterThan(coordinates.target[0].y);
+  expect(coordinates.low).toBeGreaterThan(chartCoordinates(longPlan, points).low);
 });

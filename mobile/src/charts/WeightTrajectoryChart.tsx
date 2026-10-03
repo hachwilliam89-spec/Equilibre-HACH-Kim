@@ -1,4 +1,5 @@
-import { Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import Svg, { Circle, Line, Text as SvgText } from "react-native-svg";
 import type { Measurement } from "../measurements/api";
 import { formatUtcDay, formatWeight } from "../measurements/presentation";
@@ -8,8 +9,17 @@ import {
   chartCoordinates,
   validWeightPoints,
   WEIGHT_CHART_FRAME,
+  weightChartWindow,
+  type WeightChartRange,
   type WeightPlan,
 } from "./weight-series";
+
+const ranges: { value: WeightChartRange; label: string }[] = [
+  { value: 7, label: "7 jours" },
+  { value: 30, label: "30 jours" },
+  { value: 90, label: "90 jours" },
+  { value: "plan", label: "Plan entier" },
+];
 
 export function WeightTrajectoryChart({
   plan,
@@ -18,16 +28,44 @@ export function WeightTrajectoryChart({
   plan: WeightPlan;
   measurements: Measurement[];
 }) {
+  const [range, setRange] = useState<WeightChartRange>(7);
   const points = validWeightPoints(plan, measurements);
-  const { ticks, target, actual, segments } = chartCoordinates(plan, points);
-  const last = points.at(-1);
+  const window = weightChartWindow(plan, range, new Date().toISOString().slice(0, 10));
+  const { ticks, target, actual, segments, visiblePoints } = chartCoordinates(
+    plan,
+    points,
+    window,
+  );
+  const last = visiblePoints.at(-1);
   const frame = WEIGHT_CHART_FRAME;
   return (
     <View style={{ gap: 10 }}>
       <Text style={s.cardTitle}>Poids réel et trajectoire cible</Text>
+      <Text style={s.metricLabel}>Période affichée</Text>
+      <View style={s.choiceRow}>
+        {ranges.map(({ value, label }) => {
+          const selected = range === value;
+          return (
+            <Pressable
+              key={value}
+              accessibilityRole="radio"
+              accessibilityLabel={label}
+              accessibilityState={{ checked: selected }}
+              onPress={() => setRange(value)}
+              style={[
+                s.choice,
+                { flexGrow: 1, minWidth: 92, alignItems: "center" },
+                selected && s.choiceSelected,
+              ]}
+            >
+              <Text style={s.label}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
       <View
         accessible
-        accessibilityLabel={`Graphique du poids du ${formatUtcDay(plan.dateDebut)} au ${formatUtcDay(plan.dateCible)}. Trajectoire cible de ${formatWeight(plan.poidsDepart)} à ${formatWeight(plan.poidsCible)}. ${points.length} mesure${points.length > 1 ? "s" : ""} valide${points.length > 1 ? "s" : ""}. ${last ? `Dernière mesure : ${formatWeight(last.weightKg)} le ${formatUtcDay(last.dayUtc)}.` : "Aucune mesure valide."}`}
+        accessibilityLabel={`Graphique du poids du ${formatUtcDay(window.startUtc)} au ${formatUtcDay(window.endUtc)}. ${visiblePoints.length} mesure${visiblePoints.length > 1 ? "s" : ""} valide${visiblePoints.length > 1 ? "s" : ""} sur cette période. ${last ? `Dernière mesure : ${formatWeight(last.weightKg)} le ${formatUtcDay(last.dayUtc)}.` : "Aucune mesure valide sur cette période."}`}
         style={{ width: "100%", aspectRatio: frame.width / frame.height }}
       >
         <Svg width="100%" height="100%" viewBox={`0 0 ${frame.width} ${frame.height}`}>
@@ -87,8 +125,8 @@ export function WeightTrajectoryChart({
         </Svg>
       </View>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Text style={s.historyMeta}>{formatUtcDay(plan.dateDebut)}</Text>
-        <Text style={s.historyMeta}>{formatUtcDay(plan.dateCible)}</Text>
+        <Text style={s.historyMeta}>{formatUtcDay(window.startUtc)}</Text>
+        <Text style={s.historyMeta}>{formatUtcDay(window.endUtc)}</Text>
       </View>
       <Text style={s.historyMeta}>
         Vert et points : pesées valides · gris pointillé : objectif · vert pointillé : jours sans pesée
@@ -98,7 +136,9 @@ export function WeightTrajectoryChart({
           Dernière pesée valide : {formatWeight(last.weightKg)} le {formatUtcDay(last.dayUtc)}
         </Text>
       )}
-      {points.length === 0 && <Text style={s.text}>Aucune mesure valide pour ce plan.</Text>}
+      {visiblePoints.length === 0 && (
+        <Text style={s.text}>Aucune pesée valide sur cette période.</Text>
+      )}
     </View>
   );
 }
