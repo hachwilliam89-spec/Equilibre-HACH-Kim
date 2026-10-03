@@ -130,6 +130,7 @@ export class FoodJournalsController {
       ? {
           statut: result.statut,
           budgetCalorique: result.budgetCalorique,
+          ciblesMacros: result.ciblesMacros,
           ecartKcal: result.ecartKcal,
           journal: result.journal ? toFoodJournalDto(result.journal) : null,
         }
