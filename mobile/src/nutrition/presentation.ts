@@ -4,6 +4,7 @@ import type {
   FoodJournal,
   MealCategory,
   ReferenceFood,
+  FoodCategory,
 } from "./api";
 
 export const mealCategories: { value: MealCategory; label: string }[] = [
@@ -11,6 +12,18 @@ export const mealCategories: { value: MealCategory; label: string }[] = [
   { value: "dejeuner", label: "Déjeuner" },
   { value: "diner", label: "Dîner" },
   { value: "collation", label: "Collation" },
+];
+
+export const foodCategories: { value: FoodCategory; label: string }[] = [
+  { value: "feculents", label: "Féculents" },
+  { value: "legumineuses", label: "Légumineuses" },
+  { value: "viandes", label: "Viandes" },
+  { value: "poissons", label: "Poissons" },
+  { value: "oeufs", label: "Œufs" },
+  { value: "legumes", label: "Légumes" },
+  { value: "fruits", label: "Fruits" },
+  { value: "produits-laitiers", label: "Produits laitiers" },
+  { value: "autres", label: "Autres" },
 ];
 
 export function groupEntriesByMeal(entries: FoodEntry[]) {

@@ -3,6 +3,7 @@ import { Food, normalizeFoodName } from './food.entity';
 const validFood = {
   id: '8ed1ecba-adbd-4cf7-a577-563fa30d7850',
   nom: 'Riz blanc cuit',
+  categorie: 'feculents' as const,
   caloriesKcalPour100g: 130,
   proteinesGPour100g: 2.7,
   glucidesGPour100g: 28,

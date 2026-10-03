@@ -3,6 +3,8 @@ import {
   addFoodEntry,
   removeFoodEntry,
   searchReferenceFoods,
+  getFavoriteFoods,
+  setFavoriteFood,
 } from "../api";
 
 jest.mock("../../plans/api", () => ({ requestApi: jest.fn() }));
@@ -10,6 +12,7 @@ jest.mock("../../plans/api", () => ({ requestApi: jest.fn() }));
 const food = {
   id: "food-1",
   nom: "Riz blanc cuit",
+  categorie: "feculents",
   caloriesKcalPour100g: 130,
   proteinesGPour100g: 2.7,
   glucidesGPour100g: 28,
@@ -38,7 +41,23 @@ beforeEach(() => jest.clearAllMocks());
 it("encode la recherche et valide la bibliothèque en lecture seule", async () => {
   (requestApi as jest.Mock).mockResolvedValue([food]);
   await expect(searchReferenceFoods(" riz cuit ")).resolves.toEqual([food]);
-  expect(requestApi).toHaveBeenCalledWith("/foods?q=riz%20cuit&size=20");
+  expect(requestApi).toHaveBeenCalledWith("/foods?q=riz%20cuit&size=50&page=1");
+});
+
+it("filtre par famille et charge les favoris du compte", async () => {
+  (requestApi as jest.Mock).mockResolvedValue([food]);
+  await expect(searchReferenceFoods("yaourt", "produits-laitiers", 2)).resolves.toEqual([food]);
+  expect(requestApi).toHaveBeenCalledWith("/foods?q=yaourt&size=50&page=2&categorie=produits-laitiers");
+  await expect(getFavoriteFoods()).resolves.toEqual([food]);
+  expect(requestApi).toHaveBeenCalledWith("/foods/me/favorites");
+});
+
+it("ajoute et retire un favori sur le compte", async () => {
+  (requestApi as jest.Mock).mockResolvedValue(null);
+  await setFavoriteFood(food.id, true);
+  await setFavoriteFood(food.id, false);
+  expect(requestApi).toHaveBeenNthCalledWith(1, "/foods/me/favorites/food-1", "PUT");
+  expect(requestApi).toHaveBeenNthCalledWith(2, "/foods/me/favorites/food-1", "DELETE");
 });
 
 it("envoie l'aliment, la quantité et le repas puis lit le journal recalculé", async () => {

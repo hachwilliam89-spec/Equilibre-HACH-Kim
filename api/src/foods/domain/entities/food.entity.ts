@@ -1,7 +1,21 @@
+export const FOOD_CATEGORIES = [
+  'feculents',
+  'legumineuses',
+  'viandes',
+  'poissons',
+  'oeufs',
+  'legumes',
+  'fruits',
+  'produits-laitiers',
+  'autres',
+] as const;
+export type FoodCategory = (typeof FOOD_CATEGORIES)[number];
+
 export interface FoodProps {
   id: string;
   nom: string;
   nomNormalise: string;
+  categorie: FoodCategory;
   caloriesKcalPour100g: number;
   proteinesGPour100g: number;
   glucidesGPour100g: number;
@@ -30,6 +44,9 @@ export class Food {
   static create(input: FoodCreateProps): Food {
     const nom = input.nom.trim().replace(/\s+/g, ' ');
     if (!nom) throw new Error("Le nom de l'aliment est obligatoire");
+    if (!FOOD_CATEGORIES.includes(input.categorie)) {
+      throw new Error("La catégorie de l'aliment est invalide");
+    }
 
     Food.assertNutritionalValue(
       'caloriesKcalPour100g',

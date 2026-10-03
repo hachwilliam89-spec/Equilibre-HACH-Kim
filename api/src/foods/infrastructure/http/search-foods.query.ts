@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FOOD_CATEGORIES } from '../../domain/entities/food.entity';
 
 const positivePage = z
   .string()
@@ -17,6 +18,7 @@ const pageSize = z
 export const searchFoodsQuerySchema = z
   .object({
     q: z.string().max(100).default(''),
+    categorie: z.enum(FOOD_CATEGORIES).optional(),
     page: positivePage,
     size: pageSize,
   })
