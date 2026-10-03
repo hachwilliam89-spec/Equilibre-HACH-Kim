@@ -12,6 +12,8 @@ import { MeasurementsModule } from './measurements/measurements.module';
 import { HealthModule } from './health/health.module';
 import { validateEnv } from './config/env.schema';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { FoodsModule } from './foods/foods.module';
+import { NutritionModule } from './nutrition/nutrition.module';
 
 @Module({
   imports: [
@@ -80,6 +82,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     AuthModule,
     PlansModule,
     MeasurementsModule,
+    FoodsModule,
+    NutritionModule,
     HealthModule,
     // Limite globale par IP, filet de securite general contre l'abus/DoS.
     // Les routes sensibles (ex: login) resserrent cette limite via @Throttle.

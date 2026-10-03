@@ -85,7 +85,29 @@ Depuis l’accueil connecté, « Mes utilisateurs » affiche les comptes réelle
 
 Le formulaire comporte deux étapes : objectifs (poids, dates au format AAAA-MM-JJ, IMC et rythme indicatifs), puis activité, proposition de budget et validation. La proposition appelle `POST /api/plans/preview` sans enregistrement. Le coach peut ajuster le budget avant `POST /api/plans`, qui revalide les règles métier. Le plan enregistré apparaît ensuite avec la possibilité de l’annuler après confirmation.
 
-La taille est obligatoire ; sans âge ou sexe, le budget doit être saisi manuellement. La complétion du profil dans le mobile reste à implémenter : pour la recette, utiliser un utilisateur dont le profil est déjà renseigné. Aucun graphique de pesées ou d’alimentation fictives n’est affiché ; ces suivis dépendent des prochaines US.
+La taille est obligatoire ; sans âge ou sexe, le budget doit être saisi manuellement. L’utilisateur peut compléter son profil depuis l’application. Le coach voit actuellement le plan et ses données de création, mais pas encore la courbe du poids ni les calories de ses utilisateurs : les endpoints de suivi sont pour l’instant réservés au propriétaire des données.
+
+## Suivi visuel de l’utilisateur
+
+« Mon suivi de poids » affiche la trajectoire cible en gris pointillé et les pesées valides en vert, avec des axes datés et gradués. Une ligne verte pointillée entre deux points indique des jours sans pesée : aucune valeur intermédiaire n’est inventée. Seules les mesures valides du plan, reçues pendant sa période, alimentent la courbe ; les autres restent dans l’historique. Si aucune mesure valide n’existe, la cible reste visible avec un message explicite. La dernière valeur est aussi écrite en texte, pour que la lecture ne dépende pas de la couleur ni du graphique.
+
+Le budget du jour montre la consommation en bleu, la cible par un trait gris et la tolérance de +150 kcal en texte. L’ocre n’apparaît que lorsque cette tolérance est dépassée. Une journée sans entrée est signalée comme telle, sans reprendre le total d’un ancien jour. Les composants de `src/charts` ne font aucune requête : ils reçoivent des données déjà chargées et séparent le calcul des coordonnées du dessin `react-native-svg` (compatible Expo Go). Ils pourront recevoir les données du cache SQLite sans changer de bibliothèque. Pour afficher une courbe au coach et des barres sur plusieurs jours comme dans les maquettes, il faudra d’abord des endpoints autorisés donnant l’historique du poids et des journaux alimentaires de l’utilisateur sélectionné ; l’API actuelle ne les expose pas au coach.
+
+L’écran recharge le poids et le budget lorsqu’il revient au premier plan, ainsi qu’après une correction manuelle ; le bouton « Actualiser » permet aussi un contrôle immédiat. La future synchronisation hors ligne devra décider quand mettre à jour les données en cache et déclencher le même rendu : le graphique ne simule pas un flux temps réel.
+
+## Journal alimentaire — US3
+
+Depuis « Mon suivi de poids », ouvrir « Mon journal alimentaire ». L’écran
+montre uniquement les entrées du jour UTC, le total calorique, les macros et
+le statut fourni par l’API. « Ajouter un aliment » interroge la bibliothèque
+en lecture seule, affiche les valeurs pour 100 g, puis estime les valeurs de la
+quantité saisie. Après l’ajout, le journal recharge les valeurs enregistrées
+par le serveur. « Retirer » demande une confirmation et recalcule le journal.
+La saisie d’une quantité nulle, négative ou supérieure à 10 000 g est refusée.
+Sans plan actif, le journal affiche un message dédié.
+
+La [recette US3](../docs/recette-us3.md) détaille les scénarios automatisés et
+les vérifications à faire sur iPhone avant de valider le déploiement.
 
 Les requêtes protégées renouvellent le jeton une seule fois en cas de 401. Un renouvellement refusé ramène à la connexion. Après une interruption réseau lors de la soumission, revenir au suivi et actualiser le plan avant de réessayer.
 
