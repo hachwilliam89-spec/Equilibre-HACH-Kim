@@ -92,20 +92,37 @@ export function dailyBudgetPresentation(
   budget: number,
   hasEntries: boolean,
 ) {
-  const scale = Math.max(budget + CALORIE_TOLERANCE_KCAL, total, 1);
-  const overTolerance = hasEntries && total > budget + CALORIE_TOLERANCE_KCAL;
+  const zoneStart = Math.max(0, budget - CALORIE_TOLERANCE_KCAL);
+  const zoneEnd = budget + CALORIE_TOLERANCE_KCAL;
+  const scale = Math.max(zoneEnd, total, 1);
+  const overTolerance = hasEntries && total > zoneEnd;
+  const inTargetZone = hasEntries && total >= zoneStart && !overTolerance;
+  const phase = !hasEntries
+    ? "empty"
+    : overTolerance
+      ? "over"
+      : inTargetZone
+        ? "target"
+        : "progress";
   const note = !hasEntries
     ? "Aucune entrée consignée aujourd’hui."
-    : total < budget
-      ? `${formatNutrition(budget - total)} kcal restantes avant la cible.`
-      : total === budget
-        ? "Cible calorique atteinte."
-        : overTolerance
-          ? `${formatNutrition(total - budget)} kcal au-dessus de la cible : dépassement.`
-          : `${formatNutrition(total - budget)} kcal au-dessus de la cible, dans la tolérance.`;
+    : overTolerance
+      ? `${formatNutrition(total - budget)} kcal au-dessus de la cible : dépassement.`
+      : !inTargetZone
+        ? `${formatNutrition(zoneStart - total)} kcal avant la zone cible.`
+        : total < budget
+          ? `Zone cible atteinte, ${formatNutrition(budget - total)} kcal sous la cible.`
+          : total === budget
+            ? "Cible calorique atteinte."
+            : `Zone cible atteinte, ${formatNutrition(total - budget)} kcal au-dessus de la cible.`;
   return {
     note,
+    phase,
     overTolerance,
+    zoneStart,
+    zoneEnd,
+    zoneStartPercent: Math.max(0, Math.min((zoneStart / scale) * 100, 100)),
+    zoneEndPercent: Math.max(0, Math.min((zoneEnd / scale) * 100, 100)),
     consumedPercent: Math.max(0, Math.min((total / scale) * 100, 100)),
     targetPercent: Math.max(0, Math.min((budget / scale) * 100, 100)),
   };
