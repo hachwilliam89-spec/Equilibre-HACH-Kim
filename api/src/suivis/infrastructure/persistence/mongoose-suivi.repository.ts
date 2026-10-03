@@ -12,6 +12,18 @@ import {
 import { Suivi, troisMoisAvantUtc } from '../../domain/entities/suivi.entity';
 import type { SuiviRepositoryPort } from '../../domain/ports/suivi-repository.port';
 import { SuiviDocumentClass } from './suivi.schema';
+import {
+  DailyFoodJournal,
+  type DailyFoodJournalProps,
+} from '../../../nutrition/domain/entities/daily-food-journal.entity';
+import {
+  FoodEntry,
+  type FoodEntryProps,
+} from '../../../nutrition/domain/entities/food-entry.entity';
+
+type StoredFoodJournal = Omit<DailyFoodJournalProps, 'entrees'> & {
+  entrees: FoodEntryProps[];
+};
 
 interface StoredSuivi {
   _id: string;
@@ -21,6 +33,7 @@ interface StoredSuivi {
   mesures: MeasurementProps[];
   derniereMesureValide: MeasurementProps | null;
   blocageJournalier: { jourUtc: string; mesureId: string } | null;
+  journauxAlimentaires: StoredFoodJournal[];
 }
 
 @Injectable()
@@ -116,6 +129,39 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
       : null;
   }
 
+  async lireDernierJournalAlimentaireAvecEntrees(
+    userId: string,
+    planId: string,
+  ): Promise<DailyFoodJournal | null> {
+    const rows = await this.model
+      .aggregate<StoredFoodJournal>([
+        { $match: { _id: userId } },
+        {
+          $project: {
+            journaux: { $ifNull: ['$journauxAlimentaires', []] },
+          },
+        },
+        { $unwind: '$journaux' },
+        {
+          $match: {
+            'journaux.planId': planId,
+            'journaux.entrees.0': { $exists: true },
+          },
+        },
+        { $sort: { 'journaux.jourUtc': -1 } },
+        { $limit: 1 },
+        { $replaceRoot: { newRoot: '$journaux' } },
+      ])
+      .exec();
+    const journal = rows[0];
+    return journal
+      ? DailyFoodJournal.restore({
+          ...journal,
+          entrees: journal.entrees.map((entry) => FoodEntry.restore(entry)),
+        })
+      : null;
+  }
+
   async creer(suivi: Suivi): Promise<boolean> {
     try {
       await this.model.create(this.toDocument(suivi));
@@ -141,6 +187,7 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
             mesures: stored.mesures,
             derniereMesureValide: stored.derniereMesureValide,
             blocageJournalier: stored.blocageJournalier,
+            journauxAlimentaires: stored.journauxAlimentaires,
           },
           $inc: { version: 1 },
         },
@@ -160,6 +207,13 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
       mesures: props.mesures.map((measurement) => measurement.toProps()),
       derniereMesureValide: props.derniereMesureValide?.toProps() ?? null,
       blocageJournalier: props.blocageJournalier,
+      journauxAlimentaires: props.journauxAlimentaires.map((journal) => {
+        const journalProps = journal.toProps();
+        return {
+          ...journalProps,
+          entrees: journalProps.entrees.map((entry) => entry.toProps()),
+        };
+      }),
     };
   }
 
@@ -176,6 +230,13 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
         ? Measurement.restore(document.derniereMesureValide)
         : null,
       blocageJournalier: document.blocageJournalier,
+      journauxAlimentaires: (document.journauxAlimentaires ?? []).map(
+        (journal) =>
+          DailyFoodJournal.restore({
+            ...journal,
+            entrees: journal.entrees.map((entry) => FoodEntry.restore(entry)),
+          }),
+      ),
     });
   }
 }
