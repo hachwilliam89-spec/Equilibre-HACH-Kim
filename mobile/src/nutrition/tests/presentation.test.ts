@@ -1,4 +1,9 @@
-import { dailyBudgetPresentation, journalForDay } from "../presentation";
+import {
+  dailyBudgetPresentation,
+  journalForDay,
+  nutritionForQuantity,
+  parseFoodQuantity,
+} from "../presentation";
 import type { FoodBudgetStatus } from "../api";
 
 const status: FoodBudgetStatus = {
@@ -40,4 +45,26 @@ it("ne présente pas un jour vide comme une consommation confirmée", () => {
   const display = dailyBudgetPresentation(0, 1800, false);
   expect(display.note).toBe("Aucune entrée consignée aujourd’hui.");
   expect(display.consumedPercent).toBe(0);
+});
+
+it("accepte une quantité française et estime calories et macros pour 200 g", () => {
+  expect(parseFoodQuantity("200,0")).toBe(200);
+  expect(nutritionForQuantity({
+    id: "food-1", nom: "Riz blanc cuit",
+    caloriesKcalPour100g: 130,
+    proteinesGPour100g: 2.7,
+    glucidesGPour100g: 28,
+    lipidesGPour100g: 0.3,
+  }, 200)).toEqual({
+    caloriesKcal: 260,
+    proteinesG: 5.4,
+    glucidesG: 56,
+    lipidesG: 0.6,
+  });
+});
+
+it("refuse une quantité vide, nulle, négative ou hors limite", () => {
+  for (const invalid of ["", "0", "-1", "1e3", "10001", "1,2,3"]) {
+    expect(parseFoodQuantity(invalid)).toBeNull();
+  }
 });
