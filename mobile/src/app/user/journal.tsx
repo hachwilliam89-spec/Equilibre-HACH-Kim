@@ -14,6 +14,8 @@ import {
   groupEntriesByMeal,
   journalForDay,
 } from "../../nutrition/presentation";
+import { FoodIcon } from "../../nutrition/FoodIcon";
+import { foodIconKind } from "../../nutrition/food-icon-kind";
 import { formatUtcDay } from "../../measurements/presentation";
 import { Button, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
@@ -33,7 +35,8 @@ function Entry({
 }) {
   return (
     <View style={s.historyItem}>
-      <View style={s.historyMain}>
+      <View style={[s.historyMain, { alignItems: "center", gap: 10 }]}>
+        <FoodIcon kind={foodIconKind(entry.nom)} size={34} />
         <Text style={[s.historyWeight, { flex: 1 }]}>{entry.nom}</Text>
         <Text style={s.label}>{formatNutrition(entry.caloriesKcal)} kcal</Text>
       </View>

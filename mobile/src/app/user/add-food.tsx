@@ -12,6 +12,8 @@ import {
   foodCategories, formatNutrition, mealCategories,
   nutritionForQuantity, parseFoodQuantity,
 } from "../../nutrition/presentation";
+import { FoodIcon } from "../../nutrition/FoodIcon";
+import { foodIconKind, categoryIconKind } from "../../nutrition/food-icon-kind";
 import { Button, Field, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
 
@@ -185,8 +187,11 @@ export default function AddFoodScreen() {
               accessibilityRole="button"
               accessibilityState={{ selected: category === value }}
               onPress={() => changeCategory(value)}
-              style={[s.choice, category === value && s.choiceSelected]}
+              style={[s.choice, { flexDirection: "row", alignItems: "center", gap: 6 }, category === value && s.choiceSelected]}
             >
+              {value !== "tous" && value !== "favoris" && (
+                <FoodIcon kind={categoryIconKind[value]} size={22} boxed={false} />
+              )}
               <Text style={s.label}>{label}</Text>
             </Pressable>
           ))}
@@ -224,10 +229,13 @@ export default function AddFoodScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Choisir ${food.nom}`}
                   onPress={() => openFood(food)}
-                  style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 12 }}
+                  style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 }}
                 >
-                  <Text style={s.label}>{food.nom}</Text>
-                  <Text style={s.historyMeta}>{formatNutrition(food.caloriesKcalPour100g)} kcal / 100 g</Text>
+                  <FoodIcon kind={foodIconKind(food.nom, food.categorie)} size={40} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.label}>{food.nom}</Text>
+                    <Text style={s.historyMeta}>{formatNutrition(food.caloriesKcalPour100g)} kcal / 100 g</Text>
+                  </View>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
