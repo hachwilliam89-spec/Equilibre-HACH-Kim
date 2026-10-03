@@ -1,9 +1,10 @@
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
+import { DailyBudgetChart } from "../../charts/DailyBudgetChart";
 import { WeightTrajectoryChart } from "../../charts/WeightTrajectoryChart";
 import { getFoodBudgetStatus, type FoodBudgetStatus } from "../../nutrition/api";
-import { formatNutrition, journalForDay } from "../../nutrition/presentation";
+import { journalForDay } from "../../nutrition/presentation";
 import {
   correctWeight,
   getMeasurementHistory,
@@ -80,15 +81,6 @@ function DailyBudgetCard() {
   const today = journalForDay(status, todayUtc);
   const total = today?.totalCaloriesKcal ?? 0;
   const budget = status?.budgetCalorique ?? 0;
-  const progress = budget > 0 ? Math.min(Math.max(total / budget, 0), 1) : 0;
-  const remaining = budget - total;
-  const budgetNote = !today
-    ? "Aucune entrée consignée aujourd’hui."
-    : remaining > 0
-      ? `${formatNutrition(remaining)} kcal restantes`
-      : remaining < 0
-        ? `Budget dépassé de ${formatNutrition(-remaining)} kcal`
-        : "Budget atteint.";
   return (
     <View style={s.card}>
       <Text style={s.cardTitle}>Budget du jour</Text>
@@ -99,30 +91,11 @@ function DailyBudgetCard() {
       ) : status === null ? (
         <Text style={s.text}>Aucun plan alimentaire actif.</Text>
       ) : (
-        <>
-          <Text style={s.metricValue}>
-            {formatNutrition(total)} / {formatNutrition(budget)} kcal
-          </Text>
-          <View
-            accessible
-            accessibilityLabel={`${formatNutrition(total)} kilocalories consignées aujourd’hui sur ${formatNutrition(budget)} prévues`}
-            style={{
-              height: 12,
-              borderRadius: 6,
-              backgroundColor: "#e4ece7",
-              overflow: "hidden",
-            }}
-          >
-            <View
-              style={{
-                height: "100%",
-                width: `${Math.round(progress * 100)}%`,
-                backgroundColor: total > budget + 150 ? "#9a4d00" : "#087454",
-              }}
-            />
-          </View>
-          <Text style={s.historyMeta}>{budgetNote}</Text>
-        </>
+        <DailyBudgetChart
+          total={total}
+          budget={budget}
+          hasEntries={(today?.entrees.length ?? 0) > 0}
+        />
       )}
     </View>
   );
@@ -133,22 +106,24 @@ export default function WeightTrackingScreen() {
   const [history, setHistory] = useState<Measurement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [reload, setReload] = useState(0);
+  const requestVersion = useRef(0);
   const [correctionWeight, setCorrectionWeight] = useState("");
   const [correctionBusy, setCorrectionBusy] = useState(false);
   const [correctionError, setCorrectionError] = useState("");
   const [correctionNotice, setCorrectionNotice] = useState("");
 
-  useEffect(() => {
-    let active = true;
+  const retry = useCallback(() => {
+    const version = ++requestVersion.current;
+    setLoading(true);
+    setError("");
     void Promise.all([getWeightTracking(), getMeasurementHistory()])
       .then(([nextTracking, nextHistory]) => {
-        if (!active) return;
+        if (requestVersion.current !== version) return;
         setTracking(nextTracking);
         setHistory(nextHistory);
       })
       .catch((cause: unknown) => {
-        if (!active) return;
+        if (requestVersion.current !== version) return;
         setError(
           cause instanceof Error
             ? cause.message
@@ -156,18 +131,18 @@ export default function WeightTrackingScreen() {
         );
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (requestVersion.current === version) setLoading(false);
       });
-    return () => {
-      active = false;
-    };
-  }, [reload]);
+  }, []);
 
-  const retry = () => {
-    setLoading(true);
-    setError("");
-    setReload((value) => value + 1);
-  };
+  useFocusEffect(
+    useCallback(() => {
+      retry();
+      return () => {
+        requestVersion.current += 1;
+      };
+    }, [retry]),
+  );
 
   const submitCorrection = async () => {
     if (correctionBusy) return;
@@ -186,9 +161,7 @@ export default function WeightTrackingScreen() {
       await correctWeight(parsed.data);
       setCorrectionWeight("");
       setCorrectionNotice("Votre poids a bien été enregistré.");
-      setLoading(true);
-      setError("");
-      setReload((value) => value + 1);
+      retry();
     } catch (cause) {
       setCorrectionError(
         cause instanceof Error

@@ -13,6 +13,17 @@ export interface WeightPoint {
   weightKg: number;
 }
 
+// Le repère est partagé par les axes et les séries. Le viewBox SVG l'adapte
+// à la largeur disponible sans modifier les calculs de dates et de poids.
+export const WEIGHT_CHART_FRAME = {
+  width: 320,
+  height: 192,
+  left: 42,
+  right: 306,
+  top: 16,
+  bottom: 158,
+} as const;
+
 const dayTime = (dayUtc: string) => Date.parse(`${dayUtc}T00:00:00Z`);
 const day = (value: string) => value.slice(0, 10);
 
@@ -44,6 +55,7 @@ export function validWeightPoints(
 }
 
 export function chartCoordinates(plan: WeightPlan, points: WeightPoint[]) {
+  const frame = WEIGHT_CHART_FRAME;
   const start = dayTime(day(plan.dateDebut));
   const end = dayTime(day(plan.dateCible));
   const duration = Math.max(end - start, 1);
@@ -51,15 +63,30 @@ export function chartCoordinates(plan: WeightPlan, points: WeightPoint[]) {
   const low = Math.floor(Math.min(...weights) - 1);
   const high = Math.ceil(Math.max(...weights) + 1);
   const height = Math.max(high - low, 1);
-  const x = (dayUtc: string) => 24 + ((dayTime(dayUtc) - start) / duration) * 272;
-  const y = (weightKg: number) => 150 - ((weightKg - low) / height) * 120;
+  const x = (dayUtc: string) =>
+    frame.left + ((dayTime(dayUtc) - start) / duration) * (frame.right - frame.left);
+  const y = (weightKg: number) =>
+    frame.bottom - ((weightKg - low) / height) * (frame.bottom - frame.top);
   return {
     low,
     high,
+    ticks: [low, (low + high) / 2, high].map((weightKg) => ({
+      weightKg,
+      y: y(weightKg),
+    })),
     target: [
-      { x: 24, y: y(plan.poidsDepart) },
-      { x: 296, y: y(plan.poidsCible) },
+      { x: frame.left, y: y(plan.poidsDepart) },
+      { x: frame.right, y: y(plan.poidsCible) },
     ],
-    actual: points.map((point) => ({ x: x(point.dayUtc), y: y(point.weightKg) })),
+    actual: points.map((point) => ({
+      dayUtc: point.dayUtc,
+      x: x(point.dayUtc),
+      y: y(point.weightKg),
+    })),
+    segments: points.slice(1).map((point, index) => ({
+      from: { x: x(points[index].dayUtc), y: y(points[index].weightKg) },
+      to: { x: x(point.dayUtc), y: y(point.weightKg) },
+      hasGap: dayTime(point.dayUtc) - dayTime(points[index].dayUtc) > 86_400_000,
+    })),
   };
 }

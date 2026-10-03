@@ -1,4 +1,4 @@
-import { chartCoordinates, validWeightPoints } from "../weight-series";
+import { chartCoordinates, validWeightPoints, WEIGHT_CHART_FRAME } from "../weight-series";
 import type { Measurement } from "../../measurements/api";
 
 const plan = {
@@ -24,7 +24,35 @@ it("trace seulement les mesures valides du plan et garde la dernière du jour", 
   ]);
   expect(points).toEqual([{ dayUtc: "2026-10-02", weightKg: 80.5 }]);
   const coordinates = chartCoordinates(plan, points);
-  expect(coordinates.target[0].x).toBe(24);
-  expect(coordinates.target[1].x).toBe(296);
-  expect(coordinates.actual[0].x).toBe(92);
+  expect(coordinates.target[0].x).toBe(WEIGHT_CHART_FRAME.left);
+  expect(coordinates.target[1].x).toBe(WEIGHT_CHART_FRAME.right);
+  expect(coordinates.actual[0].x).toBe(108);
+  expect(coordinates.actual[0].y).toBeGreaterThan(coordinates.target[0].y);
+  expect(coordinates.ticks.map(({ weightKg }) => weightKg)).toEqual([77, 80, 83]);
+});
+
+it("rend la cible sans inventer de pesée quand le plan n'a pas encore de mesure", () => {
+  const coordinates = chartCoordinates(plan, []);
+  expect(coordinates.actual).toEqual([]);
+  expect(coordinates.segments).toEqual([]);
+  expect(coordinates.target).toHaveLength(2);
+});
+
+it("signale les jours sans pesée dans la courbe sans créer de valeur intermédiaire", () => {
+  const coordinates = chartCoordinates(plan, [
+    { dayUtc: "2026-10-01", weightKg: 82 },
+    { dayUtc: "2026-10-02", weightKg: 81 },
+    { dayUtc: "2026-10-05", weightKg: 79 },
+  ]);
+  expect(coordinates.actual).toHaveLength(3);
+  expect(coordinates.segments.map(({ hasGap }) => hasGap)).toEqual([false, true]);
+  expect(coordinates.actual[2].x).toBe(WEIGHT_CHART_FRAME.right);
+});
+
+it("espace les jours UTC régulièrement, même au changement d'heure", () => {
+  const coordinates = chartCoordinates(
+    { ...plan, dateDebut: "2026-10-24", dateCible: "2026-10-26" },
+    [{ dayUtc: "2026-10-25", weightKg: 81 }],
+  );
+  expect(coordinates.actual[0].x).toBe(174);
 });
