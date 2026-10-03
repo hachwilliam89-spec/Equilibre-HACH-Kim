@@ -4,8 +4,9 @@ import {
   journalForDay,
   nutritionForQuantity,
   parseFoodQuantity,
+  quickPortions,
 } from "../presentation";
-import type { FoodBudgetStatus, FoodEntry } from "../api";
+import type { FoodBudgetStatus, FoodEntry, ReferenceFood } from "../api";
 
 const status: FoodBudgetStatus = {
   statut: "dans-le-budget",
@@ -100,4 +101,32 @@ it("regroupe les aliments par repas sans changer le total calorique journalier",
     { label: "Non classé", caloriesKcal: 40 },
   ]);
   expect(groups.reduce((total, group) => total + group.caloriesKcal, 0)).toBe(300);
+});
+
+
+describe("quickPortions", () => {
+  const food = (nom: string): ReferenceFood => ({
+    id: "x",
+    nom,
+    categorie: "fruits",
+    caloriesKcalPour100g: 50,
+    proteinesGPour100g: 1,
+    glucidesGPour100g: 10,
+    lipidesGPour100g: 0,
+  });
+
+  it("propose l'unité ménagère puis des grammes courants", () => {
+    const portions = quickPortions(food("Banane crue"));
+    expect(portions[0]).toEqual({ label: "1 banane · 120 g", grams: 120 });
+    expect(portions.map((p) => p.grams)).toContain(100);
+  });
+
+  it("donne des grammes génériques sans doublon quand aucune unité n'est connue", () => {
+    const portions = quickPortions(food("Aliment générique"));
+    expect(portions.map((p) => p.grams)).toEqual([50, 100, 150, 200]);
+  });
+
+  it("limite la liste à cinq portions", () => {
+    expect(quickPortions(food("Oeuf dur")).length).toBeLessThanOrEqual(5);
+  });
 });
