@@ -38,3 +38,29 @@ export function formatNutrition(value: number): string {
     maximumFractionDigits: 1,
   });
 }
+
+export const CALORIE_TOLERANCE_KCAL = 150;
+
+export function dailyBudgetPresentation(
+  total: number,
+  budget: number,
+  hasEntries: boolean,
+) {
+  const scale = Math.max(budget + CALORIE_TOLERANCE_KCAL, total, 1);
+  const overTolerance = hasEntries && total > budget + CALORIE_TOLERANCE_KCAL;
+  const note = !hasEntries
+    ? "Aucune entrée consignée aujourd’hui."
+    : total < budget
+      ? `${formatNutrition(budget - total)} kcal restantes avant la cible.`
+      : total === budget
+        ? "Cible calorique atteinte."
+        : overTolerance
+          ? `${formatNutrition(total - budget)} kcal au-dessus de la cible : dépassement.`
+          : `${formatNutrition(total - budget)} kcal au-dessus de la cible, dans la tolérance.`;
+  return {
+    note,
+    overTolerance,
+    consumedPercent: Math.max(0, Math.min((total / scale) * 100, 100)),
+    targetPercent: Math.max(0, Math.min((budget / scale) * 100, 100)),
+  };
+}
