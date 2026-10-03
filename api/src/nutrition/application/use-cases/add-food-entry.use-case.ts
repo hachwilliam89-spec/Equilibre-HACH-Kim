@@ -14,7 +14,10 @@ import {
   type SuiviRepositoryPort,
 } from '../../../suivis/domain/ports/suivi-repository.port';
 import { DailyFoodJournal } from '../../domain/entities/daily-food-journal.entity';
-import { FoodEntry } from '../../domain/entities/food-entry.entity';
+import {
+  FoodEntry,
+  type MealCategory,
+} from '../../domain/entities/food-entry.entity';
 
 const MAX_TENTATIVES = 5;
 
@@ -30,6 +33,7 @@ export class AddFoodEntryUseCase {
     userId: string,
     foodId: string,
     quantiteGrammes: number,
+    categorieRepas?: MealCategory,
   ): Promise<DailyFoodJournal> {
     const receivedAt = new Date();
     const plan = await this.plans.findActiveByUserId(userId);
@@ -48,6 +52,7 @@ export class AddFoodEntryUseCase {
       aliment: food.toProps(),
       quantiteGrammes,
       receivedAt,
+      categorieRepas,
     });
     const jourUtc = receivedAt.toISOString().slice(0, 10);
 

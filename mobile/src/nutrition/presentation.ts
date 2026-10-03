@@ -1,4 +1,31 @@
-import type { FoodBudgetStatus, FoodJournal, ReferenceFood } from "./api";
+import type {
+  FoodBudgetStatus,
+  FoodEntry,
+  FoodJournal,
+  MealCategory,
+  ReferenceFood,
+} from "./api";
+
+export const mealCategories: { value: MealCategory; label: string }[] = [
+  { value: "petit-dejeuner", label: "Petit-déjeuner" },
+  { value: "dejeuner", label: "Déjeuner" },
+  { value: "diner", label: "Dîner" },
+  { value: "collation", label: "Collation" },
+];
+
+export function groupEntriesByMeal(entries: FoodEntry[]) {
+  return [...mealCategories, { value: "non-classe" as const, label: "Non classé" }]
+    .map(({ value, label }) => {
+      const items = entries.filter((entry) => entry.categorieRepas === value);
+      return {
+        value,
+        label,
+        entries: items,
+        caloriesKcal: items.reduce((sum, entry) => sum + entry.caloriesKcal, 0),
+      };
+    })
+    .filter((group) => group.entries.length > 0);
+}
 
 type Status = NonNullable<FoodBudgetStatus>["statut"];
 
