@@ -1,8 +1,10 @@
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { DailyBudgetChart } from "../../charts/DailyBudgetChart";
 import {
   getFoodBudgetStatus,
+  removeFoodEntry,
   type FoodBudgetStatus,
   type FoodEntry,
 } from "../../nutrition/api";
@@ -16,21 +18,18 @@ import { Button, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
 
 const localStyles = StyleSheet.create({
-  progressTrack: {
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#e4ece7",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 6,
-    backgroundColor: "#087454",
-  },
   note: { color: "#536861", fontSize: 14, lineHeight: 20 },
 });
 
-function Entry({ entry }: { entry: FoodEntry }) {
+function Entry({
+  entry,
+  onRemove,
+  disabled,
+}: {
+  entry: FoodEntry;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
   return (
     <View style={s.historyItem}>
       <View style={s.historyMain}>
@@ -41,6 +40,15 @@ function Entry({ entry }: { entry: FoodEntry }) {
         {formatNutrition(entry.quantiteGrammes)} g · P {formatNutrition(entry.proteinesG)} g
         {" · "}G {formatNutrition(entry.glucidesG)} g · L {formatNutrition(entry.lipidesG)} g
       </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Retirer ${entry.nom} du journal`}
+        disabled={disabled}
+        onPress={onRemove}
+        style={{ alignSelf: "flex-start" }}
+      >
+        <Text style={[s.link, disabled && s.disabled]}>Retirer</Text>
+      </Pressable>
     </View>
   );
 }
@@ -50,6 +58,9 @@ export default function FoodJournalScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState("");
+  const removeInFlight = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -82,10 +93,41 @@ export default function FoodJournalScreen() {
   const today = journalForDay(status, todayUtc);
   const totalKcal = today?.totalCaloriesKcal ?? 0;
   const budgetKcal = status?.budgetCalorique ?? 0;
-  const progress = budgetKcal > 0 ? Math.min(totalKcal / budgetKcal, 1) : 0;
   const entries = today?.entrees.slice().sort((a, b) =>
     b.receivedAt.localeCompare(a.receivedAt),
   ) ?? [];
+
+  const remove = async (entry: FoodEntry) => {
+    if (removeInFlight.current) return;
+    removeInFlight.current = true;
+    setRemovingId(entry.id);
+    setRemoveError("");
+    try {
+      await removeFoodEntry(entry.id);
+      setReload((value) => value + 1);
+    } catch (cause) {
+      setRemoveError(
+        cause instanceof Error
+          ? `${cause.message} Actualisez le journal avant de réessayer.`
+          : "Suppression impossible. Actualisez le journal avant de réessayer.",
+      );
+    } finally {
+      removeInFlight.current = false;
+      setRemovingId(null);
+    }
+  };
+
+  const confirmRemove = (entry: FoodEntry) => {
+    const message = `Retirer ${entry.nom} (${formatNutrition(entry.quantiteGrammes)} g) du journal ?`;
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) void remove(entry);
+      return;
+    }
+    Alert.alert("Retirer cet aliment ?", message, [
+      { text: "Annuler", style: "cancel" },
+      { text: "Retirer", style: "destructive", onPress: () => void remove(entry) },
+    ]);
+  };
 
   return (
     <Screen>
@@ -143,30 +185,11 @@ export default function FoodJournalScreen() {
 
           <View style={s.card}>
             <Text style={s.cardTitle}>Aujourd’hui · {formatUtcDay(todayUtc)} (UTC)</Text>
-            <Text style={s.metricValue}>
-              {formatNutrition(totalKcal)} / {formatNutrition(budgetKcal)} kcal
-            </Text>
-            {today && (
-              <Text style={s.text}>
-                Écart au budget : {totalKcal > budgetKcal ? "+" : ""}
-                {formatNutrition(totalKcal - budgetKcal)} kcal
-              </Text>
-            )}
-            <View
-              accessible
-              accessibilityLabel={`${formatNutrition(totalKcal)} kilocalories consommées sur ${formatNutrition(budgetKcal)} prévues`}
-              style={localStyles.progressTrack}
-            >
-              <View
-                style={[
-                  localStyles.progressFill,
-                  {
-                    width: `${Math.round(progress * 100)}%` as `${number}%`,
-                    backgroundColor: totalKcal > budgetKcal + 150 ? "#9a4d00" : "#087454",
-                  },
-                ]}
-              />
-            </View>
+            <DailyBudgetChart
+              total={totalKcal}
+              budget={budgetKcal}
+              hasEntries={entries.length > 0}
+            />
             <Text style={s.text}>
               {`Protéines ${formatNutrition(today?.totalProteinesG ?? 0)} g · Glucides ${formatNutrition(today?.totalGlucidesG ?? 0)} g · Lipides ${formatNutrition(today?.totalLipidesG ?? 0)} g`}
             </Text>
@@ -177,8 +200,17 @@ export default function FoodJournalScreen() {
             {entries.length === 0 ? (
               <Text style={s.text}>Aucun aliment consigné aujourd’hui.</Text>
             ) : (
-              entries.map((entry) => <Entry key={entry.id} entry={entry} />)
+              entries.map((entry) => (
+                <Entry
+                  key={entry.id}
+                  entry={entry}
+                  onRemove={() => confirmRemove(entry)}
+                  disabled={removingId !== null}
+                />
+              ))
             )}
+            {!!removeError && <Text accessibilityRole="alert" style={s.error}>{removeError}</Text>}
+            <Button title="Ajouter un aliment" onPress={() => router.push("/user/add-food")} disabled={removingId !== null} />
           </View>
           <Button title="Actualiser" onPress={() => setReload((value) => value + 1)} />
         </>
