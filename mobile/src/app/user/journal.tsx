@@ -16,6 +16,7 @@ import {
 } from "../../nutrition/presentation";
 import { FoodIcon } from "../../nutrition/FoodIcon";
 import { foodIconKind } from "../../nutrition/food-icon-kind";
+import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
 import { formatUtcDay } from "../../measurements/presentation";
 import { Button, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
@@ -40,10 +41,13 @@ function Entry({
         <Text style={[s.historyWeight, { flex: 1 }]}>{entry.nom}</Text>
         <Text style={s.label}>{formatNutrition(entry.caloriesKcal)} kcal</Text>
       </View>
-      <Text style={s.historyMeta}>
-        {formatNutrition(entry.quantiteGrammes)} g · P {formatNutrition(entry.proteinesG)} g
-        {" · "}G {formatNutrition(entry.glucidesG)} g · L {formatNutrition(entry.lipidesG)} g
-      </Text>
+      <Text style={s.historyMeta}>{formatNutrition(entry.quantiteGrammes)} g</Text>
+      <MacroBreakdown
+        variant="compact"
+        proteines={entry.proteinesG}
+        glucides={entry.glucidesG}
+        lipides={entry.lipidesG}
+      />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Retirer ${entry.nom} du journal`}
@@ -195,9 +199,11 @@ export default function FoodJournalScreen() {
               budget={budgetKcal}
               hasEntries={entries.length > 0}
             />
-            <Text style={s.text}>
-              {`Protéines ${formatNutrition(today?.totalProteinesG ?? 0)} g · Glucides ${formatNutrition(today?.totalGlucidesG ?? 0)} g · Lipides ${formatNutrition(today?.totalLipidesG ?? 0)} g`}
-            </Text>
+            <MacroBreakdown
+              proteines={today?.totalProteinesG ?? 0}
+              glucides={today?.totalGlucidesG ?? 0}
+              lipides={today?.totalLipidesG ?? 0}
+            />
           </View>
 
           <View style={s.card}>

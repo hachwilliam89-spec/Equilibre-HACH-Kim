@@ -14,6 +14,7 @@ import {
 } from "../../nutrition/presentation";
 import { FoodIcon } from "../../nutrition/FoodIcon";
 import { foodIconKind, categoryIconKind } from "../../nutrition/food-icon-kind";
+import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
 import { Button, Field, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
 
@@ -276,12 +277,14 @@ export default function AddFoodScreen() {
                 </Pressable>
               </View>
               {!!selected && (
-                <Text style={s.historyMeta}>
-                  Pour 100 g : {formatNutrition(selected.caloriesKcalPour100g)} kcal ·
-                  P {formatNutrition(selected.proteinesGPour100g)} g ·
-                  G {formatNutrition(selected.glucidesGPour100g)} g ·
-                  L {formatNutrition(selected.lipidesGPour100g)} g
-                </Text>
+                <View style={{ gap: 8 }}>
+                  <Text style={s.historyMeta}>Pour 100 g · {formatNutrition(selected.caloriesKcalPour100g)} kcal</Text>
+                  <MacroBreakdown
+                    proteines={selected.proteinesGPour100g}
+                    glucides={selected.glucidesGPour100g}
+                    lipides={selected.lipidesGPour100g}
+                  />
+                </View>
               )}
               <Field
                 label="Quantité consommée (g)"
@@ -310,9 +313,11 @@ export default function AddFoodScreen() {
                 <View style={{ gap: 5 }}>
                   <Text style={s.label}>Pour {formatNutrition(quantity!)} g</Text>
                   <Text style={s.metricValue}>{formatNutrition(preview.caloriesKcal)} kcal</Text>
-                  <Text style={s.historyMeta}>
-                    Protéines {formatNutrition(preview.proteinesG)} g · Glucides {formatNutrition(preview.glucidesG)} g · Lipides {formatNutrition(preview.lipidesG)} g
-                  </Text>
+                  <MacroBreakdown
+                    proteines={preview.proteinesG}
+                    glucides={preview.glucidesG}
+                    lipides={preview.lipidesG}
+                  />
                   <Text style={s.historyMeta}>Estimation ; le journal affichera les valeurs enregistrées par le serveur.</Text>
                 </View>
               )}
