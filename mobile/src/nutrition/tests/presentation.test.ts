@@ -29,13 +29,23 @@ it("n'affiche pas le journal d'hier comme s'il appartenait à aujourd'hui", () =
 });
 
 it("distingue la cible, la tolérance incluse et le dépassement", () => {
-  expect(dailyBudgetPresentation(1750, 1800, true).note).toContain("50 kcal restantes");
+  expect(dailyBudgetPresentation(1649, 1800, true)).toMatchObject({
+    phase: "progress",
+    note: "1 kcal avant la zone cible.",
+  });
+  expect(dailyBudgetPresentation(1650, 1800, true)).toMatchObject({
+    phase: "target",
+    zoneStart: 1650,
+    zoneEnd: 1950,
+  });
+  expect(dailyBudgetPresentation(1750, 1800, true).note).toContain("Zone cible atteinte");
   expect(dailyBudgetPresentation(1950, 1800, true)).toMatchObject({
+    phase: "target",
     overTolerance: false,
     consumedPercent: 100,
   });
-  expect(dailyBudgetPresentation(1950, 1800, true).note).toContain("dans la tolérance");
   expect(dailyBudgetPresentation(1951, 1800, true)).toMatchObject({
+    phase: "over",
     overTolerance: true,
     consumedPercent: 100,
   });
@@ -45,6 +55,7 @@ it("distingue la cible, la tolérance incluse et le dépassement", () => {
 it("ne présente pas un jour vide comme une consommation confirmée", () => {
   const display = dailyBudgetPresentation(0, 1800, false);
   expect(display.note).toBe("Aucune entrée consignée aujourd’hui.");
+  expect(display.phase).toBe("empty");
   expect(display.consumedPercent).toBe(0);
 });
 
