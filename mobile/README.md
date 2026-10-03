@@ -95,6 +95,20 @@ Le budget du jour montre la consommation en bleu, la cible par un trait gris et 
 
 L’écran recharge le poids et le budget lorsqu’il revient au premier plan, ainsi qu’après une correction manuelle ; le bouton « Actualiser » permet aussi un contrôle immédiat. La future synchronisation hors ligne devra décider quand mettre à jour les données en cache et déclencher le même rendu : le graphique ne simule pas un flux temps réel.
 
+## Journal alimentaire — US3
+
+Depuis « Mon suivi de poids », ouvrir « Mon journal alimentaire ». L’écran
+montre uniquement les entrées du jour UTC, le total calorique, les macros et
+le statut fourni par l’API. « Ajouter un aliment » interroge la bibliothèque
+en lecture seule, affiche les valeurs pour 100 g, puis estime les valeurs de la
+quantité saisie. Après l’ajout, le journal recharge les valeurs enregistrées
+par le serveur. « Retirer » demande une confirmation et recalcule le journal.
+La saisie d’une quantité nulle, négative ou supérieure à 10 000 g est refusée.
+Sans plan actif, le journal affiche un message dédié.
+
+La [recette US3](../docs/recette-us3.md) détaille les scénarios automatisés et
+les vérifications à faire sur iPhone avant de valider le déploiement.
+
 Les requêtes protégées renouvellent le jeton une seule fois en cas de 401. Un renouvellement refusé ramène à la connexion. Après une interruption réseau lors de la soumission, revenir au suivi et actualiser le plan avant de réessayer.
 
 ### Recette iPhone
