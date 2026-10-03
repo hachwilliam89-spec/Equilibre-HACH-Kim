@@ -85,7 +85,11 @@ Depuis l’accueil connecté, « Mes utilisateurs » affiche les comptes réelle
 
 Le formulaire comporte deux étapes : objectifs (poids, dates au format AAAA-MM-JJ, IMC et rythme indicatifs), puis activité, proposition de budget et validation. La proposition appelle `POST /api/plans/preview` sans enregistrement. Le coach peut ajuster le budget avant `POST /api/plans`, qui revalide les règles métier. Le plan enregistré apparaît ensuite avec la possibilité de l’annuler après confirmation.
 
-La taille est obligatoire ; sans âge ou sexe, le budget doit être saisi manuellement. La complétion du profil dans le mobile reste à implémenter : pour la recette, utiliser un utilisateur dont le profil est déjà renseigné. Aucun graphique de pesées ou d’alimentation fictives n’est affiché ; ces suivis dépendent des prochaines US.
+La taille est obligatoire ; sans âge ou sexe, le budget doit être saisi manuellement. L’utilisateur peut compléter son profil depuis l’application. Le coach voit actuellement le plan et ses données de création, mais pas encore la courbe du poids ni les calories de ses utilisateurs : les endpoints de suivi sont pour l’instant réservés au propriétaire des données.
+
+## Suivi visuel de l’utilisateur
+
+« Mon suivi de poids » affiche une courbe du poids réel et la trajectoire cible du plan actif, tracée avec `react-native-svg` (compatible Expo Go). Seules les mesures valides de ce plan, reçues pendant sa période, figurent sur la courbe ; les mesures suspectes et hors-plan restent consultables dans l’historique. En absence de mesure valide, l’écran affiche la trajectoire et un message explicite. Le budget du jour utilise le journal alimentaire réel ; en absence d’entrée aujourd’hui, il indique qu’aucune donnée n’a été consignée, sans reprendre le total d’un ancien jour.
 
 Les requêtes protégées renouvellent le jeton une seule fois en cas de 401. Un renouvellement refusé ramène à la connexion. Après une interruption réseau lors de la soumission, revenir au suivi et actualiser le plan avant de réessayer.
 

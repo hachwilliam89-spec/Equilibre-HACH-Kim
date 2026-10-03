@@ -1,6 +1,9 @@
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
+import { WeightTrajectoryChart } from "../../charts/WeightTrajectoryChart";
+import { getFoodBudgetStatus, type FoodBudgetStatus } from "../../nutrition/api";
+import { formatNutrition, journalForDay } from "../../nutrition/presentation";
 import {
   correctWeight,
   getMeasurementHistory,
@@ -42,6 +45,85 @@ function HistoryItem({ measurement }: { measurement: Measurement }) {
         {measurementSourceLabel[measurement.source]} ·{" "}
         {measurementStatusLabel[measurement.statut]}
       </Text>
+    </View>
+  );
+}
+
+function DailyBudgetCard() {
+  const [status, setStatus] = useState<FoodBudgetStatus>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [todayUtc, setTodayUtc] = useState("");
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setTodayUtc(new Date().toISOString().slice(0, 10));
+      setLoading(true);
+      setError("");
+      void getFoodBudgetStatus()
+        .then((next) => {
+          if (active) setStatus(next);
+        })
+        .catch(() => {
+          if (active) setError("Budget indisponible pour le moment.");
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
+  const today = journalForDay(status, todayUtc);
+  const total = today?.totalCaloriesKcal ?? 0;
+  const budget = status?.budgetCalorique ?? 0;
+  const progress = budget > 0 ? Math.min(Math.max(total / budget, 0), 1) : 0;
+  const remaining = budget - total;
+  const budgetNote = !today
+    ? "Aucune entrée consignée aujourd’hui."
+    : remaining > 0
+      ? `${formatNutrition(remaining)} kcal restantes`
+      : remaining < 0
+        ? `Budget dépassé de ${formatNutrition(-remaining)} kcal`
+        : "Budget atteint.";
+  return (
+    <View style={s.card}>
+      <Text style={s.cardTitle}>Budget du jour</Text>
+      {loading ? (
+        <ActivityIndicator color="#087454" accessibilityLabel="Chargement du budget calorique" />
+      ) : error ? (
+        <Text style={s.error}>{error}</Text>
+      ) : status === null ? (
+        <Text style={s.text}>Aucun plan alimentaire actif.</Text>
+      ) : (
+        <>
+          <Text style={s.metricValue}>
+            {formatNutrition(total)} / {formatNutrition(budget)} kcal
+          </Text>
+          <View
+            accessible
+            accessibilityLabel={`${formatNutrition(total)} kilocalories consignées aujourd’hui sur ${formatNutrition(budget)} prévues`}
+            style={{
+              height: 12,
+              borderRadius: 6,
+              backgroundColor: "#e4ece7",
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                height: "100%",
+                width: `${Math.round(progress * 100)}%`,
+                backgroundColor: total > budget + 150 ? "#9a4d00" : "#087454",
+              }}
+            />
+          </View>
+          <Text style={s.historyMeta}>{budgetNote}</Text>
+        </>
+      )}
     </View>
   );
 }
@@ -238,6 +320,10 @@ export default function WeightTrackingScreen() {
               </Text>
             </View>
           </View>
+          <View style={s.card}>
+            <WeightTrajectoryChart plan={tracking.plan} measurements={history} />
+          </View>
+          <DailyBudgetCard />
         </>
       )}
 
