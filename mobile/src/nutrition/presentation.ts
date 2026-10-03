@@ -1,4 +1,4 @@
-import type { FoodBudgetStatus, FoodJournal } from "./api";
+import type { FoodBudgetStatus, FoodJournal, ReferenceFood } from "./api";
 
 type Status = NonNullable<FoodBudgetStatus>["statut"];
 
@@ -37,6 +37,25 @@ export function formatNutrition(value: number): string {
   return Number(value.toFixed(1)).toLocaleString("fr-FR", {
     maximumFractionDigits: 1,
   });
+}
+
+export function parseFoodQuantity(value: string): number | null {
+  const normalized = value.trim().replace(",", ".");
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null;
+  const quantity = Number(normalized);
+  return Number.isFinite(quantity) && quantity > 0 && quantity <= 10000
+    ? quantity
+    : null;
+}
+
+export function nutritionForQuantity(food: ReferenceFood, quantity: number) {
+  const factor = quantity / 100;
+  return {
+    caloriesKcal: food.caloriesKcalPour100g * factor,
+    proteinesG: food.proteinesGPour100g * factor,
+    glucidesG: food.glucidesGPour100g * factor,
+    lipidesG: food.lipidesGPour100g * factor,
+  };
 }
 
 export const CALORIE_TOLERANCE_KCAL = 150;

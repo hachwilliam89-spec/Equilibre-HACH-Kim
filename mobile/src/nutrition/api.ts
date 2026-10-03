@@ -13,6 +13,15 @@ export const foodEntrySchema = z.object({
   receivedAt: z.string(),
 });
 
+export const referenceFoodSchema = z.object({
+  id: z.string(),
+  nom: z.string(),
+  caloriesKcalPour100g: z.number(),
+  proteinesGPour100g: z.number(),
+  glucidesGPour100g: z.number(),
+  lipidesGPour100g: z.number(),
+});
+
 export const foodJournalSchema = z.object({
   planId: z.string(),
   jourUtc: z.string(),
@@ -40,9 +49,28 @@ export const foodBudgetStatusSchema = z
 export type FoodJournal = z.infer<typeof foodJournalSchema>;
 export type FoodEntry = z.infer<typeof foodEntrySchema>;
 export type FoodBudgetStatus = z.infer<typeof foodBudgetStatusSchema>;
+export type ReferenceFood = z.infer<typeof referenceFoodSchema>;
 
 export async function getFoodBudgetStatus(): Promise<FoodBudgetStatus> {
   return foodBudgetStatusSchema.parse(
     await requestApi("/food-journals/me/status"),
+  );
+}
+
+export async function searchReferenceFoods(query: string): Promise<ReferenceFood[]> {
+  return z.array(referenceFoodSchema).parse(
+    await requestApi(`/foods?q=${encodeURIComponent(query.trim())}&size=20`),
+  );
+}
+
+export async function addFoodEntry(foodId: string, quantiteGrammes: number): Promise<FoodJournal> {
+  return foodJournalSchema.parse(
+    await requestApi("/food-journals/me/entries", "POST", { foodId, quantiteGrammes }),
+  );
+}
+
+export async function removeFoodEntry(entryId: string): Promise<FoodJournal> {
+  return foodJournalSchema.parse(
+    await requestApi(`/food-journals/me/entries/${encodeURIComponent(entryId)}`, "DELETE"),
   );
 }
