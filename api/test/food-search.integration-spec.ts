@@ -19,6 +19,14 @@ interface FoodResponse {
   lipidesGPour100g: number;
 }
 
+interface UserRow {
+  _id: string;
+  email: string;
+  passwordHash: string;
+  role: 'coach' | 'utilisateur';
+  favoriteFoodIds?: string[];
+}
+
 describe('Recherche des aliments de référence (intégration)', () => {
   let app: INestApplication<App>;
 
@@ -105,7 +113,9 @@ describe('Recherche des aliments de référence (intégration)', () => {
   it('conserve des favoris propres au compte, sans doublon et sans nouvelle collection', async () => {
     const userId = randomUUID();
     const anotherUserId = randomUUID();
-    const users = app.get<Connection>(getConnectionToken()).collection('users');
+    const users = app
+      .get<Connection>(getConnectionToken())
+      .collection<UserRow>('users');
     await users.insertMany(
       [userId, anotherUserId].map((id) => ({
         _id: id,
