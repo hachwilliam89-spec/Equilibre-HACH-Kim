@@ -18,7 +18,10 @@ interface StoredSuivi {
   journauxAlimentaires: {
     planId: string;
     jourUtc: string;
-    entrees: { aliment: { nom: string; caloriesKcalPour100g: number } }[];
+    entrees: {
+      aliment: { nom: string; caloriesKcalPour100g: number };
+      categorieRepas?: string;
+    }[];
     totalCaloriesKcal: number;
   }[];
 }
@@ -81,11 +84,20 @@ describe('Ajout d’une entrée alimentaire (intégration)', () => {
   const token = (id: string, role = 'utilisateur') =>
     app.get(JwtService).sign({ sub: id, role });
 
-  const add = (id: string, foodId: string, quantiteGrammes: unknown) =>
+  const add = (
+    id: string,
+    foodId: string,
+    quantiteGrammes: unknown,
+    categorieRepas?: string,
+  ) =>
     request(app.getHttpServer())
       .post('/api/food-journals/me/entries')
       .auth(token(id), { type: 'bearer' })
-      .send({ foodId, quantiteGrammes });
+      .send({
+        foodId,
+        quantiteGrammes,
+        ...(categorieRepas ? { categorieRepas } : {}),
+      });
 
   it('exige un utilisateur connecté, un aliment existant et une quantité valide', async () => {
     await request(app.getHttpServer())
@@ -104,13 +116,19 @@ describe('Ajout d’une entrée alimentaire (intégration)', () => {
     await add(userId, REFERENCE_FOODS[0].id, '200').expect(400);
     await add(userId, REFERENCE_FOODS[0].id, 10001).expect(400);
     await add(userId, 'invalide', 200).expect(400);
+    await add(userId, REFERENCE_FOODS[0].id, 200, 'gouter').expect(400);
     expect(
       (await collection.findOne({ _id: userId }))?.journauxAlimentaires,
     ).toEqual([]);
   });
 
   it('calcule les calories et macros pour la quantité et recalcule le total du jour', async () => {
-    const rice = await add(userId, REFERENCE_FOODS[0].id, 200).expect(201);
+    const rice = await add(
+      userId,
+      REFERENCE_FOODS[0].id,
+      200,
+      'dejeuner',
+    ).expect(201);
     expect(rice.body).toMatchObject({
       budgetCalorique: 1800,
       totalCaloriesKcal: 260,
@@ -126,6 +144,7 @@ describe('Ajout d’une entrée alimentaire (intégration)', () => {
           proteinesG: 5.4,
           glucidesG: 56,
           lipidesG: 0.6,
+          categorieRepas: 'dejeuner',
         },
       ],
     });
@@ -143,6 +162,12 @@ describe('Ajout d’une entrée alimentaire (intégration)', () => {
       nom: 'Riz blanc cuit',
       caloriesKcalPour100g: 130,
     });
+    expect(row?.journauxAlimentaires[0].entrees[0].categorieRepas).toBe(
+      'dejeuner',
+    );
+    expect(row?.journauxAlimentaires[0].entrees[1].categorieRepas).toBe(
+      'non-classe',
+    );
     expect(row?.journauxAlimentaires[0].totalCaloriesKcal).toBe(427);
     const journal = pasta.body as FoodJournalResponse;
     expect(journal.jourUtc).toBe(

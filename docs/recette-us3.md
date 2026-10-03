@@ -13,6 +13,9 @@ le statut et les entrées consommées. « Ajouter un aliment » permet de recher
 dans la bibliothèque en lecture seule, sélectionner un aliment, saisir sa
 quantité en grammes et voir une estimation avant validation. L’API fixe le jour
 UTC et renvoie les valeurs enregistrées. Le retour au journal recharge le total.
+L’utilisateur choisit le repas auquel appartient l’aliment : petit-déjeuner,
+déjeuner, dîner ou collation. Le journal regroupe les entrées par repas et affiche
+un sous-total informatif ; le budget et le statut restent ceux du jour entier.
 Chaque entrée du jour peut être retirée après confirmation ; le total et le
 statut sont alors recalculés.
 
@@ -41,6 +44,7 @@ restent informatifs.
 | Borne +150 kcal incluse, dépassement au-delà, journée absente ou ancienne | `api/src/nutrition/domain/services/food-budget-status.spec.ts`, `api/test/food-budget-status.integration-spec.ts` |
 | Parcours recherche → ajout → statut → retrait → statut vide | `api/test/us3-user-journey.integration-spec.ts` |
 | Contrats et routes appelés par le mobile | `mobile/src/nutrition/tests/api.test.ts` |
+| Classement par repas, budget quotidien inchangé, anciennes entrées « Non classé » | `api/test/food-entry.integration-spec.ts`, tests de présentation et de contrat mobiles |
 
 Depuis la racine du dépôt, avec le MongoDB de test lancé par `pnpm docker:test` :
 
@@ -61,6 +65,10 @@ Vérification locale du 3 octobre 2026 : 136/136 tests unitaires API,
 typecheck API/mobile, export iOS et Android réussis. La recette iPhone ci-dessous
 reste à confirmer après déploiement.
 
+Complément « catégories de repas » : 137 tests unitaires API, 108 tests
+d’intégration API et 61 tests mobiles réussis sur la branche dédiée, avec
+build, lint et vérification des types. La recette visuelle reste à confirmer.
+
 ## Recette à effectuer sur iPhone
 
 Utiliser un compte utilisateur ayant un plan actif et l’API de recette. Ne pas
@@ -72,9 +80,11 @@ utiliser le compte coach pour consigner les aliments.
    Rechercher un nom absent : message « Aucun aliment trouvé ».
 3. Choisir le riz et saisir `200` g : aperçu de 260 kcal, 5,4 g de protéines,
    56 g de glucides et 0,6 g de lipides. Une quantité `0` ou négative ne doit
-   pas pouvoir être envoyée.
-4. Ajouter : retour au journal avec le riz, sa quantité, ses valeurs et un total
-   de 260 kcal. Revenir au suivi de poids et vérifier le même budget du jour.
+   pas pouvoir être envoyée. Choisir « Déjeuner » ; sans choix de repas, l’ajout
+   doit être refusé avec un message clair.
+4. Ajouter : retour au journal avec le riz sous « Déjeuner », sa quantité, ses
+   valeurs, un sous-total de 260 kcal et un total journalier de 260 kcal.
+   Revenir au suivi de poids et vérifier le même budget du jour.
 5. Retirer le riz : annuler une première fois et vérifier qu’il reste, puis
    confirmer. Vérifier que la liste est vide et le total revenu à 0 kcal.
 6. Rechercher et sélectionner un autre aliment ; couper le réseau avant

@@ -11,6 +11,7 @@ import {
 import {
   foodStatusPresentation,
   formatNutrition,
+  groupEntriesByMeal,
   journalForDay,
 } from "../../nutrition/presentation";
 import { formatUtcDay } from "../../measurements/presentation";
@@ -96,6 +97,7 @@ export default function FoodJournalScreen() {
   const entries = today?.entrees.slice().sort((a, b) =>
     b.receivedAt.localeCompare(a.receivedAt),
   ) ?? [];
+  const mealGroups = groupEntriesByMeal(entries);
 
   const remove = async (entry: FoodEntry) => {
     if (removeInFlight.current) return;
@@ -200,13 +202,23 @@ export default function FoodJournalScreen() {
             {entries.length === 0 ? (
               <Text style={s.text}>Aucun aliment consigné aujourd’hui.</Text>
             ) : (
-              entries.map((entry) => (
-                <Entry
-                  key={entry.id}
-                  entry={entry}
-                  onRemove={() => confirmRemove(entry)}
-                  disabled={removingId !== null}
-                />
+              mealGroups.map((group) => (
+                <View key={group.value} style={{ gap: 4 }}>
+                  <View style={s.historyMain}>
+                    <Text accessibilityRole="header" style={s.label}>{group.label}</Text>
+                    <Text style={s.historyMeta}>
+                      {formatNutrition(group.caloriesKcal)} kcal
+                    </Text>
+                  </View>
+                  {group.entries.map((entry) => (
+                    <Entry
+                      key={entry.id}
+                      entry={entry}
+                      onRemove={() => confirmRemove(entry)}
+                      disabled={removingId !== null}
+                    />
+                  ))}
+                </View>
               ))
             )}
             {!!removeError && <Text accessibilityRole="alert" style={s.error}>{removeError}</Text>}

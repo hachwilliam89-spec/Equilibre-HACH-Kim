@@ -13,6 +13,12 @@ calcule les calories et macronutriments consommés selon
 `valeur pour 100 g × quantité / 100`, avec deux décimales. Les totaux du jour
 sont recalculés à partir des entrées après chaque ajout ou retrait.
 
+Une entrée peut être classée dans `petit-dejeuner`, `dejeuner`, `diner` ou
+`collation`. Cette catégorie sert uniquement à regrouper les aliments dans
+l'application mobile : le budget et le statut restent calculés sur le total
+de la journée. Les anciennes entrées sans catégorie sont affichées sous
+« Non classé » ; elles conservent leurs valeurs nutritionnelles.
+
 Le suivi conserve trois mois calendaires glissants de journaux, en incluant
 le jour limite UTC. Les anciens plans restent dans le document tant qu'un
 journal ou une mesure conservée les référence. Le champ `version` du suivi
@@ -28,7 +34,9 @@ Les documents `suivis` créés avant l'US3 restent lisibles : l'absence du champ
 `POST /api/food-journals/me/entries` est réservé à l'utilisateur authentifié.
 Le corps contient l'identifiant UUID d'un aliment du référentiel (`foodId`) et
 sa quantité en grammes (`quantiteGrammes`, strictement positive, maximum
-10 000 g). Un plan actif est nécessaire. L'API détermine seule la date et le
+10 000 g). `categorieRepas` est facultatif pour préserver les anciens clients ;
+sans ce champ, l'entrée est « Non classé ». Un plan actif est nécessaire.
+L'API détermine seule la date et le
 jour UTC de réception, puis crée ou complète le journal de ce jour.
 
 La réponse `201` contient l'entrée et le journal avec ses totaux immédiatement

@@ -86,4 +86,12 @@ describe('Journal alimentaire quotidien', () => {
     ).toThrow('jour UTC');
     expect(journal.toProps().entrees).toHaveLength(0);
   });
+
+  it('relit une ancienne entrée sans catégorie sans changer ses calories', () => {
+    const oldEntry = entry(0, 200).toProps();
+    delete oldEntry.categorieRepas;
+    const restored = FoodEntry.restore(oldEntry).toProps();
+    expect(restored.categorieRepas).toBe('non-classe');
+    expect(restored.caloriesKcal).toBe(260);
+  });
 });

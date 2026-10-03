@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { requestApi } from "../plans/api";
 
+export const mealCategorySchema = z.enum([
+  "petit-dejeuner",
+  "dejeuner",
+  "diner",
+  "collation",
+  "non-classe",
+]);
+
 export const foodEntrySchema = z.object({
   id: z.string(),
   foodId: z.string(),
@@ -10,6 +18,7 @@ export const foodEntrySchema = z.object({
   proteinesG: z.number(),
   glucidesG: z.number(),
   lipidesG: z.number(),
+  categorieRepas: mealCategorySchema.default("non-classe"),
   receivedAt: z.string(),
 });
 
@@ -48,6 +57,7 @@ export const foodBudgetStatusSchema = z
 
 export type FoodJournal = z.infer<typeof foodJournalSchema>;
 export type FoodEntry = z.infer<typeof foodEntrySchema>;
+export type MealCategory = z.infer<typeof mealCategorySchema>;
 export type FoodBudgetStatus = z.infer<typeof foodBudgetStatusSchema>;
 export type ReferenceFood = z.infer<typeof referenceFoodSchema>;
 
@@ -63,9 +73,17 @@ export async function searchReferenceFoods(query: string): Promise<ReferenceFood
   );
 }
 
-export async function addFoodEntry(foodId: string, quantiteGrammes: number): Promise<FoodJournal> {
+export async function addFoodEntry(
+  foodId: string,
+  quantiteGrammes: number,
+  categorieRepas?: MealCategory,
+): Promise<FoodJournal> {
   return foodJournalSchema.parse(
-    await requestApi("/food-journals/me/entries", "POST", { foodId, quantiteGrammes }),
+    await requestApi("/food-journals/me/entries", "POST", {
+      foodId,
+      quantiteGrammes,
+      ...(categorieRepas ? { categorieRepas } : {}),
+    }),
   );
 }
 

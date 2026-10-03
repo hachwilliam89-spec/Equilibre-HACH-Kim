@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { DailyFoodJournal } from '../../domain/entities/daily-food-journal.entity';
+import {
+  MEAL_CATEGORIES,
+  type MealCategory,
+} from '../../domain/entities/food-entry.entity';
 
 export class FoodEntryDto {
   @ApiProperty({ format: 'uuid' }) id: string;
@@ -10,6 +14,7 @@ export class FoodEntryDto {
   @ApiProperty() proteinesG: number;
   @ApiProperty() glucidesG: number;
   @ApiProperty() lipidesG: number;
+  @ApiProperty({ enum: MEAL_CATEGORIES }) categorieRepas: MealCategory;
   @ApiProperty({ format: 'date-time' }) receivedAt: string;
 }
 
@@ -41,6 +46,7 @@ export function toFoodJournalDto(journal: DailyFoodJournal): FoodJournalDto {
         proteinesG: item.proteinesG,
         glucidesG: item.glucidesG,
         lipidesG: item.lipidesG,
+        categorieRepas: item.categorieRepas ?? 'non-classe',
         receivedAt: item.receivedAt.toISOString(),
       };
     }),

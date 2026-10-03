@@ -1,10 +1,11 @@
 import {
   dailyBudgetPresentation,
+  groupEntriesByMeal,
   journalForDay,
   nutritionForQuantity,
   parseFoodQuantity,
 } from "../presentation";
-import type { FoodBudgetStatus } from "../api";
+import type { FoodBudgetStatus, FoodEntry } from "../api";
 
 const status: FoodBudgetStatus = {
   statut: "dans-le-budget",
@@ -67,4 +68,24 @@ it("refuse une quantité vide, nulle, négative ou hors limite", () => {
   for (const invalid of ["", "0", "-1", "1e3", "10001", "1,2,3"]) {
     expect(parseFoodQuantity(invalid)).toBeNull();
   }
+});
+
+it("regroupe les aliments par repas sans changer le total calorique journalier", () => {
+  const base: FoodEntry = {
+    id: "entry-1", foodId: "food-1", nom: "Riz", quantiteGrammes: 100,
+    caloriesKcal: 130, proteinesG: 2.7, glucidesG: 28, lipidesG: 0.3,
+    categorieRepas: "dejeuner", receivedAt: "2026-10-03T12:00:00Z",
+  };
+  const groups = groupEntriesByMeal([
+    base,
+    { ...base, id: "entry-2", categorieRepas: "collation", caloriesKcal: 80 },
+    { ...base, id: "entry-3", categorieRepas: "dejeuner", caloriesKcal: 50 },
+    { ...base, id: "entry-4", categorieRepas: "non-classe", caloriesKcal: 40 },
+  ]);
+  expect(groups.map(({ label, caloriesKcal }) => ({ label, caloriesKcal }))).toEqual([
+    { label: "Déjeuner", caloriesKcal: 180 },
+    { label: "Collation", caloriesKcal: 80 },
+    { label: "Non classé", caloriesKcal: 40 },
+  ]);
+  expect(groups.reduce((total, group) => total + group.caloriesKcal, 0)).toBe(300);
 });

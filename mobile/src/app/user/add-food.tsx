@@ -4,10 +4,12 @@ import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-nativ
 import {
   addFoodEntry,
   searchReferenceFoods,
+  type MealCategory,
   type ReferenceFood,
 } from "../../nutrition/api";
 import {
   formatNutrition,
+  mealCategories,
   nutritionForQuantity,
   parseFoodQuantity,
 } from "../../nutrition/presentation";
@@ -22,6 +24,7 @@ export default function AddFoodScreen() {
   const [searchNonce, setSearchNonce] = useState(0);
   const [selected, setSelected] = useState<ReferenceFood | null>(null);
   const [quantityText, setQuantityText] = useState("");
+  const [mealCategory, setMealCategory] = useState<MealCategory | null>(null);
   const [submitError, setSubmitError] = useState("");
   const [busy, setBusy] = useState(false);
   const submitInFlight = useRef(false);
@@ -82,11 +85,15 @@ export default function AddFoodScreen() {
       setSubmitError("Saisissez une quantité supérieure à 0 g et au plus égale à 10 000 g.");
       return;
     }
+    if (mealCategory === null) {
+      setSubmitError("Choisissez le repas associé à cet aliment.");
+      return;
+    }
     submitInFlight.current = true;
     setBusy(true);
     setSubmitError("");
     try {
-      await addFoodEntry(selected.id, quantity);
+      await addFoodEntry(selected.id, quantity, mealCategory);
       router.replace("/user/journal");
     } catch (cause) {
       setSubmitError(
@@ -178,6 +185,32 @@ export default function AddFoodScreen() {
             numeric
             disabled={busy}
           />
+          <Text style={s.label}>Repas</Text>
+          <Text style={s.historyMeta}>Ce choix organise le journal ; le budget reste celui de la journée.</Text>
+          <View style={s.choiceRow}>
+            {mealCategories.map(({ value, label }) => (
+              <Pressable
+                key={value}
+                accessibilityRole="radio"
+                accessibilityLabel={label}
+                accessibilityState={{ checked: mealCategory === value }}
+                disabled={busy}
+                onPress={() => {
+                  setMealCategory(value);
+                  setSubmitError("");
+                }}
+                style={[
+                  s.choice,
+                  { flexGrow: 1, minWidth: 100, alignItems: "center" },
+                  mealCategory === value && s.choiceSelected,
+                ]}
+              >
+                <Text style={s.label}>
+                  {value === "petit-dejeuner" ? "Petit-déj." : label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           {preview && (
             <View style={{ gap: 5 }}>
               <Text style={s.label}>Pour {formatNutrition(quantity!)} g</Text>
