@@ -26,11 +26,13 @@ export function MacroBreakdown({
   glucides,
   lipides,
   variant = "full",
+  targets,
 }: {
   proteines: number;
   glucides: number;
   lipides: number;
   variant?: "full" | "compact";
+  targets?: { proteines: number; glucides: number; lipides: number };
 }) {
   const values: Record<MacroKey, number> = { proteines, glucides, lipides };
   const energy = MACROS.map((m) => Math.max(0, values[m.key]) * m.kcalParGramme);
@@ -90,7 +92,13 @@ export function MacroBreakdown({
             <Text style={{ fontSize: 17, fontWeight: "800", color: "#173b33" }}>
               {formatNutrition(values[m.key])} g
             </Text>
-            <Text style={{ fontSize: 12, color: "#7a8a84" }}>{percent(i)} % des macros</Text>
+            {targets ? (
+              <Text style={{ fontSize: 12, color: values[m.key] > targets[m.key] ? m.color : "#7a8a84" }}>
+                cible {formatNutrition(targets[m.key])} g
+              </Text>
+            ) : (
+              <Text style={{ fontSize: 12, color: "#7a8a84" }}>{percent(i)} % des macros</Text>
+            )}
           </View>
         ))}
       </View>

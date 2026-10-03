@@ -227,7 +227,19 @@ export default function FoodJournalScreen() {
               proteines={today?.totalProteinesG ?? 0}
               glucides={today?.totalGlucidesG ?? 0}
               lipides={today?.totalLipidesG ?? 0}
+              targets={
+                status.ciblesMacros
+                  ? {
+                      proteines: status.ciblesMacros.proteinesG,
+                      glucides: status.ciblesMacros.glucidesG,
+                      lipides: status.ciblesMacros.lipidesG,
+                    }
+                  : undefined
+              }
             />
+            <Text style={s.historyMeta}>
+              Cibles indicatives selon ton budget et ton activité ; le suivi reste calorique.
+            </Text>
           </View>
 
           <View style={s.card}>
