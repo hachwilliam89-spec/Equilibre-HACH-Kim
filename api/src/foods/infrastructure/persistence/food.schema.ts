@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import {
+  FOOD_CATEGORIES,
+  type FoodCategory,
+} from '../../domain/entities/food.entity';
 
 @Schema({
   collection: 'aliments',
@@ -16,6 +20,9 @@ export class FoodDocumentClass {
 
   @Prop({ type: String, required: true })
   nomNormalise: string;
+
+  @Prop({ type: String, required: true, enum: FOOD_CATEGORIES })
+  categorie: FoodCategory;
 
   @Prop({ type: Number, required: true, min: 0, max: 1000 })
   caloriesKcalPour100g: number;
@@ -38,3 +45,4 @@ export const FoodSchema = SchemaFactory.createForClass(FoodDocumentClass);
 
 // Sert a la fois l'unicite du referentiel et la future recherche par prefixe.
 FoodSchema.index({ nomNormalise: 1 }, { unique: true });
+FoodSchema.index({ categorie: 1, nomNormalise: 1 });

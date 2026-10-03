@@ -6,12 +6,13 @@ peuvent ni en créer, ni en modifier, ni en supprimer.
 
 Chaque document utilise un UUID applicatif stable et contient :
 
-- le nom affiché et sa forme normalisée pour la recherche sans casse ni accent ;
+- le nom affiché, sa forme normalisée et sa famille alimentaire ;
 - les calories en kcal pour 100 g ;
 - les protéines, glucides et lipides en grammes pour 100 g.
 
-Un index unique sur `nomNormalise` empêche les doublons et prépare la recherche
-par nom. Au démarrage de l'API, un seed fait des mises à jour avec `upsert` sur
+Un index unique sur `nomNormalise` empêche les doublons ; un index
+`categorie, nomNormalise` facilite le parcours par famille. Au démarrage de
+l'API, un seed fait des mises à jour avec `upsert` sur
 des identifiants fixes. Le relancer corrige le référentiel sans créer de
 doublon.
 
@@ -20,20 +21,39 @@ doublon.
 `GET /api/foods` est accessible à un coach ou un utilisateur connecté, même
 sans plan actif. Le paramètre facultatif `q` cherche une partie du nom sans
 tenir compte de la casse ni des accents (par exemple `pates` retrouve
-« Pâtes cuites » et `oeuf` retrouve « Œuf dur »). Sans `q`, la liste entière
-est consultable. Les caractères spéciaux sont cherchés littéralement.
+« Pâtes cuites » et `oeuf` retrouve « Œuf dur »). Le paramètre facultatif
+`categorie` filtre parmi les familles (féculents, légumineuses, viandes,
+poissons, œufs, légumes, fruits, produits laitiers et autres). Sans `q`, les
+aliments restent consultables par pages. Les caractères spéciaux sont cherchés
+littéralement.
 
 Les résultats sont triés par nom normalisé puis par identifiant, et paginés
 avec `page` (défaut 1) et `size` (défaut 20, maximum 50). La réponse est un
 tableau d'aliments avec leurs valeurs pour 100 g ; une recherche sans résultat
 renvoie `200` et un tableau vide. Les paramètres invalides renvoient `400`.
-La bibliothèque est en lecture seule : le calcul des valeurs pour la quantité
-consommée sera effectué lors de l'ajout d'une entrée au journal.
+La bibliothèque est en lecture seule : les valeurs pour la quantité consommée
+sont calculées lors de l'ajout d'une entrée au journal. L'écran mobile montre
+les aliments dès l'ouverture, permet de parcourir les familles et d'ouvrir une
+fenêtre de saisie de quantité. Après ajout, la fenêtre se ferme et la liste
+reste affichée pour consigner un autre aliment.
+
+## Favoris
+
+Un utilisateur peut marquer ou retirer un aliment de référence en favori.
+`GET /api/foods/me/favorites` retourne ses favoris ;
+`PUT /api/foods/me/favorites/{foodId}` et
+`DELETE /api/foods/me/favorites/{foodId}` les modifient de façon idempotente.
+Les identifiants favoris sont imbriqués dans le document `users` du compte ;
+MongoDB applique `$addToSet` et `$pull` atomiquement, sans collection de
+liaison ni modification du référentiel commun. Les favoris sont accessibles
+sur les autres appareils avec le même compte. Seul le rôle utilisateur peut
+utiliser ces routes.
 
 ## Provenance des données
 
-Le MVP embarque un sous-ensemble court d'aliments courants, et non l'ensemble
-des 3 484 références disponibles. Les valeurs proviennent de :
+Le MVP embarque 54 aliments courants répartis en neuf familles, et non
+l'ensemble de la base Ciqual. Cela rend le parcours utile tout en gardant le
+référentiel contrôlé en lecture seule. Les valeurs proviennent de :
 
 > Anses. 2025. Table de composition nutritionnelle des aliments Ciqual 2025.
 > https://doi.org/10.57745/RDMHWY

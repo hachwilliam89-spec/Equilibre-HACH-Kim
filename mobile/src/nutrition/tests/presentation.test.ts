@@ -63,6 +63,7 @@ it("accepte une quantité française et estime calories et macros pour 200 g", (
   expect(parseFoodQuantity("200,0")).toBe(200);
   expect(nutritionForQuantity({
     id: "food-1", nom: "Riz blanc cuit",
+    categorie: "feculents",
     caloriesKcalPour100g: 130,
     proteinesGPour100g: 2.7,
     glucidesGPour100g: 28,

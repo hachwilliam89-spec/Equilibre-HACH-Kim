@@ -10,9 +10,11 @@ persistant (US5) sont des travaux distincts.
 Un utilisateur connecté avec un plan actif ouvre « Mon journal alimentaire ».
 Il voit le total et les macronutriments du jour UTC, la cible calorique du plan,
 le statut et les entrées consommées. « Ajouter un aliment » permet de rechercher
-dans la bibliothèque en lecture seule, sélectionner un aliment, saisir sa
-quantité en grammes et voir une estimation avant validation. L’API fixe le jour
-UTC et renvoie les valeurs enregistrées. Le retour au journal recharge le total.
+dans la bibliothèque en lecture seule, parcourir les familles, rechercher un
+aliment ou retrouver ses favoris, puis saisir sa quantité en grammes dans une
+fenêtre dédiée et voir une estimation avant validation. Après ajout, il revient
+à la liste pour pouvoir consigner un autre aliment. L’API fixe le jour UTC et
+renvoie les valeurs enregistrées. Le retour au journal recharge le total.
 L’utilisateur choisit le repas auquel appartient l’aliment : petit-déjeuner,
 déjeuner, dîner ou collation. Le journal regroupe les entrées par repas et affiche
 un sous-total informatif ; le budget et le statut restent ceux du jour entier.
@@ -22,6 +24,8 @@ statut sont alors recalculés.
 | Fonction | Route API | Règle visible |
 | --- | --- | --- |
 | Recherche par nom | `GET /api/foods?q=...` | Liste vide explicite ; valeurs affichées pour 100 g |
+| Parcours par famille | `GET /api/foods?categorie=...` | Bibliothèque visible dès l’ouverture ; pagination |
+| Favoris | `GET/PUT/DELETE /api/foods/me/favorites...` | Sélection propre au compte utilisateur |
 | Ajout | `POST /api/food-journals/me/entries` | Quantité > 0 et ≤ 10 000 g ; calories et macros proportionnelles |
 | Retrait | `DELETE /api/food-journals/me/entries/{entryId}` | Confirmation ; entrée retirée du journal |
 | Statut et total | `GET /api/food-journals/me/status` | Dépassement seulement au-delà de budget + 150 kcal |
@@ -60,10 +64,10 @@ pnpm --dir mobile exec expo export --platform ios --platform android
 Ces tests vérifient les règles et les contrats. L’export Expo valide le bundle,
 mais ne remplace pas une recette visuelle sur appareil.
 
-Vérification locale du 3 octobre 2026 : 136/136 tests unitaires API,
-108/108 tests d’intégration API avec MongoDB, 59/59 tests mobiles, lint et
-typecheck API/mobile, export iOS et Android réussis. La recette iPhone ci-dessous
-reste à confirmer après déploiement.
+Vérification locale du 3 octobre 2026 : 137/137 tests unitaires API,
+110/110 tests d’intégration API avec MongoDB, 67/67 tests mobiles, lint et
+typecheck API/mobile et export iOS/Android réussis. La recette iPhone reste à
+confirmer pour cette évolution après déploiement.
 
 Complément « catégories de repas » : 137 tests unitaires API, 108 tests
 d’intégration API et 61 tests mobiles réussis sur la branche dédiée, avec

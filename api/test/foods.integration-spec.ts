@@ -10,6 +10,7 @@ interface FoodRow {
   _id: string;
   nom: string;
   nomNormalise: string;
+  categorie: string;
   caloriesKcalPour100g: number;
   proteinesGPour100g: number;
   glucidesGPour100g: number;
@@ -46,6 +47,7 @@ describe("Bibliotheque d'aliments (integration)", () => {
       expect.objectContaining({
         nom: 'Riz blanc cuit',
         nomNormalise: 'riz blanc cuit',
+        categorie: 'feculents',
         caloriesKcalPour100g: 130,
         proteinesGPour100g: 2.7,
         glucidesGPour100g: 28,

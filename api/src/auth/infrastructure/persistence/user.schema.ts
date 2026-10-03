@@ -43,6 +43,10 @@ export class UserDocumentClass {
   @Prop({ type: String, ref: 'UserDocumentClass' })
   coachId?: string;
 
+  // Préférences propres au compte : aucune collection de liaison nécessaire.
+  @Prop({ type: [String], default: [] })
+  favoriteFoodIds: string[];
+
   // Non decorees en @Prop() : gerees automatiquement par { timestamps: true }
   // ci-dessus. Declarees ici uniquement pour que TypeScript connaisse leur
   // existence et leur type, sans avoir besoin d'un cast "as any" cote repository.
