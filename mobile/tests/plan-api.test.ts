@@ -42,3 +42,9 @@ test("une erreur metier conserve son message et ne relance pas le POST", async (
   await expect(requestApi("/plans", "POST", {})).rejects.toThrow("Un plan actif existe déjà.");
   expect(global.fetch).toHaveBeenCalledTimes(1); expect(refresh).not.toHaveBeenCalled();
 });
+test("une réponse 204 sans corps valide une modification de favori", async () => {
+  const json = jest.fn(() => { throw new Error("Aucun corps JSON"); });
+  (global.fetch as jest.Mock).mockResolvedValue({ status: 204, ok: true, json });
+  await expect(requestApi("/foods/me/favorites/food-1", "PUT")).resolves.toBeNull();
+  expect(json).not.toHaveBeenCalled();
+});

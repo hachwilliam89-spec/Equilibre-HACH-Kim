@@ -3,6 +3,8 @@ import {
   addFoodEntry,
   removeFoodEntry,
   searchReferenceFoods,
+  getFavoriteFoods,
+  setFavoriteFood,
 } from "../api";
 
 jest.mock("../../plans/api", () => ({ requestApi: jest.fn() }));
@@ -10,6 +12,7 @@ jest.mock("../../plans/api", () => ({ requestApi: jest.fn() }));
 const food = {
   id: "food-1",
   nom: "Riz blanc cuit",
+  categorie: "feculents",
   caloriesKcalPour100g: 130,
   proteinesGPour100g: 2.7,
   glucidesGPour100g: 28,
@@ -24,6 +27,7 @@ const journal = {
     id: "entry-1", foodId: food.id, nom: food.nom,
     quantiteGrammes: 200, caloriesKcal: 260,
     proteinesG: 5.4, glucidesG: 56, lipidesG: 0.6,
+    categorieRepas: "dejeuner",
     receivedAt: "2026-10-03T07:00:00.000Z",
   }],
   totalCaloriesKcal: 260,
@@ -37,16 +41,43 @@ beforeEach(() => jest.clearAllMocks());
 it("encode la recherche et valide la bibliothèque en lecture seule", async () => {
   (requestApi as jest.Mock).mockResolvedValue([food]);
   await expect(searchReferenceFoods(" riz cuit ")).resolves.toEqual([food]);
-  expect(requestApi).toHaveBeenCalledWith("/foods?q=riz%20cuit&size=20");
+  expect(requestApi).toHaveBeenCalledWith("/foods?q=riz%20cuit&size=50&page=1");
 });
 
-it("envoie l'aliment et la quantité puis lit le journal recalculé", async () => {
+it("filtre par famille et charge les favoris du compte", async () => {
+  (requestApi as jest.Mock).mockResolvedValue([food]);
+  await expect(searchReferenceFoods("yaourt", "produits-laitiers", 2)).resolves.toEqual([food]);
+  expect(requestApi).toHaveBeenCalledWith("/foods?q=yaourt&size=50&page=2&categorie=produits-laitiers");
+  await expect(getFavoriteFoods()).resolves.toEqual([food]);
+  expect(requestApi).toHaveBeenCalledWith("/foods/me/favorites");
+});
+
+it("ajoute et retire un favori sur le compte", async () => {
+  (requestApi as jest.Mock).mockResolvedValue(null);
+  await setFavoriteFood(food.id, true);
+  await setFavoriteFood(food.id, false);
+  expect(requestApi).toHaveBeenNthCalledWith(1, "/foods/me/favorites/food-1", "PUT");
+  expect(requestApi).toHaveBeenNthCalledWith(2, "/foods/me/favorites/food-1", "DELETE");
+});
+
+it("envoie l'aliment, la quantité et le repas puis lit le journal recalculé", async () => {
   (requestApi as jest.Mock).mockResolvedValue(journal);
-  await expect(addFoodEntry(food.id, 200)).resolves.toEqual(journal);
+  await expect(addFoodEntry(food.id, 200, "dejeuner")).resolves.toEqual(journal);
   expect(requestApi).toHaveBeenCalledWith("/food-journals/me/entries", "POST", {
     foodId: food.id,
     quantiteGrammes: 200,
+    categorieRepas: "dejeuner",
   });
+});
+
+it("lit une ancienne entrée sans catégorie comme non classée", async () => {
+  const oldJournal = {
+    ...journal,
+    entrees: [{ ...journal.entrees[0], categorieRepas: undefined }],
+  };
+  (requestApi as jest.Mock).mockResolvedValue(oldJournal);
+  const result = await removeFoodEntry("entry-1");
+  expect(result.entrees[0].categorieRepas).toBe("non-classe");
 });
 
 it("retire une entrée par son identifiant et lit le total recalculé", async () => {

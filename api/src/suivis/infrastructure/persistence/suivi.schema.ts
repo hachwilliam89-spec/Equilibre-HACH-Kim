@@ -2,7 +2,10 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
 import type { MeasurementProps } from '../../../measurements/domain/entities/measurement.entity';
 import type { PlanProps } from '../../../plans/domain/entities/plan.entity';
-import type { FoodEntryProps } from '../../../nutrition/domain/entities/food-entry.entity';
+import {
+  MEAL_CATEGORIES,
+  type FoodEntryProps,
+} from '../../../nutrition/domain/entities/food-entry.entity';
 
 const PlanEmbeddedSchema = new MongooseSchema(
   {
@@ -81,6 +84,11 @@ const FoodEntryEmbeddedSchema = new MongooseSchema(
     proteinesG: { type: Number, required: true, min: 0 },
     glucidesG: { type: Number, required: true, min: 0 },
     lipidesG: { type: Number, required: true, min: 0 },
+    categorieRepas: {
+      type: String,
+      enum: MEAL_CATEGORIES,
+      default: 'non-classe',
+    },
     receivedAt: { type: Date, required: true },
   },
   { _id: false },

@@ -47,11 +47,14 @@ export class FoodJournalsController {
   @ApiOperation({
     summary: 'Ajouter un aliment consommé au journal du jour UTC',
     description:
-      'Le serveur détermine le jour UTC, copie les valeurs pour 100 g du référentiel et calcule les valeurs consommées selon la quantité. Le journal et ses totaux sont renvoyés immédiatement.',
+      'Le serveur détermine le jour UTC, copie les valeurs pour 100 g du référentiel et calcule les valeurs consommées selon la quantité. La catégorie de repas sert uniquement au classement visuel ; le budget reste quotidien. Le journal et ses totaux sont renvoyés immédiatement.',
   })
   @ApiBody({ type: AddFoodEntryDto })
   @ApiResponse({ status: 201, type: FoodJournalDto })
-  @ApiResponse({ status: 400, description: 'Aliment ou quantité invalide' })
+  @ApiResponse({
+    status: 400,
+    description: 'Aliment, quantité ou catégorie de repas invalide',
+  })
   @ApiResponse({ status: 401, description: 'Authentification requise' })
   @ApiResponse({ status: 403, description: 'Réservé au rôle utilisateur' })
   @ApiResponse({ status: 404, description: 'Aliment introuvable' })
@@ -69,6 +72,7 @@ export class FoodJournalsController {
       request.user.sub,
       body.foodId,
       body.quantiteGrammes,
+      body.categorieRepas,
     );
     return toFoodJournalDto(journal);
   }

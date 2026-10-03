@@ -2,6 +2,7 @@
 export const CHART_COLORS = {
   measured: "#087454",
   nutrition: "#25677a",
+  nutritionTargetZone: "#d8eee0",
   target: "#536861",
   warning: "#9a4d00",
   grid: "#e4ece7",

@@ -13,6 +13,16 @@ export type FoodSnapshot = Pick<
   | 'lipidesGPour100g'
 >;
 
+export const MEAL_CATEGORIES = [
+  'petit-dejeuner',
+  'dejeuner',
+  'diner',
+  'collation',
+  'non-classe',
+] as const;
+
+export type MealCategory = (typeof MEAL_CATEGORIES)[number];
+
 export interface FoodEntryProps {
   id: string;
   aliment: FoodSnapshot;
@@ -22,6 +32,8 @@ export interface FoodEntryProps {
   glucidesG: number;
   lipidesG: number;
   receivedAt: Date;
+  // Facultatif pour relire les entrées enregistrées avant le classement par repas.
+  categorieRepas?: MealCategory;
 }
 
 export interface FoodEntryCreateProps {
@@ -29,6 +41,7 @@ export interface FoodEntryCreateProps {
   aliment: FoodProps;
   quantiteGrammes: number;
   receivedAt: Date;
+  categorieRepas?: MealCategory;
 }
 
 export function arrondirCentiemes(value: number): number {
@@ -68,6 +81,7 @@ export class FoodEntry {
       glucidesG: arrondirCentiemes(food.glucidesGPour100g * coefficient),
       lipidesG: arrondirCentiemes(food.lipidesGPour100g * coefficient),
       receivedAt: new Date(input.receivedAt),
+      categorieRepas: input.categorieRepas ?? 'non-classe',
     });
   }
 
@@ -76,6 +90,7 @@ export class FoodEntry {
       ...props,
       aliment: { ...props.aliment },
       receivedAt: new Date(props.receivedAt),
+      categorieRepas: props.categorieRepas ?? 'non-classe',
     });
   }
 

@@ -20,6 +20,7 @@ export class ReferenceFoodsSeed implements OnApplicationBootstrap {
             $set: {
               nom: food.nom,
               nomNormalise: food.nomNormalise,
+              categorie: food.categorie,
               caloriesKcalPour100g: food.caloriesKcalPour100g,
               proteinesGPour100g: food.proteinesGPour100g,
               glucidesGPour100g: food.glucidesGPour100g,

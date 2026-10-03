@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { requestApi } from "../plans/api";
 
+export const mealCategorySchema = z.enum([
+  "petit-dejeuner",
+  "dejeuner",
+  "diner",
+  "collation",
+  "non-classe",
+]);
+
 export const foodEntrySchema = z.object({
   id: z.string(),
   foodId: z.string(),
@@ -10,12 +18,17 @@ export const foodEntrySchema = z.object({
   proteinesG: z.number(),
   glucidesG: z.number(),
   lipidesG: z.number(),
+  categorieRepas: mealCategorySchema.default("non-classe"),
   receivedAt: z.string(),
 });
 
 export const referenceFoodSchema = z.object({
   id: z.string(),
   nom: z.string(),
+  categorie: z.enum([
+    "feculents", "legumineuses", "viandes", "poissons", "oeufs",
+    "legumes", "fruits", "produits-laitiers", "autres",
+  ]),
   caloriesKcalPour100g: z.number(),
   proteinesGPour100g: z.number(),
   glucidesGPour100g: z.number(),
@@ -48,8 +61,10 @@ export const foodBudgetStatusSchema = z
 
 export type FoodJournal = z.infer<typeof foodJournalSchema>;
 export type FoodEntry = z.infer<typeof foodEntrySchema>;
+export type MealCategory = z.infer<typeof mealCategorySchema>;
 export type FoodBudgetStatus = z.infer<typeof foodBudgetStatusSchema>;
 export type ReferenceFood = z.infer<typeof referenceFoodSchema>;
+export type FoodCategory = ReferenceFood["categorie"];
 
 export async function getFoodBudgetStatus(): Promise<FoodBudgetStatus> {
   return foodBudgetStatusSchema.parse(
@@ -57,15 +72,33 @@ export async function getFoodBudgetStatus(): Promise<FoodBudgetStatus> {
   );
 }
 
-export async function searchReferenceFoods(query: string): Promise<ReferenceFood[]> {
+export async function searchReferenceFoods(query: string, category?: FoodCategory, page = 1): Promise<ReferenceFood[]> {
+  const params = `q=${encodeURIComponent(query.trim())}&size=50&page=${page}` +
+    (category ? `&categorie=${encodeURIComponent(category)}` : "");
   return z.array(referenceFoodSchema).parse(
-    await requestApi(`/foods?q=${encodeURIComponent(query.trim())}&size=20`),
+    await requestApi(`/foods?${params}`),
   );
 }
 
-export async function addFoodEntry(foodId: string, quantiteGrammes: number): Promise<FoodJournal> {
+export async function getFavoriteFoods(): Promise<ReferenceFood[]> {
+  return z.array(referenceFoodSchema).parse(await requestApi("/foods/me/favorites"));
+}
+
+export async function setFavoriteFood(foodId: string, favorite: boolean): Promise<void> {
+  await requestApi(`/foods/me/favorites/${encodeURIComponent(foodId)}`, favorite ? "PUT" : "DELETE");
+}
+
+export async function addFoodEntry(
+  foodId: string,
+  quantiteGrammes: number,
+  categorieRepas?: MealCategory,
+): Promise<FoodJournal> {
   return foodJournalSchema.parse(
-    await requestApi("/food-journals/me/entries", "POST", { foodId, quantiteGrammes }),
+    await requestApi("/food-journals/me/entries", "POST", {
+      foodId,
+      quantiteGrammes,
+      ...(categorieRepas ? { categorieRepas } : {}),
+    }),
   );
 }
 
