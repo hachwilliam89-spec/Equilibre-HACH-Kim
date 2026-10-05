@@ -253,8 +253,8 @@ deploy_serveur_ecole:
     - if: '$CI_COMMIT_BRANCH == "FR403-cibles-macronutriments"'
   script:
     - cd /home/uha40/equilibre-hach-kim
-    - git fetch --all --prune
-    - git reset --hard "origin/$CI_COMMIT_BRANCH"
+    - git fetch "https://gitlab-ci-token:${CI_JOB_TOKEN}@git.uha4point0.fr/UHA40/fil-rouge-2026/4.0.3/equilibre-hach-kim.git" "$CI_COMMIT_BRANCH"
+    - git reset --hard FETCH_HEAD
     - docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build
     - docker image prune -f
   environment:
