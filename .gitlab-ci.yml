@@ -16,3 +16,31 @@ deploy_serveur_ecole:
   environment:
     name: ecole-dev
     url: http://10.6.0.8:3000/api
+
+# Deploiement serveur ecole (UHA interne). Jumeau de deploy:recette, cible
+# surchargee au niveau du job ; tourne en parallele de la recette OVH.
+deploy:ecole:
+  stage: deploy
+  image: alpine:3.22
+  dependencies: ["docker:build"]
+  resource_group: ecole-uha
+  interruptible: false
+  timeout: 15 minutes
+  variables:
+    DEPLOY_HOST: "10.6.0.8"
+    DEPLOY_USER: "uha40"
+  environment:
+    name: ecole
+    url: http://10.6.0.8:3000/api
+  rules:
+    - if: '$DEPLOY_ECOLE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
+      when: manual
+      allow_failure: true
+  before_script:
+    - for i in 1 2 3; do apk add --no-cache openssh-client bash && break || sleep 5; done
+    - test -s "$SSH_PRIVATE_KEY_ECOLE" && test -s "$SSH_KNOWN_HOSTS_ECOLE"
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - cp "$SSH_PRIVATE_KEY_ECOLE" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+    - cp "$SSH_KNOWN_HOSTS_ECOLE" ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+  script:
+    - bash scripts/deploy-via-ssh.sh
