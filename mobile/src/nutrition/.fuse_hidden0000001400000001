@@ -40,7 +40,7 @@ const normalize = (name: string) => name.normalize("NFD")
  * cacahuète » avant « beurre », « pomme de terre » avant « pomme »).
  * Présentation uniquement : les noms et les calculs restent ceux de l'API.
  */
-const RULES: readonly (readonly [RegExp, FoodIconKind])[] = [
+const RULES: ReadonlyArray<readonly [RegExp, FoodIconKind]> = [
   // Autres (pièges de préfixe en premier)
   [/beurre de cacahuete/, "peanutButter"],
   [/beurre/, "butter"],

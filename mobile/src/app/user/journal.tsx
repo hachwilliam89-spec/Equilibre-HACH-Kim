@@ -1,8 +1,9 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { DailyBudgetChart } from "../../charts/DailyBudgetChart";
 import {
+  addFoodEntry,
   getFoodBudgetStatus,
   removeFoodEntry,
   type FoodBudgetStatus,
@@ -16,6 +17,7 @@ import {
 } from "../../nutrition/presentation";
 import { FoodIcon } from "../../nutrition/FoodIcon";
 import { foodIconKind } from "../../nutrition/food-icon-kind";
+import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
 import { formatUtcDay } from "../../measurements/presentation";
 import { Button, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
@@ -40,10 +42,13 @@ function Entry({
         <Text style={[s.historyWeight, { flex: 1 }]}>{entry.nom}</Text>
         <Text style={s.label}>{formatNutrition(entry.caloriesKcal)} kcal</Text>
       </View>
-      <Text style={s.historyMeta}>
-        {formatNutrition(entry.quantiteGrammes)} g · P {formatNutrition(entry.proteinesG)} g
-        {" · "}G {formatNutrition(entry.glucidesG)} g · L {formatNutrition(entry.lipidesG)} g
-      </Text>
+      <Text style={s.historyMeta}>{formatNutrition(entry.quantiteGrammes)} g</Text>
+      <MacroBreakdown
+        variant="compact"
+        proteines={entry.proteinesG}
+        glucides={entry.glucidesG}
+        lipides={entry.lipidesG}
+      />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Retirer ${entry.nom} du journal`}
@@ -64,6 +69,8 @@ export default function FoodJournalScreen() {
   const [reload, setReload] = useState(0);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState("");
+  const [undoEntry, setUndoEntry] = useState<FoodEntry | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removeInFlight = useRef(false);
 
   useFocusEffect(
@@ -109,6 +116,9 @@ export default function FoodJournalScreen() {
     setRemoveError("");
     try {
       await removeFoodEntry(entry.id);
+      setUndoEntry(entry);
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setUndoEntry(null), 6000);
       setReload((value) => value + 1);
     } catch (cause) {
       setRemoveError(
@@ -122,16 +132,27 @@ export default function FoodJournalScreen() {
     }
   };
 
-  const confirmRemove = (entry: FoodEntry) => {
-    const message = `Retirer ${entry.nom} (${formatNutrition(entry.quantiteGrammes)} g) du journal ?`;
-    if (Platform.OS === "web") {
-      if (window.confirm(message)) void remove(entry);
-      return;
+  const confirmRemove = (entry: FoodEntry) => void remove(entry);
+
+  const undoRemove = async () => {
+    const entry = undoEntry;
+    if (!entry) return;
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndoEntry(null);
+    try {
+      await addFoodEntry(
+        entry.foodId,
+        entry.quantiteGrammes,
+        entry.categorieRepas === "non-classe" ? undefined : entry.categorieRepas,
+      );
+      setReload((value) => value + 1);
+    } catch (cause) {
+      setRemoveError(
+        cause instanceof Error
+          ? `${cause.message} Impossible d'annuler le retrait.`
+          : "Impossible d'annuler le retrait.",
+      );
     }
-    Alert.alert("Retirer cet aliment ?", message, [
-      { text: "Annuler", style: "cancel" },
-      { text: "Retirer", style: "destructive", onPress: () => void remove(entry) },
-    ]);
   };
 
   return (
@@ -190,13 +211,34 @@ export default function FoodJournalScreen() {
 
           <View style={s.card}>
             <Text style={s.cardTitle}>Aujourd’hui · {formatUtcDay(todayUtc)} (UTC)</Text>
+            <Text style={s.metricValue}>
+              {budgetKcal <= 0
+                ? `${formatNutrition(totalKcal)} kcal consommées`
+                : totalKcal <= budgetKcal
+                  ? `${formatNutrition(budgetKcal - totalKcal)} kcal restantes`
+                  : `${formatNutrition(totalKcal - budgetKcal)} kcal au-dessus de la cible`}
+            </Text>
             <DailyBudgetChart
               total={totalKcal}
               budget={budgetKcal}
               hasEntries={entries.length > 0}
             />
-            <Text style={s.text}>
-              {`Protéines ${formatNutrition(today?.totalProteinesG ?? 0)} g · Glucides ${formatNutrition(today?.totalGlucidesG ?? 0)} g · Lipides ${formatNutrition(today?.totalLipidesG ?? 0)} g`}
+            <MacroBreakdown
+              proteines={today?.totalProteinesG ?? 0}
+              glucides={today?.totalGlucidesG ?? 0}
+              lipides={today?.totalLipidesG ?? 0}
+              targets={
+                status.ciblesMacros
+                  ? {
+                      proteines: status.ciblesMacros.proteinesG,
+                      glucides: status.ciblesMacros.glucidesG,
+                      lipides: status.ciblesMacros.lipidesG,
+                    }
+                  : undefined
+              }
+            />
+            <Text style={s.historyMeta}>
+              Cibles indicatives selon ton budget et ton activité ; le suivi reste calorique.
             </Text>
           </View>
 
@@ -223,6 +265,14 @@ export default function FoodJournalScreen() {
                   ))}
                 </View>
               ))
+            )}
+            {undoEntry && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#eef4fa", borderRadius: 12, padding: 12 }}>
+                <Text style={[s.text, { flex: 1 }]}>{undoEntry.nom} retiré.</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Annuler le retrait" onPress={() => void undoRemove()}>
+                  <Text style={s.link}>Annuler</Text>
+                </Pressable>
+              </View>
             )}
             {!!removeError && <Text accessibilityRole="alert" style={s.error}>{removeError}</Text>}
             <Button title="Ajouter un aliment" onPress={() => router.push("/user/add-food")} disabled={removingId !== null} />

@@ -140,3 +140,39 @@ export function dailyBudgetPresentation(
     targetPercent: Math.max(0, Math.min((budget / scale) * 100, 100)),
   };
 }
+
+type QuickPortion = { label: string; grams: number };
+
+const HOUSEHOLD_UNITS: { pattern: RegExp; label: string; grams: number }[] = [
+  { pattern: /blanc d.{0,2}oeuf/, label: "1 blanc", grams: 33 },
+  { pattern: /jaune d.{0,2}oeuf/, label: "1 jaune", grams: 17 },
+  { pattern: /oeuf/, label: "1 œuf", grams: 50 },
+  { pattern: /banane/, label: "1 banane", grams: 120 },
+  { pattern: /\bpomme\b/, label: "1 pomme", grams: 150 },
+  { pattern: /poire/, label: "1 poire", grams: 150 },
+  { pattern: /peche/, label: "1 pêche", grams: 150 },
+  { pattern: /orange/, label: "1 orange", grams: 130 },
+  { pattern: /clementine/, label: "1 clémentine", grams: 80 },
+  { pattern: /kiwi/, label: "1 kiwi", grams: 75 },
+  { pattern: /pain de mie/, label: "1 tranche", grams: 30 },
+  { pattern: /baguette/, label: "1/4", grams: 65 },
+  { pattern: /yaourt|skyr|fromage blanc/, label: "1 pot", grams: 125 },
+  { pattern: /tomate/, label: "1 tomate", grams: 120 },
+  { pattern: /carotte/, label: "1 carotte", grams: 70 },
+];
+
+const normalizePortion = (name: string) => name.normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").replace(/œ/g, "oe");
+
+/** Suggestions de portions pour eviter la saisie au gramme pres. */
+export function quickPortions(food: ReferenceFood): QuickPortion[] {
+  const value = normalizePortion(food.nom);
+  const unit = HOUSEHOLD_UNITS.find((u) => u.pattern.test(value));
+  const portions: QuickPortion[] = unit
+    ? [{ label: `${unit.label} · ${unit.grams} g`, grams: unit.grams }]
+    : [];
+  for (const g of [50, 100, 150, 200]) {
+    if (!portions.some((p) => p.grams === g)) portions.push({ label: `${g} g`, grams: g });
+  }
+  return portions.slice(0, 5);
+}

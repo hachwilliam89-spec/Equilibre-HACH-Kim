@@ -36,7 +36,11 @@ export class User {
   private constructor(private readonly props: UserProps) {}
 
   static create(props: UserProps): User {
-    if (!EMAIL_SHAPE_REGEX.test(props.email)) {
+    // Email normalise en minuscules (et sans espaces) : findByEmail interroge
+    // en minuscules, donc stocker la casse d'origine rendrait impossible la
+    // reconnexion d'un compte cree avec une majuscule.
+    const email = props.email.trim().toLowerCase();
+    if (!EMAIL_SHAPE_REGEX.test(email)) {
       throw new Error('Email invalide');
     }
     if (props.role === 'utilisateur' && !props.coachId) {
@@ -44,7 +48,7 @@ export class User {
       // la règle d'accès ("un coach ne voit que les utilisateurs qui lui sont rattachés")
       throw new Error('Un utilisateur doit être rattaché à un coach');
     }
-    return new User(props);
+    return new User({ ...props, email });
   }
 
   get id(): string {

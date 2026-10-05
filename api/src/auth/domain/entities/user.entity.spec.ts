@@ -15,6 +15,16 @@ describe('User (entite domaine)', () => {
     expect(user.coachId).toBeUndefined();
   });
 
+  it('normalise l email en minuscules et sans espaces (permet la reconnexion)', () => {
+    const user = User.create({
+      ...baseProps,
+      email: '  Coach@Equilibre.APP  ',
+      role: 'coach',
+    });
+
+    expect(user.email).toBe('coach@equilibre.app');
+  });
+
   it('cree un utilisateur rattache a un coach', () => {
     const user = User.create({
       ...baseProps,

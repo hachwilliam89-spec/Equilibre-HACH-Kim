@@ -12,9 +12,15 @@ import {
   determinerStatutBudget,
   type FoodBudgetResult,
 } from '../../domain/services/food-budget-status';
+import {
+  ciblesMacros,
+  objectifDepuisPoids,
+  type MacroTargets,
+} from '../../domain/services/macro-targets';
 
 export interface FoodBudgetTracking extends FoodBudgetResult {
   budgetCalorique: number;
+  ciblesMacros: MacroTargets;
   journal: DailyFoodJournal | null;
 }
 
@@ -32,7 +38,17 @@ export class GetFoodBudgetStatusUseCase {
       userId,
       plan.id,
     );
-    const budgetCalorique = plan.toProps().budgetCalorique;
+    const planProps = plan.toProps();
+    const budgetCalorique = planProps.budgetCalorique;
+    const cibles = ciblesMacros({
+      budgetCalorique,
+      poidsKg: planProps.poidsDepart,
+      objectif: objectifDepuisPoids(
+        planProps.poidsDepart,
+        planProps.poidsCible,
+      ),
+      niveauActivite: planProps.niveauActivite,
+    });
     const last = journal?.toProps();
     const result = determinerStatutBudget(
       budgetCalorique,
@@ -45,6 +61,6 @@ export class GetFoodBudgetStatusUseCase {
           }
         : null,
     );
-    return { ...result, budgetCalorique, journal };
+    return { ...result, budgetCalorique, ciblesMacros: cibles, journal };
   }
 }

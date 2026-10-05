@@ -46,6 +46,12 @@ export const foodJournalSchema = z.object({
   totalLipidesG: z.number(),
 });
 
+export const macroTargetsSchema = z.object({
+  proteinesG: z.number(),
+  glucidesG: z.number(),
+  lipidesG: z.number(),
+});
+
 export const foodBudgetStatusSchema = z
   .object({
     statut: z.enum([
@@ -54,6 +60,7 @@ export const foodBudgetStatusSchema = z
       "pas-de-donnees-recentes",
     ]),
     budgetCalorique: z.number(),
+    ciblesMacros: macroTargetsSchema.nullish(),
     ecartKcal: z.number().nullable(),
     journal: foodJournalSchema.nullable(),
   })
@@ -63,6 +70,7 @@ export type FoodJournal = z.infer<typeof foodJournalSchema>;
 export type FoodEntry = z.infer<typeof foodEntrySchema>;
 export type MealCategory = z.infer<typeof mealCategorySchema>;
 export type FoodBudgetStatus = z.infer<typeof foodBudgetStatusSchema>;
+export type MacroTargets = z.infer<typeof macroTargetsSchema>;
 export type ReferenceFood = z.infer<typeof referenceFoodSchema>;
 export type FoodCategory = ReferenceFood["categorie"];
 

@@ -10,14 +10,16 @@ import {
 } from "../../nutrition/api";
 import {
   foodCategories, formatNutrition, mealCategories,
-  nutritionForQuantity, parseFoodQuantity,
+  nutritionForQuantity, parseFoodQuantity, quickPortions,
 } from "../../nutrition/presentation";
 import { FoodIcon } from "../../nutrition/FoodIcon";
 import { foodIconKind, categoryIconKind } from "../../nutrition/food-icon-kind";
+import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
+import { getRecentFoods, pushRecentFood } from "../../nutrition/recent-foods";
 import { Button, Field, Screen } from "../../plans/ui";
 import { styles as s } from "../../ui/styles";
 
-type LibraryCategory = FoodCategory | "tous" | "favoris";
+type LibraryCategory = FoodCategory | "tous" | "favoris" | "recents";
 const PAGE_SIZE = 50;
 const normalize = (value: string) => value.normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR");
@@ -27,6 +29,7 @@ export default function AddFoodScreen() {
   const [category, setCategory] = useState<LibraryCategory>("tous");
   const [foods, setFoods] = useState<ReferenceFood[]>([]);
   const [favoriteFoods, setFavoriteFoods] = useState<ReferenceFood[]>([]);
+  const [recentFoods, setRecentFoods] = useState<ReferenceFood[]>([]);
   const [searching, setSearching] = useState(true);
   const [searchError, setSearchError] = useState("");
   const [favoriteError, setFavoriteError] = useState("");
@@ -56,7 +59,11 @@ export default function AddFoodScreen() {
   }, [favoritesNonce]);
 
   useEffect(() => {
-    if (category === "favoris") return;
+    void getRecentFoods().then(setRecentFoods).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (category === "favoris" || category === "recents") return;
     let active = true;
     const timer = setTimeout(() => {
       void searchReferenceFoods(query, category === "tous" ? undefined : category, page)
@@ -78,7 +85,7 @@ export default function AddFoodScreen() {
     setQuery(value);
     setPage(1);
     setFoods([]);
-    if (category !== "favoris") setSearching(true);
+    if (category !== "favoris" && category !== "recents") setSearching(true);
     setSearchError("");
     setSuccess("");
   };
@@ -87,7 +94,7 @@ export default function AddFoodScreen() {
     setCategory(value);
     setPage(1);
     setFoods([]);
-    if (value !== "favoris") setSearching(true);
+    if (value !== "favoris" && value !== "recents") setSearching(true);
     setSearchError("");
     setSuccess("");
   };
@@ -95,7 +102,9 @@ export default function AddFoodScreen() {
   const favoriteIds = new Set(favoriteFoods.map((food) => food.id));
   const visibleFoods = category === "favoris"
     ? favoriteFoods.filter((food) => normalize(food.nom).includes(normalize(query.trim())))
-    : foods;
+    : category === "recents"
+      ? recentFoods.filter((food) => normalize(food.nom).includes(normalize(query.trim())))
+      : foods;
   const quantity = parseFoodQuantity(quantityText);
   const preview = selected && quantity !== null
     ? nutritionForQuantity(selected, quantity)
@@ -142,6 +151,7 @@ export default function AddFoodScreen() {
     setSubmitError("");
     try {
       await addFoodEntry(selected.id, quantity, mealCategory);
+      setRecentFoods(await pushRecentFood(selected));
       setSuccess(`${selected.nom} ajouté au journal. Vous pouvez choisir un autre aliment.`);
       setSelected(null);
       setQuantityText("");
@@ -166,19 +176,32 @@ export default function AddFoodScreen() {
       <View style={s.card}>
         <Text style={s.cardTitle}>Bibliothèque alimentaire</Text>
         <Text style={s.text}>Parcourez les familles ou recherchez un aliment. Les valeurs sont indiquées pour 100 g.</Text>
-        <TextInput
-          accessibilityLabel="Rechercher un aliment par nom"
-          style={s.input}
-          value={query}
-          onChangeText={changeQuery}
-          placeholder="Ex. fromage blanc, yaourt…"
-          autoCapitalize="none"
-          autoCorrect={false}
-          maxLength={100}
-        />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+        <View style={{ position: "relative", justifyContent: "center" }}>
+          <TextInput
+            accessibilityLabel="Rechercher un aliment par nom"
+            style={[s.input, query.length > 0 && { paddingRight: 44 }]}
+            value={query}
+            onChangeText={changeQuery}
+            placeholder="Ex. fromage blanc, yaourt…"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={100}
+          />
+          {query.length > 0 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Effacer la recherche"
+              onPress={() => changeQuery("")}
+              style={{ position: "absolute", right: 6, width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+            >
+              <Text style={{ fontSize: 20, color: "#63756b" }}>✕</Text>
+            </Pressable>
+          )}
+        </View>
+        <View style={s.choiceRow}>
           {[
             { value: "tous" as const, label: "Tous" },
+            { value: "recents" as const, label: "Récents" },
             { value: "favoris" as const, label: "★ Favoris" },
             ...foodCategories,
           ].map(({ value, label }) => (
@@ -189,13 +212,13 @@ export default function AddFoodScreen() {
               onPress={() => changeCategory(value)}
               style={[s.choice, { flexDirection: "row", alignItems: "center", gap: 6 }, category === value && s.choiceSelected]}
             >
-              {value !== "tous" && value !== "favoris" && (
+              {value !== "tous" && value !== "favoris" && value !== "recents" && (
                 <FoodIcon kind={categoryIconKind[value]} size={22} boxed={false} />
               )}
               <Text style={s.label}>{label}</Text>
             </Pressable>
           ))}
-        </ScrollView>
+        </View>
 
         {!!success && <Text accessibilityRole="alert" style={s.success}>{success}</Text>}
         {!!favoriteError && (
@@ -220,7 +243,9 @@ export default function AddFoodScreen() {
         ) : visibleFoods.length === 0 ? (
           <Text style={s.text}>{category === "favoris"
             ? "Aucun favori ici. Touchez l’étoile d’un aliment pour le retrouver rapidement."
-            : "Aucun aliment trouvé. Essayez une autre recherche ou une autre famille."}</Text>
+            : category === "recents"
+              ? "Aucun aliment récent. Vos derniers ajouts apparaîtront ici."
+              : "Aucun aliment trouvé. Essayez une autre recherche ou une autre famille."}</Text>
         ) : (
           <View style={{ gap: 8 }}>
             {visibleFoods.map((food) => (
@@ -276,12 +301,14 @@ export default function AddFoodScreen() {
                 </Pressable>
               </View>
               {!!selected && (
-                <Text style={s.historyMeta}>
-                  Pour 100 g : {formatNutrition(selected.caloriesKcalPour100g)} kcal ·
-                  P {formatNutrition(selected.proteinesGPour100g)} g ·
-                  G {formatNutrition(selected.glucidesGPour100g)} g ·
-                  L {formatNutrition(selected.lipidesGPour100g)} g
-                </Text>
+                <View style={{ gap: 8 }}>
+                  <Text style={s.historyMeta}>Pour 100 g · {formatNutrition(selected.caloriesKcalPour100g)} kcal</Text>
+                  <MacroBreakdown
+                    proteines={selected.proteinesGPour100g}
+                    glucides={selected.glucidesGPour100g}
+                    lipides={selected.lipidesGPour100g}
+                  />
+                </View>
               )}
               <Field
                 label="Quantité consommée (g)"
@@ -289,6 +316,22 @@ export default function AddFoodScreen() {
                 onChange={(value) => { setQuantityText(value); setSubmitError(""); }}
                 numeric disabled={busy}
               />
+              {!!selected && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {quickPortions(selected).map((portion) => (
+                    <Pressable
+                      key={portion.label}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Portion ${portion.label}`}
+                      disabled={busy}
+                      onPress={() => { setQuantityText(String(portion.grams)); setSubmitError(""); }}
+                      style={[s.choice, { paddingVertical: 8, paddingHorizontal: 12 }, quantity === portion.grams && s.choiceSelected]}
+                    >
+                      <Text style={s.label}>{portion.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
               <Text style={s.label}>Repas</Text>
               <Text style={s.historyMeta}>Le repas organise le journal ; le budget reste celui de la journée.</Text>
               <View style={s.choiceRow}>
@@ -310,9 +353,11 @@ export default function AddFoodScreen() {
                 <View style={{ gap: 5 }}>
                   <Text style={s.label}>Pour {formatNutrition(quantity!)} g</Text>
                   <Text style={s.metricValue}>{formatNutrition(preview.caloriesKcal)} kcal</Text>
-                  <Text style={s.historyMeta}>
-                    Protéines {formatNutrition(preview.proteinesG)} g · Glucides {formatNutrition(preview.glucidesG)} g · Lipides {formatNutrition(preview.lipidesG)} g
-                  </Text>
+                  <MacroBreakdown
+                    proteines={preview.proteinesG}
+                    glucides={preview.glucidesG}
+                    lipides={preview.lipidesG}
+                  />
                   <Text style={s.historyMeta}>Estimation ; le journal affichera les valeurs enregistrées par le serveur.</Text>
                 </View>
               )}
