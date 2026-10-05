@@ -14,6 +14,13 @@ async function bootstrap() {
   // ne tournent jamais, et la connexion MongoDB n'est jamais fermee proprement.
   app.enableShutdownHooks();
 
+  // CORS : l'app native React Native n'applique pas CORS, mais le navigateur
+  // (Expo Web) si -- sans ceci la version web est bloquee par la same-origin
+  // policy et ne peut joindre l'API. L'authentification se fait par Bearer
+  // token (en-tete Authorization), pas par cookie : autoriser les origines ne
+  // cree donc pas de risque de requete authentifiee cross-site.
+  app.enableCors();
+
   const configService = app.get(ConfigService);
 
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
