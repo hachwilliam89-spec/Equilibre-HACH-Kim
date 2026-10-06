@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { credentialsSchema } from "../auth/contracts";
 import { useSession } from "../auth/session";
+import { useSync } from "../sync/useSync";
 import { styles as s } from "../ui/styles";
 
 export default function Connection() {
@@ -39,6 +40,28 @@ export default function Connection() {
   const [copyStatus, setCopyStatus] = useState("");
   const [visible, setVisible] = useState(false);
   const [validation, setValidation] = useState<string | null>(null);
+  const [pendingWarning, setPendingWarning] = useState<number | null>(null);
+  /**
+   * Déconnexion : dernière tentative d'envoi, puis effacement de la base
+   * embarquée. S'il reste des modifications non envoyées, on prévient avant
+   * de les perdre (second appui pour confirmer).
+   */
+  const leave = async () => {
+    const sync = useSync.getState();
+    if (session?.role === "utilisateur" && pendingWarning === null) {
+      await sync.synchroniser();
+      const pending = useSync.getState().vue.operationsEnAttente;
+      if (pending > 0) {
+        setPendingWarning(pending);
+        return;
+      }
+    }
+    await signOut();
+    if (!useSession.getState().session) {
+      setPendingWarning(null);
+      await sync.reinitialiser();
+    }
+  };
   useEffect(() => {
     void restore();
   }, [restore]);
@@ -125,14 +148,26 @@ export default function Connection() {
                   {error}
                 </Text>
               )}
+              {pendingWarning !== null && (
+                <Text accessibilityRole="alert" style={s.error}>
+                  {pendingWarning === 1
+                    ? "1 modification n’a pas encore été envoyée et sera perdue."
+                    : `${pendingWarning} modifications n’ont pas encore été envoyées et seront perdues.`}{" "}
+                  Reconnecte-toi au réseau pour les synchroniser, ou confirme la déconnexion.
+                </Text>
+              )}
               <Pressable
                 accessibilityRole="button"
                 disabled={busy}
                 style={[s.button, busy && s.disabled]}
-                onPress={() => void signOut()}
+                onPress={() => void leave()}
               >
                 <Text style={s.buttonText}>
-                  {busy ? "Déconnexion…" : "Se déconnecter"}
+                  {busy
+                    ? "Déconnexion…"
+                    : pendingWarning !== null
+                      ? "Se déconnecter quand même"
+                      : "Se déconnecter"}
                 </Text>
               </Pressable>
             </View>

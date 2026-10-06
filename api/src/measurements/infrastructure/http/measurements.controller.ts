@@ -28,8 +28,8 @@ import { RolesGuard } from '../../../common/auth/roles.guard';
 import { GetMeasurementHistoryUseCase } from '../../application/use-cases/get-measurement-history.use-case';
 import { GetWeightTrackingStatusUseCase } from '../../application/use-cases/get-weight-tracking-status.use-case';
 import { CorrectMeasurementUseCase } from '../../application/use-cases/correct-measurement.use-case';
-import { MeasurementDto } from './measurement.dto';
-import { SuiviDto } from './suivi.dto';
+import { MeasurementDto, toMeasurementDto } from './measurement.dto';
+import { SuiviDto, toSuiviDto } from './suivi.dto';
 
 @ApiTags('measurements')
 @ApiBearerAuth()
@@ -78,8 +78,7 @@ export class MeasurementsController {
       request.user.sub,
       body.poidsKg,
     );
-    const props = measurement.toProps();
-    return { ...props, receivedAt: props.receivedAt.toISOString() };
+    return toMeasurementDto(measurement);
   }
 
   @Post('correction')
@@ -116,8 +115,7 @@ export class MeasurementsController {
       request.user.sub,
       body.poidsKg,
     );
-    const props = measurement.toProps();
-    return { ...props, receivedAt: props.receivedAt.toISOString() };
+    return toMeasurementDto(measurement);
   }
 
   @Get('me')
@@ -138,10 +136,7 @@ export class MeasurementsController {
     @Req() request: Request & { user: JwtPayload },
   ): Promise<MeasurementDto[]> {
     const measurements = await this.getHistory.execute(request.user.sub);
-    return measurements.map((measurement) => {
-      const props = measurement.toProps();
-      return { ...props, receivedAt: props.receivedAt.toISOString() };
-    });
+    return measurements.map(toMeasurementDto);
   }
 
   @Get('me/suivi')
@@ -165,28 +160,7 @@ export class MeasurementsController {
     if (!suivi) {
       return response.json(null);
     }
-    const planProps = suivi.plan.toProps();
-    const derniere = suivi.derniereMesure?.toProps() ?? null;
-    const body: SuiviDto = {
-      statut: suivi.statut,
-      plan: {
-        id: planProps.id,
-        poidsDepart: planProps.poidsDepart,
-        poidsCible: planProps.poidsCible,
-        dateDebut: planProps.dateDebut.toISOString(),
-        dateCible: planProps.dateCible.toISOString(),
-        imcCible: planProps.imcCible,
-        niveauActivite: planProps.niveauActivite,
-        budgetCalorique: planProps.budgetCalorique,
-        budgetPlafonneAuBmr: planProps.budgetPlafonneAuBmr,
-        statut: planProps.statut,
-      },
-      derniereMesure: derniere
-        ? { ...derniere, receivedAt: derniere.receivedAt.toISOString() }
-        : null,
-      poidsAttendu: suivi.ecart ? suivi.ecart.poidsAttendu : null,
-      ecartKg: suivi.ecart ? suivi.ecart.ecartKg : null,
-    };
+    const body: SuiviDto = toSuiviDto(suivi);
     return response.json(body);
   }
 }

@@ -25,8 +25,8 @@ import { Roles } from '../../../common/auth/roles.decorator';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { SearchFoodsUseCase } from '../../application/use-cases/search-foods.use-case';
 import { ManageFavoriteFoodsUseCase } from '../../application/use-cases/manage-favorite-foods.use-case';
-import { FOOD_CATEGORIES, type Food } from '../../domain/entities/food.entity';
-import { FoodDto } from './food.dto';
+import { FOOD_CATEGORIES } from '../../domain/entities/food.entity';
+import { FoodDto, toFoodDto } from './food.dto';
 import {
   searchFoodsQuerySchema,
   type SearchFoodsQuery,
@@ -41,19 +41,6 @@ export class FoodsController {
     private readonly searchFoods: SearchFoodsUseCase,
     private readonly favoriteFoods: ManageFavoriteFoodsUseCase,
   ) {}
-
-  private toDto(food: Food): FoodDto {
-    const props = food.toProps();
-    return {
-      id: props.id,
-      nom: props.nom,
-      categorie: props.categorie,
-      caloriesKcalPour100g: props.caloriesKcalPour100g,
-      proteinesGPour100g: props.proteinesGPour100g,
-      glucidesGPour100g: props.glucidesGPour100g,
-      lipidesGPour100g: props.lipidesGPour100g,
-    };
-  }
 
   @Get()
   @Roles('coach', 'utilisateur')
@@ -85,7 +72,7 @@ export class FoodsController {
       query.size,
       query.categorie,
     );
-    return foods.map((food) => this.toDto(food));
+    return foods.map((food) => toFoodDto(food));
   }
 
   @Get('me/favorites')
@@ -96,7 +83,7 @@ export class FoodsController {
     @Req() request: Request & { user: JwtPayload },
   ): Promise<FoodDto[]> {
     const foods = await this.favoriteFoods.list(request.user.sub);
-    return foods.map((food) => this.toDto(food));
+    return foods.map((food) => toFoodDto(food));
   }
 
   @Put('me/favorites/:foodId')

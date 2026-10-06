@@ -47,6 +47,7 @@ Un compte existant est nécessaire, inscrit via Swagger dans le même environnem
 
 - Login sur `/auth/login` ; rôle et identifiant fournis par le serveur.
 - Session conservée dans Expo SecureStore sur iOS/Android, jamais dans SQLite.
+- Hors ligne au démarrage : la session enregistrée est reprise pour ouvrir la base embarquée ; le jeton est renouvelé à la première requête réseau.
 - Mot de passe uniquement dans le formulaire, effacé après connexion réussie.
 - Au redémarrage : `/auth/refresh`, puis sauvegarde des nouveaux jetons après rotation.
 - Jeton révoqué/expiré : retour au formulaire ; panne réseau : possibilité de réessayer sans effacer la session.
@@ -93,16 +94,33 @@ La taille est obligatoire ; sans âge ou sexe, le budget doit être saisi manuel
 
 Le budget du jour montre la consommation en bleu, la cible par un trait gris et la tolérance de +150 kcal en texte. L’ocre n’apparaît que lorsque cette tolérance est dépassée. Une journée sans entrée est signalée comme telle, sans reprendre le total d’un ancien jour. Les composants de `src/charts` ne font aucune requête : ils reçoivent des données déjà chargées et séparent le calcul des coordonnées du dessin `react-native-svg` (compatible Expo Go). Ils pourront recevoir les données du cache SQLite sans changer de bibliothèque. Pour afficher une courbe au coach et des barres sur plusieurs jours comme dans les maquettes, il faudra d’abord des endpoints autorisés donnant l’historique du poids et des journaux alimentaires de l’utilisateur sélectionné ; l’API actuelle ne les expose pas au coach.
 
-L’écran recharge le poids et le budget lorsqu’il revient au premier plan, ainsi qu’après une correction manuelle ; le bouton « Actualiser » permet aussi un contrôle immédiat. La future synchronisation hors ligne devra décider quand mettre à jour les données en cache et déclencher le même rendu : le graphique ne simule pas un flux temps réel.
+Les écrans lisent la base embarquée : ils s’affichent immédiatement, hors ligne compris, et se mettent à jour après chaque synchronisation (retour au premier plan, modification, toutes les 2 minutes, bouton « Actualiser »). Le graphique ne simule pas un flux temps réel.
+
+## Synchronisation et mode hors ligne
+
+Les données visibles par l’utilisateur sont copiées dans une base SQLite
+(`expo-sqlite`) et synchronisées dans les deux sens avec l’API (`/api/sync`).
+Ajouts et retraits d’aliments, saisie de poids de secours et favoris
+fonctionnent sans réseau ; un bandeau indique l’état (« Synchronisé à… »,
+« Hors ligne · 2 modifications en attente ») et explique les modifications
+refusées par le serveur. La recherche dans la bibliothèque reste en ligne :
+hors ligne, utiliser « Récents » ou « Favoris ». L’aperçu web garde ces données
+en mémoire uniquement. Détails, schéma et diagrammes :
+[Page 9 — Synchronisation](../docs/synchronisation.md).
+
+`expo-sqlite` et `expo-crypto` sont inclus dans Expo Go SDK 57 : aucun
+development build supplémentaire n’est nécessaire.
 
 ## Journal alimentaire — US3
 
 Depuis « Mon suivi de poids », ouvrir « Mon journal alimentaire ». L’écran
 montre uniquement les entrées du jour UTC, le total calorique, les macros et
-le statut fourni par l’API. « Ajouter un aliment » interroge la bibliothèque
+le statut (même règle que l’API, recalculé
+sur l’appareil pour rester juste hors ligne). « Ajouter un aliment » interroge la bibliothèque
 en lecture seule, affiche les valeurs pour 100 g, puis estime les valeurs de la
-quantité saisie. Après l’ajout, le journal recharge les valeurs enregistrées
-par le serveur. « Retirer » demande une confirmation et recalcule le journal.
+quantité saisie. L’ajout est immédiat dans le journal local, puis confirmé par
+le serveur à la synchronisation. « Retirer » recalcule le journal et propose
+d’annuler pendant quelques secondes.
 La saisie d’une quantité nulle, négative ou supérieure à 10 000 g est refusée.
 Sans plan actif, le journal affiche un message dédié.
 
