@@ -2,7 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import type { PlanStatut } from '../../../plans/domain/entities/plan.entity';
 import type { NiveauActivite } from '../../../plans/domain/services/metabolic-calculations';
 import type { StatutSuivi } from '../../domain/services/measurement-suivi';
-import { MeasurementDto } from './measurement.dto';
+import type { WeightTrackingStatus } from '../../application/use-cases/get-weight-tracking-status.use-case';
+import { MeasurementDto, toMeasurementDto } from './measurement.dto';
 
 export class PlanResumeDto {
   @ApiProperty()
@@ -71,4 +72,28 @@ export class SuiviDto {
     description: 'Ecart signe (mesure moins attendu), en kg',
   })
   ecartKg: number | null;
+}
+
+export function toSuiviDto(suivi: WeightTrackingStatus): SuiviDto {
+  const planProps = suivi.plan.toProps();
+  return {
+    statut: suivi.statut,
+    plan: {
+      id: planProps.id,
+      poidsDepart: planProps.poidsDepart,
+      poidsCible: planProps.poidsCible,
+      dateDebut: planProps.dateDebut.toISOString(),
+      dateCible: planProps.dateCible.toISOString(),
+      imcCible: planProps.imcCible,
+      niveauActivite: planProps.niveauActivite,
+      budgetCalorique: planProps.budgetCalorique,
+      budgetPlafonneAuBmr: planProps.budgetPlafonneAuBmr,
+      statut: planProps.statut,
+    },
+    derniereMesure: suivi.derniereMesure
+      ? toMeasurementDto(suivi.derniereMesure)
+      : null,
+    poidsAttendu: suivi.ecart ? suivi.ecart.poidsAttendu : null,
+    ecartKg: suivi.ecart ? suivi.ecart.ecartKg : null,
+  };
 }

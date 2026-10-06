@@ -230,4 +230,4 @@ durée ; ils n'ont aucune valeur en dehors de la CI.
 
 ## Application mobile
 
-Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le parcours coach de proposition et soumission du plan (FR403-128) est disponible pour recette sur iPhone.
+Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le parcours coach de proposition et soumission du plan (FR403-128) est disponible pour recette sur iPhone. L’espace utilisateur fonctionne hors ligne grâce à une base SQLite embarquée synchronisée avec MongoDB : voir [Page 9 — Synchronisation](docs/synchronisation.md).

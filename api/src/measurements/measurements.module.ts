@@ -23,6 +23,11 @@ import { MongooseMeasurementRepository } from './infrastructure/persistence/mong
       useClass: MongooseMeasurementRepository,
     },
   ],
-  exports: [MEASUREMENT_REPOSITORY],
+  exports: [
+    MEASUREMENT_REPOSITORY,
+    GetMeasurementHistoryUseCase,
+    GetWeightTrackingStatusUseCase,
+    CorrectMeasurementUseCase,
+  ],
 })
 export class MeasurementsModule {}

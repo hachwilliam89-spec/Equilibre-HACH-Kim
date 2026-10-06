@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type {
+  Measurement,
   MeasurementSource,
   MeasurementStatut,
 } from '../../domain/entities/measurement.entity';
@@ -35,4 +36,9 @@ export class MeasurementDto {
 
   @ApiProperty({ enum: ['valide', 'suspecte', 'hors-plan'] })
   statut: MeasurementStatut;
+}
+
+export function toMeasurementDto(measurement: Measurement): MeasurementDto {
+  const props = measurement.toProps();
+  return { ...props, receivedAt: props.receivedAt.toISOString() };
 }

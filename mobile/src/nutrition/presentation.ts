@@ -26,7 +26,7 @@ export const foodCategories: { value: FoodCategory; label: string }[] = [
   { value: "autres", label: "Autres" },
 ];
 
-export function groupEntriesByMeal(entries: FoodEntry[]) {
+export function groupEntriesByMeal<T extends FoodEntry>(entries: T[]) {
   return [...mealCategories, { value: "non-classe" as const, label: "Non classé" }]
     .map(({ value, label }) => {
       const items = entries.filter((entry) => entry.categorieRepas === value);
@@ -175,4 +175,22 @@ export function quickPortions(food: ReferenceFood): QuickPortion[] {
     if (!portions.some((p) => p.grams === g)) portions.push({ label: `${g} g`, grams: g });
   }
   return portions.slice(0, 5);
+}
+
+/**
+ * Valeurs pour 100 g retrouvées depuis une entrée du journal, pour ré-ajouter
+ * l'aliment (annulation d'un retrait) sans consulter le référentiel.
+ */
+export function referenceFoodFromEntry(entry: FoodEntry): ReferenceFood {
+  const per100 = (value: number) =>
+    entry.quantiteGrammes > 0 ? Math.round((value / entry.quantiteGrammes) * 10000) / 100 : 0;
+  return {
+    id: entry.foodId,
+    nom: entry.nom,
+    categorie: "autres",
+    caloriesKcalPour100g: per100(entry.caloriesKcal),
+    proteinesGPour100g: per100(entry.proteinesG),
+    glucidesGPour100g: per100(entry.glucidesG),
+    lipidesGPour100g: per100(entry.lipidesG),
+  };
 }
