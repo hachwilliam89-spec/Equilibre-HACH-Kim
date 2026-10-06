@@ -23,6 +23,7 @@ export const useSession = create<State>((set, get) => ({
   restore: async () => {
     if (get().busy) return;
     set({ busy: true, error: null });
+    let stored: Session | null = null;
     try {
       const raw = await storage.read();
       if (raw) {
@@ -30,6 +31,7 @@ export const useSession = create<State>((set, get) => ({
         if (!parsed.success) {
           await storage.clear();
         } else {
+          stored = parsed.data;
           const next = {
             ...parsed.data,
             ...(await api.refresh(parsed.data.refreshToken)),
@@ -46,6 +48,10 @@ export const useSession = create<State>((set, get) => ({
       } else if (error instanceof SyntaxError) {
         await storage.clear();
         set({ ready: true });
+      } else if (stored && !(error instanceof api.ApiError)) {
+        // Hors ligne : on reprend la session enregistrée pour ouvrir la base
+        // embarquée ; le jeton sera renouvelé à la première requête réseau.
+        set({ ready: true, session: stored });
       } else {
         set({ error: message(error) });
       }

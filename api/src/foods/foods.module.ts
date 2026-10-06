@@ -39,6 +39,6 @@ import { MongooseFoodRepository } from './infrastructure/persistence/mongoose-fo
     SearchFoodsUseCase,
     ManageFavoriteFoodsUseCase,
   ],
-  exports: [FOOD_REPOSITORY],
+  exports: [FOOD_REPOSITORY, ManageFavoriteFoodsUseCase],
 })
 export class FoodsModule {}

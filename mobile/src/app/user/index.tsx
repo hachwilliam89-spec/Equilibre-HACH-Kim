@@ -1,18 +1,9 @@
-import { router, useFocusEffect } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { router } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { DailyBudgetChart } from "../../charts/DailyBudgetChart";
 import { WeightTrajectoryChart } from "../../charts/WeightTrajectoryChart";
-import { getFoodBudgetStatus, type FoodBudgetStatus } from "../../nutrition/api";
-import { journalForDay } from "../../nutrition/presentation";
-import {
-  correctWeight,
-  getMeasurementHistory,
-  getWeightTracking,
-  manualCorrectionSchema,
-  type Measurement,
-  type WeightTracking,
-} from "../../measurements/api";
+import { manualCorrectionSchema } from "../../measurements/api";
 import {
   canSubmitManualCorrection,
   formatSignedWeight,
@@ -23,6 +14,10 @@ import {
   trackingPresentation,
 } from "../../measurements/presentation";
 import { Button, Screen } from "../../plans/ui";
+import type { LocalMeasurement } from "../../sync/contracts";
+import { etatChargement } from "../../sync/presentation";
+import { SyncStatus } from "../../sync/SyncStatus";
+import { useSync } from "../../sync/useSync";
 import { MeasurementField } from "../../ui/MeasurementField";
 import { styles as s } from "../../ui/styles";
 
@@ -35,7 +30,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function HistoryItem({ measurement }: { measurement: Measurement }) {
+function HistoryItem({ measurement }: { measurement: LocalMeasurement }) {
   return (
     <View style={s.historyItem}>
       <View style={s.historyMain}>
@@ -44,56 +39,27 @@ function HistoryItem({ measurement }: { measurement: Measurement }) {
       </View>
       <Text style={s.historyMeta}>
         {measurementSourceLabel[measurement.source]} ·{" "}
-        {measurementStatusLabel[measurement.statut]}
+        {measurement.enAttente
+          ? "En attente de synchronisation"
+          : measurementStatusLabel[measurement.statut]}
       </Text>
     </View>
   );
 }
 
 function DailyBudgetCard() {
-  const [status, setStatus] = useState<FoodBudgetStatus>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [todayUtc, setTodayUtc] = useState("");
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      setTodayUtc(new Date().toISOString().slice(0, 10));
-      setLoading(true);
-      setError("");
-      void getFoodBudgetStatus()
-        .then((next) => {
-          if (active) setStatus(next);
-        })
-        .catch(() => {
-          if (active) setError("Budget indisponible pour le moment.");
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
-
-  const today = journalForDay(status, todayUtc);
-  const total = today?.totalCaloriesKcal ?? 0;
-  const budget = status?.budgetCalorique ?? 0;
+  const alimentation = useSync((state) => state.vue.alimentation);
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const today = alimentation?.journaux.find((journal) => journal.jourUtc === todayUtc);
   return (
     <View style={s.card}>
       <Text style={s.cardTitle}>Budget du jour</Text>
-      {loading ? (
-        <ActivityIndicator color="#087454" accessibilityLabel="Chargement du budget calorique" />
-      ) : error ? (
-        <Text style={s.error}>{error}</Text>
-      ) : status === null ? (
+      {alimentation === null ? (
         <Text style={s.text}>Aucun plan alimentaire actif.</Text>
       ) : (
         <DailyBudgetChart
-          total={total}
-          budget={budget}
+          total={today?.totalCaloriesKcal ?? 0}
+          budget={alimentation.budgetCalorique}
           hasEntries={(today?.entrees.length ?? 0) > 0}
         />
       )}
@@ -102,50 +68,16 @@ function DailyBudgetCard() {
 }
 
 export default function WeightTrackingScreen() {
-  const [tracking, setTracking] = useState<WeightTracking>(null);
-  const [history, setHistory] = useState<Measurement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const requestVersion = useRef(0);
+  const { vue, enCours, horsLigne, erreur, saisirPoids, synchroniser } = useSync();
+  const tracking = vue.suiviPoids;
+  const history = vue.mesures;
+  const { loading, error } = etatChargement({ ...vue, enCours, horsLigne, erreur });
+  const retry = () => void synchroniser();
   const [correctionWeight, setCorrectionWeight] = useState("");
-  const [correctionBusy, setCorrectionBusy] = useState(false);
   const [correctionError, setCorrectionError] = useState("");
   const [correctionNotice, setCorrectionNotice] = useState("");
 
-  const retry = useCallback(() => {
-    const version = ++requestVersion.current;
-    setLoading(true);
-    setError("");
-    void Promise.all([getWeightTracking(), getMeasurementHistory()])
-      .then(([nextTracking, nextHistory]) => {
-        if (requestVersion.current !== version) return;
-        setTracking(nextTracking);
-        setHistory(nextHistory);
-      })
-      .catch((cause: unknown) => {
-        if (requestVersion.current !== version) return;
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Impossible de charger le suivi. Réessaie.",
-        );
-      })
-      .finally(() => {
-        if (requestVersion.current === version) setLoading(false);
-      });
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      retry();
-      return () => {
-        requestVersion.current += 1;
-      };
-    }, [retry]),
-  );
-
   const submitCorrection = async () => {
-    if (correctionBusy) return;
     const parsed = manualCorrectionSchema.safeParse({
       poidsKg: Number(correctionWeight.trim().replace(",", ".")),
     });
@@ -154,22 +86,17 @@ export default function WeightTrackingScreen() {
       setCorrectionNotice("");
       return;
     }
-    setCorrectionBusy(true);
     setCorrectionError("");
-    setCorrectionNotice("");
     try {
-      await correctWeight(parsed.data);
+      await saisirPoids(parsed.data.poidsKg);
       setCorrectionWeight("");
-      setCorrectionNotice("Votre poids a bien été enregistré.");
-      retry();
-    } catch (cause) {
-      setCorrectionError(
-        cause instanceof Error
-          ? cause.message
-          : "Impossible d’enregistrer votre poids. Réessaie.",
+      setCorrectionNotice(
+        horsLigne
+          ? "Poids enregistré sur l’appareil. Il sera envoyé dès le retour du réseau."
+          : "Votre poids a bien été enregistré.",
       );
-    } finally {
-      setCorrectionBusy(false);
+    } catch {
+      setCorrectionError("Impossible d’enregistrer votre poids sur l’appareil. Réessaie.");
     }
   };
 
@@ -190,6 +117,7 @@ export default function WeightTrackingScreen() {
           <Text style={s.title}>Mon suivi de poids</Text>
         </View>
       </View>
+      <SyncStatus />
 
       {loading ? (
         <View style={s.card}>
@@ -329,11 +257,9 @@ export default function WeightTrackingScreen() {
             value={correctionWeight}
             onChange={setCorrectionWeight}
             error={correctionError}
-            disabled={correctionBusy}
           />
           <Button
-            title={correctionBusy ? "Enregistrement…" : "Enregistrer mon poids"}
-            disabled={correctionBusy}
+            title="Enregistrer mon poids"
             onPress={() => void submitCorrection()}
           />
         </View>
@@ -345,7 +271,7 @@ export default function WeightTrackingScreen() {
         </Text>
       )}
 
-      <Button title="Actualiser" disabled={loading} onPress={retry} />
+      <Button title={enCours ? "Synchronisation…" : "Actualiser"} disabled={enCours} onPress={retry} />
       <Button title="Mon journal alimentaire" onPress={() => router.push("/user/journal")} />
       <Button title="Mon profil" onPress={() => router.push("/user/profile")} />
       <Button title="Mon compte" onPress={() => router.replace("/")} />

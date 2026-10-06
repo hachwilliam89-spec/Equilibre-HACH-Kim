@@ -1,25 +1,22 @@
-import { router, useFocusEffect } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { router } from "expo-router";
+import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { DailyBudgetChart } from "../../charts/DailyBudgetChart";
-import {
-  addFoodEntry,
-  getFoodBudgetStatus,
-  removeFoodEntry,
-  type FoodBudgetStatus,
-  type FoodEntry,
-} from "../../nutrition/api";
 import {
   foodStatusPresentation,
   formatNutrition,
   groupEntriesByMeal,
-  journalForDay,
+  referenceFoodFromEntry,
 } from "../../nutrition/presentation";
 import { FoodIcon } from "../../nutrition/FoodIcon";
 import { foodIconKind } from "../../nutrition/food-icon-kind";
 import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
 import { formatUtcDay } from "../../measurements/presentation";
 import { Button, Screen } from "../../plans/ui";
+import type { LocalFoodEntry } from "../../sync/contracts";
+import { etatChargement } from "../../sync/presentation";
+import { SyncStatus } from "../../sync/SyncStatus";
+import { useSync } from "../../sync/useSync";
 import { styles as s } from "../../ui/styles";
 
 const localStyles = StyleSheet.create({
@@ -31,7 +28,7 @@ function Entry({
   onRemove,
   disabled,
 }: {
-  entry: FoodEntry;
+  entry: LocalFoodEntry;
   onRemove: () => void;
   disabled: boolean;
 }) {
@@ -42,7 +39,10 @@ function Entry({
         <Text style={[s.historyWeight, { flex: 1 }]}>{entry.nom}</Text>
         <Text style={s.label}>{formatNutrition(entry.caloriesKcal)} kcal</Text>
       </View>
-      <Text style={s.historyMeta}>{formatNutrition(entry.quantiteGrammes)} g</Text>
+      <Text style={s.historyMeta}>
+        {formatNutrition(entry.quantiteGrammes)} g
+        {entry.enAttente ? " · en attente de synchronisation" : ""}
+      </Text>
       <MacroBreakdown
         variant="compact"
         proteines={entry.proteinesG}
@@ -63,45 +63,17 @@ function Entry({
 }
 
 export default function FoodJournalScreen() {
-  const [status, setStatus] = useState<FoodBudgetStatus>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [reload, setReload] = useState(0);
+  const { vue, enCours, horsLigne, erreur, retirerEntree, ajouterAliment, synchroniser } =
+    useSync();
+  const status = vue.alimentation;
+  const { loading, error } = etatChargement({ ...vue, enCours, horsLigne, erreur });
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState("");
-  const [undoEntry, setUndoEntry] = useState<FoodEntry | null>(null);
+  const [undoEntry, setUndoEntry] = useState<LocalFoodEntry | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const removeInFlight = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      setLoading(true);
-      setError("");
-      if (reload > 0) setStatus(null);
-      void getFoodBudgetStatus()
-        .then((next) => {
-          if (active) setStatus(next);
-        })
-        .catch((cause: unknown) => {
-          if (!active) return;
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Impossible de charger votre journal alimentaire.",
-          );
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-      return () => {
-        active = false;
-      };
-    }, [reload]),
-  );
 
   const todayUtc = new Date().toISOString().slice(0, 10);
-  const today = journalForDay(status, todayUtc);
+  const today = status?.journaux.find((journal) => journal.jourUtc === todayUtc) ?? null;
   const totalKcal = today?.totalCaloriesKcal ?? 0;
   const budgetKcal = status?.budgetCalorique ?? 0;
   const entries = today?.entrees.slice().sort((a, b) =>
@@ -109,30 +81,22 @@ export default function FoodJournalScreen() {
   ) ?? [];
   const mealGroups = groupEntriesByMeal(entries);
 
-  const remove = async (entry: FoodEntry) => {
-    if (removeInFlight.current) return;
-    removeInFlight.current = true;
+  // Écriture locale immédiate : fonctionne aussi hors ligne.
+  const confirmRemove = async (entry: LocalFoodEntry) => {
+    if (removingId) return;
     setRemovingId(entry.id);
     setRemoveError("");
     try {
-      await removeFoodEntry(entry.id);
+      await retirerEntree(entry);
       setUndoEntry(entry);
       if (undoTimer.current) clearTimeout(undoTimer.current);
       undoTimer.current = setTimeout(() => setUndoEntry(null), 6000);
-      setReload((value) => value + 1);
-    } catch (cause) {
-      setRemoveError(
-        cause instanceof Error
-          ? `${cause.message} Actualisez le journal avant de réessayer.`
-          : "Suppression impossible. Actualisez le journal avant de réessayer.",
-      );
+    } catch {
+      setRemoveError("Suppression impossible sur l’appareil. Réessaie.");
     } finally {
-      removeInFlight.current = false;
       setRemovingId(null);
     }
   };
-
-  const confirmRemove = (entry: FoodEntry) => void remove(entry);
 
   const undoRemove = async () => {
     const entry = undoEntry;
@@ -140,18 +104,13 @@ export default function FoodJournalScreen() {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     setUndoEntry(null);
     try {
-      await addFoodEntry(
-        entry.foodId,
+      await ajouterAliment(
+        referenceFoodFromEntry(entry),
         entry.quantiteGrammes,
         entry.categorieRepas === "non-classe" ? undefined : entry.categorieRepas,
       );
-      setReload((value) => value + 1);
-    } catch (cause) {
-      setRemoveError(
-        cause instanceof Error
-          ? `${cause.message} Impossible d'annuler le retrait.`
-          : "Impossible d'annuler le retrait.",
-      );
+    } catch {
+      setRemoveError("Impossible d'annuler le retrait.");
     }
   };
 
@@ -161,6 +120,7 @@ export default function FoodJournalScreen() {
         <Text style={s.eyebrow}>ESPACE UTILISATEUR</Text>
         <Text style={s.title}>Mon journal alimentaire</Text>
       </View>
+      <SyncStatus />
 
       {loading ? (
         <View style={s.card}>
@@ -173,7 +133,7 @@ export default function FoodJournalScreen() {
       ) : error ? (
         <View style={s.card}>
           <Text accessibilityRole="alert" style={s.error}>{error}</Text>
-          <Button title="Réessayer" onPress={() => setReload((value) => value + 1)} />
+          <Button title="Réessayer" onPress={() => void synchroniser()} />
         </View>
       ) : status === null ? (
         <View style={s.card}>
@@ -186,27 +146,27 @@ export default function FoodJournalScreen() {
         <>
           <View
             accessible
-            accessibilityLabel={`Statut alimentaire : ${foodStatusPresentation[status.statut].label}`}
+            accessibilityLabel={`Statut alimentaire : ${foodStatusPresentation[status.statut.statut].label}`}
             style={[
               s.statusCard,
-              { backgroundColor: foodStatusPresentation[status.statut].background },
+              { backgroundColor: foodStatusPresentation[status.statut.statut].background },
             ]}
           >
-            <Text style={[s.statusSymbol, { color: foodStatusPresentation[status.statut].color }]}>
-              {foodStatusPresentation[status.statut].symbol}
+            <Text style={[s.statusSymbol, { color: foodStatusPresentation[status.statut.statut].color }]}>
+              {foodStatusPresentation[status.statut.statut].symbol}
             </Text>
             <View style={{ flex: 1 }}>
               <Text style={s.metricLabel}>SUIVI ALIMENTAIRE</Text>
-              <Text style={[s.statusLabel, { color: foodStatusPresentation[status.statut].color }]}>
-                {foodStatusPresentation[status.statut].label}
+              <Text style={[s.statusLabel, { color: foodStatusPresentation[status.statut.statut].color }]}>
+                {foodStatusPresentation[status.statut.statut].label}
               </Text>
             </View>
           </View>
 
           <Text style={localStyles.note}>
-            {status.journal
-              ? `Statut calculé à partir du dernier jour renseigné : ${formatUtcDay(status.journal.jourUtc)} (UTC).`
-              : "Aucune entrée alimentaire enregistrée pour ce plan."}
+            {status.statut.journal
+              ? `Statut calculé à partir du dernier jour renseigné : ${formatUtcDay(status.statut.journal.jourUtc)} (UTC).`
+              : "Aucune entrée alimentaire aujourd’hui ni hier."}
           </Text>
 
           <View style={s.card}>
@@ -259,7 +219,7 @@ export default function FoodJournalScreen() {
                     <Entry
                       key={entry.id}
                       entry={entry}
-                      onRemove={() => confirmRemove(entry)}
+                      onRemove={() => void confirmRemove(entry)}
                       disabled={removingId !== null}
                     />
                   ))}
@@ -277,7 +237,7 @@ export default function FoodJournalScreen() {
             {!!removeError && <Text accessibilityRole="alert" style={s.error}>{removeError}</Text>}
             <Button title="Ajouter un aliment" onPress={() => router.push("/user/add-food")} disabled={removingId !== null} />
           </View>
-          <Button title="Actualiser" onPress={() => setReload((value) => value + 1)} />
+          <Button title={enCours ? "Synchronisation…" : "Actualiser"} disabled={enCours} onPress={() => void synchroniser()} />
         </>
       )}
 

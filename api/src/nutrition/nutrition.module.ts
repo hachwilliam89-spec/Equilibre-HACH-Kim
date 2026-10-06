@@ -16,5 +16,10 @@ import { FoodJournalsController } from './infrastructure/http/food-journals.cont
     RemoveFoodEntryUseCase,
     GetFoodBudgetStatusUseCase,
   ],
+  exports: [
+    AddFoodEntryUseCase,
+    RemoveFoodEntryUseCase,
+    GetFoodBudgetStatusUseCase,
+  ],
 })
 export class NutritionModule {}

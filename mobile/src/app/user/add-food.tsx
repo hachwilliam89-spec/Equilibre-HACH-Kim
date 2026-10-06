@@ -5,7 +5,7 @@ import {
   Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
 import {
-  addFoodEntry, getFavoriteFoods, searchReferenceFoods, setFavoriteFood,
+  searchReferenceFoods,
   type FoodCategory, type MealCategory, type ReferenceFood,
 } from "../../nutrition/api";
 import {
@@ -15,8 +15,10 @@ import {
 import { FoodIcon } from "../../nutrition/FoodIcon";
 import { foodIconKind, categoryIconKind } from "../../nutrition/food-icon-kind";
 import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
-import { getRecentFoods, pushRecentFood } from "../../nutrition/recent-foods";
+import { ApiError } from "../../auth/api";
 import { Button, Field, Screen } from "../../plans/ui";
+import { SyncStatus } from "../../sync/SyncStatus";
+import { useSync } from "../../sync/useSync";
 import { styles as s } from "../../ui/styles";
 
 type LibraryCategory = FoodCategory | "tous" | "favoris" | "recents";
@@ -28,13 +30,13 @@ export default function AddFoodScreen() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<LibraryCategory>("tous");
   const [foods, setFoods] = useState<ReferenceFood[]>([]);
-  const [favoriteFoods, setFavoriteFoods] = useState<ReferenceFood[]>([]);
-  const [recentFoods, setRecentFoods] = useState<ReferenceFood[]>([]);
+  // Favoris et récents viennent de la base embarquée : disponibles hors ligne.
+  const favoriteFoods = useSync((state) => state.vue.favoris);
+  const recentFoods = useSync((state) => state.vue.recents);
+  const { ajouterAliment, basculerFavori } = useSync.getState();
   const [searching, setSearching] = useState(true);
   const [searchError, setSearchError] = useState("");
   const [favoriteError, setFavoriteError] = useState("");
-  const [favoritesLoading, setFavoritesLoading] = useState(true);
-  const [favoritesNonce, setFavoritesNonce] = useState(0);
   const [favoritesBusyId, setFavoritesBusyId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -48,21 +50,6 @@ export default function AddFoodScreen() {
   const submitInFlight = useRef(false);
 
   useEffect(() => {
-    let active = true;
-    void getFavoriteFoods()
-      .then((result) => { if (active) setFavoriteFoods(result); })
-      .catch((cause: unknown) => {
-        if (active) setFavoriteError(cause instanceof Error ? cause.message : "Favoris indisponibles.");
-      })
-      .finally(() => { if (active) setFavoritesLoading(false); });
-    return () => { active = false; };
-  }, [favoritesNonce]);
-
-  useEffect(() => {
-    void getRecentFoods().then(setRecentFoods).catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
     if (category === "favoris" || category === "recents") return;
     let active = true;
     const timer = setTimeout(() => {
@@ -74,7 +61,10 @@ export default function AddFoodScreen() {
         })
         .catch((cause: unknown) => {
           if (!active) return;
-          setSearchError(cause instanceof Error ? cause.message : "Impossible de charger les aliments.");
+          // Le référentiel complet n'est pas copié sur l'appareil (strict nécessaire).
+          setSearchError(cause instanceof ApiError
+            ? cause.message
+            : "Recherche indisponible hors ligne. Retrouvez vos aliments dans « Récents » ou « Favoris ».");
         })
         .finally(() => { if (active) setSearching(false); });
     }, page === 1 ? 250 : 0);
@@ -116,12 +106,9 @@ export default function AddFoodScreen() {
     setFavoritesBusyId(food.id);
     setFavoriteError("");
     try {
-      await setFavoriteFood(food.id, !isFavorite);
-      setFavoriteFoods((previous) => isFavorite
-        ? previous.filter((item) => item.id !== food.id)
-        : [...previous, food].sort((a, b) => a.nom.localeCompare(b.nom, "fr")));
-    } catch (cause) {
-      setFavoriteError(cause instanceof Error ? cause.message : "Impossible de modifier le favori.");
+      await basculerFavori(food, !isFavorite);
+    } catch {
+      setFavoriteError("Impossible de modifier le favori sur l’appareil.");
     } finally {
       setFavoritesBusyId(null);
     }
@@ -150,16 +137,13 @@ export default function AddFoodScreen() {
     setBusy(true);
     setSubmitError("");
     try {
-      await addFoodEntry(selected.id, quantity, mealCategory);
-      setRecentFoods(await pushRecentFood(selected));
+      await ajouterAliment(selected, quantity, mealCategory === "non-classe" ? undefined : mealCategory);
       setSuccess(`${selected.nom} ajouté au journal. Vous pouvez choisir un autre aliment.`);
       setSelected(null);
       setQuantityText("");
       setMealCategory(null);
-    } catch (cause) {
-      setSubmitError(cause instanceof Error
-        ? `${cause.message} Vérifiez votre journal avant de réessayer.`
-        : "Ajout impossible. Vérifiez votre journal avant de réessayer.");
+    } catch {
+      setSubmitError("Ajout impossible sur l’appareil. Vérifiez votre journal avant de réessayer.");
     } finally {
       submitInFlight.current = false;
       setBusy(false);
@@ -172,6 +156,7 @@ export default function AddFoodScreen() {
         <Text style={s.eyebrow}>ESPACE UTILISATEUR</Text>
         <Text style={s.title}>Ajouter un aliment</Text>
       </View>
+      <SyncStatus />
 
       <View style={s.card}>
         <Text style={s.cardTitle}>Bibliothèque alimentaire</Text>
@@ -221,19 +206,8 @@ export default function AddFoodScreen() {
         </View>
 
         {!!success && <Text accessibilityRole="alert" style={s.success}>{success}</Text>}
-        {!!favoriteError && (
-          <View style={{ gap: 8 }}>
-            <Text accessibilityRole="alert" style={s.error}>{favoriteError}</Text>
-            <Button title="Réessayer les favoris" onPress={() => {
-              setFavoriteError("");
-              setFavoritesLoading(true);
-              setFavoritesNonce((value) => value + 1);
-            }} />
-          </View>
-        )}
-        {category === "favoris" && favoritesLoading ? (
-          <ActivityIndicator color="#087454" accessibilityLabel="Chargement des favoris" />
-        ) : category !== "favoris" && searching && page === 1 ? (
+        {!!favoriteError && <Text accessibilityRole="alert" style={s.error}>{favoriteError}</Text>}
+        {category !== "favoris" && category !== "recents" && searching && page === 1 ? (
           <ActivityIndicator color="#087454" accessibilityLabel="Chargement des aliments" />
         ) : searchError ? (
           <View style={{ gap: 8 }}>
@@ -265,8 +239,8 @@ export default function AddFoodScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`${favoriteIds.has(food.id) ? "Retirer" : "Ajouter"} ${food.nom} ${favoriteIds.has(food.id) ? "des" : "aux"} favoris`}
-                  accessibilityState={{ selected: favoriteIds.has(food.id), disabled: favoritesLoading || Boolean(favoritesBusyId) }}
-                  disabled={favoritesLoading || Boolean(favoritesBusyId)}
+                  accessibilityState={{ selected: favoriteIds.has(food.id), disabled: Boolean(favoritesBusyId) }}
+                  disabled={Boolean(favoritesBusyId)}
                   onPress={() => void toggleFavorite(food)}
                   style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}
                 >
@@ -358,7 +332,7 @@ export default function AddFoodScreen() {
                     glucides={preview.glucidesG}
                     lipides={preview.lipidesG}
                   />
-                  <Text style={s.historyMeta}>Estimation ; le journal affichera les valeurs enregistrées par le serveur.</Text>
+                  <Text style={s.historyMeta}>Estimation ; le journal affichera les valeurs confirmées par le serveur après synchronisation.</Text>
                 </View>
               )}
               {!!submitError && <Text accessibilityRole="alert" style={s.error}>{submitError}</Text>}
