@@ -237,7 +237,15 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          # Verification explicite : sous GitHub Actions, "test A && test B" ne
+          # fait pas echouer l'etape si A est faux (pas de sortie sur erreur
+          # dans une liste &&), le secret vide passait donc inapercu.
+          for nom in SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_HOST DEPLOY_USER; do
+            if [ -z "${!nom}" ]; then
+              echo "::error::Secret GitHub manquant ou vide : $nom"
+              exit 1
+            fi
+          done
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
@@ -265,7 +273,15 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
         run: |
-          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          # Verification explicite : sous GitHub Actions, "test A && test B" ne
+          # fait pas echouer l'etape si A est faux (pas de sortie sur erreur
+          # dans une liste &&), le secret vide passait donc inapercu.
+          for nom in SSH_PRIVATE_KEY SSH_KNOWN_HOSTS DEPLOY_HOST DEPLOY_USER; do
+            if [ -z "${!nom}" ]; then
+              echo "::error::Secret GitHub manquant ou vide : $nom"
+              exit 1
+            fi
+          done
           install -d -m 700 ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
