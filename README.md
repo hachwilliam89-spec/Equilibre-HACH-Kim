@@ -194,12 +194,25 @@ Pipeline GitLab CI (`.gitlab-ci.yml`, contrôles repris par GitHub Actions dans
 `.github/workflows/ci.yml`) déclenchée sur chaque commit, toutes branches.
 Cinq étages GitLab, dans l'ordre : `quality` (lint + vérification des types),
 `test` (Jest et contrat du déploiement), `build` (compilation TypeScript de l'API),
-`publish` (GHCR, branches protégées develop/main), `deploy` (recette OVH, simulateur et serveur école).
-Sur `develop`, le déploiement est continu : les jobs `deploy:*` partent seuls une fois
-tous les étages verts. Sur `main`, ils attendent un clic de validation. Chaque cible reste
-conditionnée à sa variable `DEPLOY_*_ENABLED`. La recette contrôle la santé de l'API et
-restaure l'image précédente en cas d'échec ; le serveur école attend les healthchecks
-(`docker compose --wait`).
+`publish` (GHCR, branches protégées develop/main), `deploy` (serveur école).
+
+### Chaîne école GitLab → GHCR → serveur n°2 (évaluation)
+
+CI et déploiement sont séparés sur deux serveurs de l'école :
+
+- **CI** : tous les jobs tournent sur le runner docker de la salle 102
+  (tag `uha40-salle-102`, partagé avec la classe, sans mode privilégié). Les
+  images sont construites avec kaniko, sans Docker-in-Docker, et publiées sur
+  GHCR (la registry GitLab de l'école, port 5050, est bloquée depuis le campus).
+- **Déploiement** : `deploy:ecole` se connecte en SSH au serveur n°2
+  (`10.6.0.3`) et y remplace l'API par l'image de la pipeline, par digest.
+  MongoDB et son volume ne sont jamais recréés ; l'image précédente est
+  restaurée si l'API ne redevient pas saine.
+
+Sur `develop`, `deploy:ecole` part seul une fois tous les étages verts ; sur
+`main`, il attend un clic. Il reste conditionné à `DEPLOY_ECOLE_ENABLED`.
+Voir [le déploiement école](docs/deploiement-ecole.md).
+
 `api/` et `mobile/` sont deux paquets indépendants ; chaque job
 installe ses propres dépendances avec `pnpm install --frozen-lockfile`, qui
 échoue si le lockfile ne correspond plus au `package.json`.
@@ -207,8 +220,7 @@ installe ses propres dépendances avec `pnpm install --frozen-lockfile`, qui
 Pour bloquer les fusions en échec, activer « Pipelines must succeed » et protéger
 develop/main dans GitLab. Les variables GHCR doivent être protégées et masquées.
 La publication produit les images API et simulateur taguées avec le SHA complet,
-puis les artefacts par digest `image.ref` et `simulator-image.ref`. Ils sont
-utilisés respectivement par `deploy:recette` et `deploy:simulator`.
+puis les artefacts par digest `image.ref` et `simulator-image.ref`.
 
 ### Chaîne personnelle GitHub → GHCR → VPS OVH
 

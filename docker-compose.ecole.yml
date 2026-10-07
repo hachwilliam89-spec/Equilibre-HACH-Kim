@@ -1,0 +1,32 @@
+# Surcharge ECOLE : serveur n2 de l'UHA (10.6.0.3, reseau du campus).
+# Deploye par le job deploy:ecole de la pipeline GitLab, qui copie ce fichier
+# et docker-compose.yml dans ~/equilibre-ecole puis lance
+# scripts/deploy-ecole.sh. Le fichier .env.ecole est cree une fois a la main
+# sur le serveur (modele : .env.example) et n'est jamais versionne.
+# Comme en production, aucun build : l'image validee par la CI est recuperee
+# depuis GHCR par son digest.
+
+services:
+  api:
+    image: ${API_IMAGE:?Renseigner API_IMAGE avec une reference image explicite}
+    container_name: equilibre-api-ecole
+    environment:
+      # Force en dur : le serveur ecole fait tourner le build de production.
+      - NODE_ENV=production
+    # Pas de reverse proxy sur le campus : l'API est exposee directement sur
+    # le port 3000 du serveur, joignable depuis le reseau de l'ecole.
+    ports:
+      - "3000:3000"
+    restart: always
+
+  mongo:
+    container_name: equilibre-mongo-ecole
+    restart: always
+    # Volontairement PAS de "ports" : Mongo n'est joignable que par l'API,
+    # via le reseau interne Docker.
+    volumes:
+      - mongo-data-ecole:/data/db
+
+# Volume propre au serveur ecole, jamais supprime par le deploiement.
+volumes:
+  mongo-data-ecole:
