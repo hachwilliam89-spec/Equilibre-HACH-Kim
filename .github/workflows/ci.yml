@@ -1,7 +1,17 @@
-# Miroir GitHub Actions de la pipeline GitLab CI (.gitlab-ci.yml, qui reste
-# la pipeline de reference pour le rendu du fil rouge). Meme decoupage :
-# qualite -> tests -> build, sur les deux paquets independants api/ et
-# mobile/. Se declenche sur push et pull_request, sur toutes les branches.
+# Chaine CI/CD personnelle (GitHub -> GHCR -> VPS OVH), independante du
+# GitLab de l'ecole : elle continue de fonctionner apres le fil rouge.
+#
+# - CI : qualite -> tests -> build, a chaque push et pull request, sur toutes
+#   les branches (meme decoupage que .gitlab-ci.yml).
+# - CD :
+#   * develop : deploiement continu. Une fois toute la CI verte, les images
+#     sont publiees sur GHCR puis deployees sur le VPS OVH, sans intervention.
+#   * main : livraison continue. Rien ne part automatiquement ; le deploiement
+#     se lance a la main depuis l'onglet Actions ("Run workflow" sur main).
+#
+# Secrets GitHub requis (Settings -> Secrets and variables -> Actions) :
+# DEPLOY_HOST, DEPLOY_USER, SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS.
+# GHCR utilise le GITHUB_TOKEN du workflow : aucun jeton personnel stocke.
 
 name: CI
 
@@ -11,6 +21,8 @@ permissions:
 on:
   push:
   pull_request:
+  # Deploiement manuel de main (livraison continue).
+  workflow_dispatch:
 
 jobs:
   api-lint:
@@ -162,3 +174,103 @@ jobs:
       - run: |
           bash scripts/test-deploy-recette.sh
           bash scripts/test-deploy-simulator.sh
+
+  # ---------------------------------------------------------------------------
+  # CD : publication puis deploiement sur le VPS OVH
+  # ---------------------------------------------------------------------------
+
+  # Images de l'API et du simulateur, taguees avec le SHA du commit et
+  # transmises aux deploiements par leur digest (empreinte immuable), jamais
+  # par un tag modifiable comme latest.
+  publish:
+    runs-on: ubuntu-latest
+    needs: [api-build]
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api-image: ghcr.io/hachwilliam89-spec/equilibre-api@${{ steps.api.outputs.digest }}
+      simulator-image: ghcr.io/hachwilliam89-spec/equilibre-balance-simulator@${{ steps.simulator.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: api
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api
+          push: true
+          tags: ghcr.io/hachwilliam89-spec/equilibre-api:${{ github.sha }}
+      - id: simulator
+        uses: docker/build-push-action@v6
+        with:
+          context: ./simulator
+          file: simulator/Dockerfile
+          push: true
+          tags: ghcr.io/hachwilliam89-spec/equilibre-balance-simulator:${{ github.sha }}
+
+  # Les scripts de deploiement sont ceux deja testes par deploy-test : controle
+  # de sante de l'API et retour a l'image precedente en cas d'echec.
+  deploy-recette:
+    runs-on: ubuntu-latest
+    needs: [publish]
+    environment: recette
+    # Un seul deploiement a la fois sur le VPS, jamais interrompu en cours.
+    concurrency:
+      group: recette-ovh
+      cancel-in-progress: false
+    timeout-minutes: 15
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurer la cle SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Deployer l'API
+        run: |
+          printf '%s\n' "${{ needs.publish.outputs.api-image }}" > image.ref
+          bash scripts/deploy-via-ssh.sh
+
+  deploy-simulator:
+    runs-on: ubuntu-latest
+    needs: [publish, deploy-recette]
+    environment: recette
+    concurrency:
+      group: recette-ovh
+      cancel-in-progress: false
+    timeout-minutes: 15
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurer la cle SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Installer le simulateur
+        run: |
+          printf '%s\n' "${{ needs.publish.outputs.simulator-image }}" > simulator-image.ref
+          bash scripts/deploy-simulator-via-ssh.sh

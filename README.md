@@ -190,7 +190,7 @@ Un lint en échec bloque le commit.
 
 ## Intégration continue
 
-Pipeline GitLab CI (`.gitlab-ci.yml`, miroir GitHub Actions dans
+Pipeline GitLab CI (`.gitlab-ci.yml`, contrôles repris par GitHub Actions dans
 `.github/workflows/ci.yml`) déclenchée sur chaque commit, toutes branches.
 Cinq étages GitLab, dans l'ordre : `quality` (lint + vérification des types),
 `test` (Jest et contrat du déploiement), `build` (compilation TypeScript de l'API),
@@ -208,9 +208,23 @@ Pour bloquer les fusions en échec, activer « Pipelines must succeed » et prot
 develop/main dans GitLab. Les variables GHCR doivent être protégées et masquées.
 La publication produit les images API et simulateur taguées avec le SHA complet,
 puis les artefacts par digest `image.ref` et `simulator-image.ref`. Ils sont
-utilisés respectivement par `deploy:recette` et `deploy:simulator`. GitHub
-reproduit les contrôles et construit l’image du simulateur, mais ne publie ni ne
-déploie les images. Les contrôles locaux ne prouvent pas un passage de la CI distante.
+utilisés respectivement par `deploy:recette` et `deploy:simulator`.
+
+### Chaîne personnelle GitHub → GHCR → VPS OVH
+
+`.github/workflows/ci.yml` reprend les mêmes contrôles et ajoute sa propre CD,
+indépendante du GitLab de l'école (elle continue après le fil rouge) :
+
+- sur `develop`, une fois toute la CI verte : publication des images API et
+  simulateur sur GHCR (authentification par `GITHUB_TOKEN`), puis déploiement
+  automatique sur le VPS OVH avec les scripts `deploy-via-ssh.sh` et
+  `deploy-simulator-via-ssh.sh` (contrôle de santé et retour arrière) ;
+- sur `main`, aucun départ automatique : le déploiement se lance depuis
+  l'onglet Actions, « Run workflow » sur `main`.
+
+Secrets du dépôt GitHub : `DEPLOY_HOST`, `DEPLOY_USER`, `SSH_PRIVATE_KEY`,
+`SSH_KNOWN_HOSTS`. Les paquets GHCR doivent autoriser l'accès en écriture au
+dépôt GitHub (paramètres du paquet → *Manage Actions access*).
 
 Voir [la procédure de recette](docs/deploiement-recette.md) avant d'activer la CD.
 
