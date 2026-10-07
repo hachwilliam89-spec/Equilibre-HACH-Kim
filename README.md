@@ -194,7 +194,12 @@ Pipeline GitLab CI (`.gitlab-ci.yml`, miroir GitHub Actions dans
 `.github/workflows/ci.yml`) déclenchée sur chaque commit, toutes branches.
 Cinq étages GitLab, dans l'ordre : `quality` (lint + vérification des types),
 `test` (Jest et contrat du déploiement), `build` (compilation TypeScript de l'API),
-`publish` (GHCR, branches protégées develop/main), `deploy` (recette manuelle, désactivée par défaut).
+`publish` (GHCR, branches protégées develop/main), `deploy` (recette OVH, simulateur et serveur école).
+Sur `develop`, le déploiement est continu : les jobs `deploy:*` partent seuls une fois
+tous les étages verts. Sur `main`, ils attendent un clic de validation. Chaque cible reste
+conditionnée à sa variable `DEPLOY_*_ENABLED`. La recette contrôle la santé de l'API et
+restaure l'image précédente en cas d'échec ; le serveur école attend les healthchecks
+(`docker compose --wait`).
 `api/` et `mobile/` sont deux paquets indépendants ; chaque job
 installe ses propres dépendances avec `pnpm install --frozen-lockfile`, qui
 échoue si le lockfile ne correspond plus au `package.json`.
