@@ -21,7 +21,13 @@ case "$*" in
   'compose '*config*) exit 0 ;;
   'pull '*) [[ "$TEST_CASE" != pull-failure ]] ;;
   'compose '*up*)
-    [[ "$*" == *'--no-build --pull never --wait'* ]]
+    # Deploiement : --pull missing (MongoDB au premier passage) ;
+    # retour arriere : --pull never sur la seule API.
+    if [[ "$API_IMAGE" == "$TEST_OLD" ]]; then
+      [[ "$*" == *'--no-build --pull never --wait --wait-timeout 120 api' ]]
+    else
+      [[ "$*" == *'--no-build --pull missing --wait --wait-timeout 180' ]]
+    fi
     if [[ "$TEST_CASE" == rollback-failure ]]; then exit 1; fi
     if [[ "$TEST_CASE" == health-failure* && "$API_IMAGE" != "$TEST_OLD" ]]; then exit 1; fi ;;
   *) echo "Appel Docker inattendu : $*" >&2; exit 10 ;;
