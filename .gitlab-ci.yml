@@ -9,12 +9,21 @@
 #
 # Activer "Pipelines must succeed" et proteger develop/main dans GitLab.
 #
+# Chaine ecole (evaluation), entierement sur le materiel de l'UHA :
+# - CI : runner docker de la salle 102 (tag uha40-salle-102), partage avec
+#   la classe, sans mode privilegie.
+# - Deploiement : serveur n2 (10.6.0.3), joint en SSH depuis ce runner.
+# - Images : GHCR, la registry GitLab de l'ecole (port 5050) etant bloquee
+#   depuis le reseau du campus.
+# La recette OVH est deployee par GitHub Actions (.github/workflows/ci.yml),
+# plus par cette pipeline.
+#
 # Livraison et deploiement :
-# - develop : deploiement continu. Une fois tous les stages verts, les jobs
-#   deploy:* partent seuls (recette OVH, simulateur, serveur ecole).
-# - main : livraison continue. Les memes jobs attendent un clic : la version
+# - develop : deploiement continu. Une fois tous les stages verts,
+#   deploy:ecole part seul.
+# - main : livraison continue. deploy:ecole attend un clic : la version
 #   stable n'est mise en ligne qu'apres validation humaine.
-# Chaque deploiement reste conditionne a sa variable DEPLOY_*_ENABLED.
+# Le deploiement reste conditionne a la variable DEPLOY_ECOLE_ENABLED.
 
 stages:
   - quality   # lint + verification des types : rapide, echoue vite
@@ -23,9 +32,14 @@ stages:
   - publish   # image issue du commit valide
   - deploy    # automatique sur develop, manuel sur main
 
-# Meme image que le Dockerfile de l'API (node:24-alpine) : le comportement
-# en CI est celui qu'on retrouvera en construisant l'image de production.
-image: node:24-alpine
+default:
+  # Tous les jobs tournent sur le runner de la salle 102 (consigne : la CI
+  # sur le materiel de l'ecole). Un runner sans ce tag ne prend aucun job.
+  tags:
+    - uha40-salle-102
+  # Meme image que le Dockerfile de l'API (node:24-alpine) : le comportement
+  # en CI est celui qu'on retrouvera en construisant l'image de production.
+  image: node:24-alpine
 
 # corepack est fourni avec cette image Node 24. Il lit le champ "packageManager"
 # du package.json ("pnpm@10.25.0") et installe/active exactement cette
@@ -84,9 +98,9 @@ api:integration:
   services:
     # Alias explicite : "mongo" est le nom d'hote joignable depuis le job,
     # exactement comme dans MONGO_URI ci-dessous et dans docker-compose.yml.
-    # Image figee a 7.0 (pas 8.0) : le runner (VPS OVH, noyau >= 6.19)
-    # declenche le bug connu SERVER-121912 (TCMalloc vendorise incompatible
-    # avec les noyaux recents) qui empeche mongo:8.0 de demarrer. Meme choix
+    # Image figee a 7.0 (pas 8.0) : sur les noyaux Linux >= 6.19, le bug
+    # connu SERVER-121912 (TCMalloc vendorise incompatible avec les noyaux
+    # recents) empeche mongo:8.0 de demarrer. Meme choix
     # que dans docker-compose.yml pour rester coherent.
     - name: mongo:7.0
       alias: mongo
@@ -117,37 +131,36 @@ api:build:
       - api/dist
     expire_in: 1 day
 
-# GHCR remplace la registry ecole inaccessible depuis les reseaux testes.
-# GHCR_TOKEN doit etre masque ET protege, develop/main protegees.
-# Le filtrage du job ne protege pas a lui seul les variables du projet.
+# Construction sans Docker-in-Docker : kaniko construit et pousse l'image
+# depuis un conteneur ordinaire, donc le runner partage n'a besoin ni du mode
+# privilegie ni du socket Docker de l'hote.
+# GHCR_TOKEN (write:packages) doit etre masque ET protege, develop/main
+# protegees. Le filtrage du job ne protege pas a lui seul les variables.
 docker:build:
   stage: publish
-  image: docker:27-cli
-  services:
-    - docker:27-dind
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
   variables:
-    # Conserve le fonctionnement du runner existant. Isolation et privileges
-    # a auditer sur le VPS ; TLS reste preferable lorsque configure cote runner.
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
     GHCR_IMAGE: ghcr.io/hachwilliam89-spec/equilibre-api
     SIMULATOR_IMAGE: ghcr.io/hachwilliam89-spec/equilibre-balance-simulator
   rules:
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
   before_script:
-    - test -n "$GHCR_USER" && test -n "$GHCR_TOKEN"
-    - printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+    - '[ -n "$GHCR_USER" ] || { echo "Variable GitLab GHCR_USER manquante"; exit 1; }'
+    - '[ -n "$GHCR_TOKEN" ] || { echo "Variable GitLab GHCR_TOKEN manquante"; exit 1; }'
+    - mkdir -p /kaniko/.docker
+    - auth=$(printf '%s:%s' "$GHCR_USER" "$GHCR_TOKEN" | base64 | tr -d '\n')
+    - printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$auth" > /kaniko/.docker/config.json
   script:
-    - docker build -t "$GHCR_IMAGE:$CI_COMMIT_SHA" ./api
-    - docker push "$GHCR_IMAGE:$CI_COMMIT_SHA"
-    - docker pull "$GHCR_IMAGE:$CI_COMMIT_SHA"
-    - docker image inspect --format '{{index .RepoDigests 0}}' "$GHCR_IMAGE:$CI_COMMIT_SHA" > image.ref
+    # Cible par defaut du Dockerfile : le stage production (dernier stage).
+    # --cleanup remet le conteneur a zero entre les deux constructions.
+    - /kaniko/executor --context "$CI_PROJECT_DIR/api" --dockerfile "$CI_PROJECT_DIR/api/Dockerfile" --destination "$GHCR_IMAGE:$CI_COMMIT_SHA" --digest-file "$CI_PROJECT_DIR/api.digest" --cleanup
+    - printf '%s@%s\n' "$GHCR_IMAGE" "$(cat api.digest)" > image.ref
     - grep -Eq '^ghcr.io/hachwilliam89-spec/equilibre-api@sha256:[a-f0-9]{64}$' image.ref
     - printf 'API_IMAGE=%s\n' "$(cat image.ref)" > image.env
-    - docker build -f simulator/Dockerfile -t "$SIMULATOR_IMAGE:$CI_COMMIT_SHA" ./simulator
-    - docker push "$SIMULATOR_IMAGE:$CI_COMMIT_SHA"
-    - docker pull "$SIMULATOR_IMAGE:$CI_COMMIT_SHA"
-    - docker image inspect --format '{{index .RepoDigests 0}}' "$SIMULATOR_IMAGE:$CI_COMMIT_SHA" > simulator-image.ref
+    - /kaniko/executor --context "$CI_PROJECT_DIR/simulator" --dockerfile "$CI_PROJECT_DIR/simulator/Dockerfile" --destination "$SIMULATOR_IMAGE:$CI_COMMIT_SHA" --digest-file "$CI_PROJECT_DIR/simulator.digest" --cleanup
+    - printf '%s@%s\n' "$SIMULATOR_IMAGE" "$(cat simulator.digest)" > simulator-image.ref
     - grep -Eq '^ghcr.io/hachwilliam89-spec/equilibre-balance-simulator@sha256:[a-f0-9]{64}$' simulator-image.ref
     - printf 'SIMULATOR_IMAGE=%s\n' "$(cat simulator-image.ref)" >> image.env
   artifacts:
@@ -156,70 +169,14 @@ docker:build:
       dotenv: image.env
     expire_in: 30 days
 
-# Pas de needs : attendre tous les stages precedents, pas seulement l'image.
-# L'image est lue depuis l'artefact de CETTE pipeline, jamais depuis latest.
-deploy:recette:
-  stage: deploy
-  image: alpine:3.22
-  dependencies: ["docker:build"]
-  resource_group: recette-ovh
-  interruptible: false
-  timeout: 15 minutes
-  environment:
-    name: recette
-  rules:
-    # develop : part seul si tous les stages precedents sont verts ; un
-    # echec rend la pipeline rouge.
-    - if: '$DEPLOY_RECETTE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "develop"'
-      when: on_success
-    # main : attend un clic de validation.
-    - if: '$DEPLOY_RECETTE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
-      when: manual
-      allow_failure: true
-  before_script:
-    - for i in 1 2 3; do apk add --no-cache openssh-client bash && break || sleep 5; done
-    - test -s "$SSH_PRIVATE_KEY" && test -s "$SSH_KNOWN_HOSTS"
-    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
-    - cp "$SSH_PRIVATE_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
-    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
-  script:
-    - bash scripts/deploy-via-ssh.sh
-
-# Installation independante : elle ne remplace ni l'API ni MongoDB. Le job
-# transmet seulement le digest et le script ; les identifiants restent sur OVH.
-deploy:simulator:
-  stage: deploy
-  image: alpine:3.22
-  dependencies: ["docker:build"]
-  resource_group: recette-ovh
-  interruptible: false
-  timeout: 15 minutes
-  environment:
-    name: recette
-  rules:
-    # develop : part seul si tous les stages precedents sont verts ; un
-    # echec rend la pipeline rouge.
-    - if: '$DEPLOY_SIMULATOR_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "develop"'
-      when: on_success
-    # main : attend un clic de validation.
-    - if: '$DEPLOY_SIMULATOR_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
-      when: manual
-      allow_failure: true
-  before_script:
-    - for i in 1 2 3; do apk add --no-cache openssh-client bash && break || sleep 5; done
-    - test -s "$SSH_PRIVATE_KEY" && test -s "$SSH_KNOWN_HOSTS"
-    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
-    - cp "$SSH_PRIVATE_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
-    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
-  script:
-    - bash scripts/deploy-simulator-via-ssh.sh
-
+# Tests de contrat des scripts de deploiement (Docker simule).
 deploy:test:
   stage: test
   script:
     - for i in 1 2 3; do apk add --no-cache bash && break || sleep 5; done
     - bash scripts/test-deploy-recette.sh
     - bash scripts/test-deploy-simulator.sh
+    - bash scripts/test-deploy-ecole.sh
 
 # ---------------------------------------------------------------------------
 # Mobile (Expo / React Native)
@@ -257,22 +214,25 @@ simulator:test:
     - pnpm install --frozen-lockfile
     - pnpm test
 
-# Deploiement serveur ecole (UHA interne) : tourne sur le runner installe sur
-# le serveur de la salle 102 (tag uha40-salle-102-deploy, reserve a ce
-# projet), deploie en local. Le tag uha40-salle-102 designe le runner docker
-# de CI partage avec la classe : il ne doit jamais recevoir ce job. Le runner OVH ne peut pas
-# joindre l'IP interne 10.6.0.8 (reseau du campus uniquement), donc pas de SSH.
+# Deploiement ecole : le runner de la salle 102 se connecte en SSH au
+# serveur n2 (10.6.0.3, meme reseau du campus) et y remplace l'API par
+# l'image construite dans CETTE pipeline (artefact image.ref, par digest,
+# jamais latest). Aucun code source ni secret applicatif n'est envoye :
+# .env.ecole est cree une fois sur le serveur.
+# Pas de needs : attendre tous les stages precedents, pas seulement l'image.
 deploy:ecole:
   stage: deploy
-  tags:
-    - uha40-salle-102-deploy
-  dependencies: []
+  image: alpine:3.22
+  dependencies: ["docker:build"]
   resource_group: ecole-uha
   interruptible: false
   timeout: 15 minutes
+  variables:
+    ECOLE_HOST: 10.6.0.3
+    ECOLE_USER: uha40
   environment:
     name: ecole-dev
-    url: http://10.6.0.8:3000/api
+    url: http://10.6.0.3:3000/api
   rules:
     # develop : part seul si tous les stages precedents sont verts.
     - if: '$DEPLOY_ECOLE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "develop"'
@@ -281,12 +241,13 @@ deploy:ecole:
     - if: '$DEPLOY_ECOLE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
       when: manual
       allow_failure: true
-  before_script: []
+  before_script:
+    - for i in 1 2 3; do apk add --no-cache openssh-client bash && break || sleep 5; done
+    # Variables de type File : elles contiennent le chemin d'un fichier.
+    - '[ -s "$ECOLE_SSH_PRIVATE_KEY" ] || { echo "Variable GitLab ECOLE_SSH_PRIVATE_KEY manquante ou vide"; exit 1; }'
+    - '[ -s "$ECOLE_SSH_KNOWN_HOSTS" ] || { echo "Variable GitLab ECOLE_SSH_KNOWN_HOSTS manquante ou vide"; exit 1; }'
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - cp "$ECOLE_SSH_PRIVATE_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+    - cp "$ECOLE_SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
   script:
-    - cd /home/uha40/equilibre-hach-kim
-    - git fetch "https://gitlab-ci-token:${CI_JOB_TOKEN}@git.uha4point0.fr/UHA40/fil-rouge-2026/4.0.3/equilibre-hach-kim.git" "$CI_COMMIT_BRANCH"
-    - git reset --hard FETCH_HEAD
-    # --wait : attend que les healthchecks de l'API et de MongoDB soient
-    # verts ; le job echoue si l'application ne demarre pas correctement.
-    - docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build --wait --wait-timeout 180
-    - docker image prune -f
+    - bash scripts/deploy-ecole-via-ssh.sh
