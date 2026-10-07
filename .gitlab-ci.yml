@@ -258,12 +258,14 @@ simulator:test:
     - pnpm test
 
 # Deploiement serveur ecole (UHA interne) : tourne sur le runner installe sur
-# le serveur de la salle 102 (tag uha40-salle-102), deploie en local. Le runner OVH ne peut pas
+# le serveur de la salle 102 (tag uha40-salle-102-deploy, reserve a ce
+# projet), deploie en local. Le tag uha40-salle-102 designe le runner docker
+# de CI partage avec la classe : il ne doit jamais recevoir ce job. Le runner OVH ne peut pas
 # joindre l'IP interne 10.6.0.8 (reseau du campus uniquement), donc pas de SSH.
 deploy:ecole:
   stage: deploy
   tags:
-    - uha40-salle-102
+    - uha40-salle-102-deploy
   dependencies: []
   resource_group: ecole-uha
   interruptible: false
