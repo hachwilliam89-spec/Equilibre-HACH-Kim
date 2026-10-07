@@ -8,14 +8,20 @@
 # installation faite par un autre et masque une regression.
 #
 # Activer "Pipelines must succeed" et proteger develop/main dans GitLab.
-# La recette est un job manuel, active seulement apres provisionnement OVH.
+#
+# Livraison et deploiement :
+# - develop : deploiement continu. Une fois tous les stages verts, les jobs
+#   deploy:* partent seuls (recette OVH, simulateur, serveur ecole).
+# - main : livraison continue. Les memes jobs attendent un clic : la version
+#   stable n'est mise en ligne qu'apres validation humaine.
+# Chaque deploiement reste conditionne a sa variable DEPLOY_*_ENABLED.
 
 stages:
   - quality   # lint + verification des types : rapide, echoue vite
   - test      # tests unitaires (Jest), sans base de donnees
   - build     # compilation TypeScript -> JavaScript (api/dist)
   - publish   # image issue du commit valide
-  - deploy    # recette manuelle
+  - deploy    # automatique sur develop, manuel sur main
 
 # Meme image que le Dockerfile de l'API (node:24-alpine) : le comportement
 # en CI est celui qu'on retrouvera en construisant l'image de production.
@@ -162,7 +168,12 @@ deploy:recette:
   environment:
     name: recette
   rules:
-    - if: '$DEPLOY_RECETTE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
+    # develop : part seul si tous les stages precedents sont verts ; un
+    # echec rend la pipeline rouge.
+    - if: '$DEPLOY_RECETTE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    # main : attend un clic de validation.
+    - if: '$DEPLOY_RECETTE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
       when: manual
       allow_failure: true
   before_script:
@@ -186,7 +197,12 @@ deploy:simulator:
   environment:
     name: recette
   rules:
-    - if: '$DEPLOY_SIMULATOR_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
+    # develop : part seul si tous les stages precedents sont verts ; un
+    # echec rend la pipeline rouge.
+    - if: '$DEPLOY_SIMULATOR_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    # main : attend un clic de validation.
+    - if: '$DEPLOY_SIMULATOR_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
       when: manual
       allow_failure: true
   before_script:
@@ -241,12 +257,14 @@ simulator:test:
     - pnpm install --frozen-lockfile
     - pnpm test
 
-# Deploiement serveur ecole (UHA interne), jumeau de deploy:recette.
-# Memes variables scopees a l'environnement "ecole", tourne en parallele.
+# Deploiement serveur ecole (UHA interne) : tourne sur le runner installe sur
+# le serveur (tag uha-server), deploie en local. Le runner OVH ne peut pas
+# joindre l'IP interne 10.6.0.8 (reseau du campus uniquement), donc pas de SSH.
 deploy:ecole:
   stage: deploy
-  image: alpine:3.22
-  dependencies: ["docker:build"]
+  tags:
+    - uha-server
+  dependencies: []
   resource_group: ecole-uha
   interruptible: false
   timeout: 15 minutes
@@ -254,14 +272,19 @@ deploy:ecole:
     name: ecole-dev
     url: http://10.6.0.8:3000/api
   rules:
-    - if: '$DEPLOY_ECOLE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
+    # develop : part seul si tous les stages precedents sont verts.
+    - if: '$DEPLOY_ECOLE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    # main : attend un clic de validation.
+    - if: '$DEPLOY_ECOLE_ENABLED == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == "main"'
       when: manual
       allow_failure: true
-  before_script:
-    - for i in 1 2 3; do apk add --no-cache openssh-client bash && break || sleep 5; done
-    - test -s "$SSH_PRIVATE_KEY" && test -s "$SSH_KNOWN_HOSTS"
-    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
-    - cp "$SSH_PRIVATE_KEY" ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
-    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+  before_script: []
   script:
-    - bash scripts/deploy-via-ssh.sh
+    - cd /home/uha40/equilibre-hach-kim
+    - git fetch "https://gitlab-ci-token:${CI_JOB_TOKEN}@git.uha4point0.fr/UHA40/fil-rouge-2026/4.0.3/equilibre-hach-kim.git" "$CI_COMMIT_BRANCH"
+    - git reset --hard FETCH_HEAD
+    # --wait : attend que les healthchecks de l'API et de MongoDB soient
+    # verts ; le job echoue si l'application ne demarre pas correctement.
+    - docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build --wait --wait-timeout 180
+    - docker image prune -f
