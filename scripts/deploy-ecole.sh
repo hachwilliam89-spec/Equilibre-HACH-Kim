@@ -52,8 +52,10 @@ rollback() {
   exit 1
 }
 trap rollback ERR INT TERM
-# --wait : attend que MongoDB et l'API soient sains (healthchecks).
-compose up -d --no-build --pull never --wait --wait-timeout 180
+# --pull missing : telecharge mongo:7.0 au premier deploiement ; l'API est
+# deja presente (docker pull ci-dessus). --wait : attend que MongoDB et
+# l'API soient sains (healthchecks).
+compose up -d --no-build --pull missing --wait --wait-timeout 180
 printf 'API_IMAGE=%s\n' "$target" > .env.release.tmp
 mv .env.release.tmp .env.release
 trap - ERR INT TERM
