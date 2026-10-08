@@ -206,3 +206,21 @@ le fichier.
 L’identifiant Android de l’application est `dev.wkhach.equilibre`. Il ne doit
 plus changer une fois l’application installée chez quelqu’un : un autre
 identifiant serait considéré comme une autre application.
+
+## Mises à jour à distance (EAS Update)
+
+L’application embarque `expo-updates` : une modification du code JavaScript
+(écrans, logique, textes) est publiée sans nouvel APK. L’application télécharge
+la mise à jour au démarrage et l’applique au lancement suivant.
+
+```bash
+pnpm dlx eas-cli update --channel preview --environment preview --message "fix: ..."
+```
+
+- `--channel preview` vise les APK construits avec le profil `preview`.
+- `--environment preview` prend `EXPO_PUBLIC_API_URL` dans les variables EAS
+  (sinon le `.env` local, qui pointe sur `localhost`, serait embarqué).
+- `runtimeVersion` suit la politique `fingerprint` : une mise à jour n’est
+  envoyée qu’aux APK dont le code natif est identique. Après l’ajout d’une
+  bibliothèque native, d’une permission ou un changement de version d’Expo, il
+  faut reconstruire l’APK (`eas build`) au lieu de publier une mise à jour.
