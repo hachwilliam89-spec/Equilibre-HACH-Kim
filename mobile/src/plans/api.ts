@@ -46,7 +46,13 @@ export async function requestApi(path: string, method = "GET", body?: unknown, r
     return requestApi(path, method, body, false);
   }
   const text = await response.text();
-  const data: unknown = response.status === 204 || !text ? null : JSON.parse(text);
+  if (response.status === 204 || !text) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Réponse serveur invalide (attendu JSON, reçu ${text.slice(0, 100)}...)`);
+  }
   if (!response.ok) {
     const problem = z.object({ detail: z.string().optional(), errors: z.array(z.object({ message: z.string() })).optional() }).safeParse(data);
     throw new ApiError(problem.success ? problem.data.errors?.map((e) => e.message).join("\n") || problem.data.detail || "Opération refusée." : "Opération refusée.", response.status);

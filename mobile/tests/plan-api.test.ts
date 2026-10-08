@@ -48,3 +48,8 @@ test("une réponse 204 sans corps valide une modification de favori", async () =
   await expect(requestApi("/foods/me/favorites/food-1", "PUT")).resolves.toBeNull();
   expect(text).toHaveBeenCalled();
 });
+test("une réponse HTML invalide déclenche une erreur claire", async () => {
+  const text = jest.fn(async () => "<!DOCTYPE html><html>Error</html>");
+  (global.fetch as jest.Mock).mockResolvedValue({ status: 500, ok: false, text });
+  await expect(requestApi("/api/test")).rejects.toThrow("Réponse serveur invalide");
+});
