@@ -17,6 +17,11 @@ Elle conserve les UUID et ne modifie pas les contrats HTTP.
 7. Après validation et nouvelle sauvegarde, supprimer les anciennes
    collections avec `pnpm --dir api migrate:suivis -- --apply --drop-legacy`.
 
+Un utilisateur qui possède déjà un document `suivis` (créé par la nouvelle API)
+est conservé tel quel : la migration ne le remplace pas, pour ne pas perdre un
+plan, des mesures ou un journal alimentaire plus récents que les anciennes
+collections. Le compteur `suivisExistantsConserves` l’indique.
+
 Avant la remise en service de la nouvelle API, la commande est réexécutable :
 chaque document `suivis` est remplacé par la projection déterministe des données
 sources. Elle ne doit plus être relancée après la reprise des écritures, car
