@@ -37,6 +37,8 @@ describe('Ajout d’une entrée alimentaire (intégration)', () => {
   let collection: Collection<StoredSuivi>;
   const userId = randomUUID();
   const concurrentUserId = randomUUID();
+  const forgedUserId = randomUUID();
+  const mixedUserId = randomUUID();
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -49,12 +51,16 @@ describe('Ajout d’une entrée alimentaire (intégration)', () => {
     collection = app
       .get<Connection>(getConnectionToken())
       .collection<StoredSuivi>('suivis');
-    await Promise.all([createSuivi(userId), createSuivi(concurrentUserId)]);
+    await Promise.all(
+      [userId, concurrentUserId, forgedUserId, mixedUserId].map(createSuivi),
+    );
   });
 
   afterAll(async () => {
     if (collection) {
-      await collection.deleteMany({ _id: { $in: [userId, concurrentUserId] } });
+      await collection.deleteMany({
+        _id: { $in: [userId, concurrentUserId, forgedUserId, mixedUserId] },
+      });
     }
     if (app) await app.close();
   });
@@ -186,5 +192,42 @@ describe('Ajout d’une entrée alimentaire (intégration)', () => {
     expect(row?.journauxAlimentaires).toHaveLength(1);
     expect(row?.journauxAlimentaires[0].entrees).toHaveLength(2);
     expect(row?.journauxAlimentaires[0].totalCaloriesKcal).toBe(427);
+  });
+
+  it('refuse des valeurs nutritionnelles envoyées par le client : elles sont calculées par le serveur', async () => {
+    const forged = await request(app.getHttpServer())
+      .post('/api/food-journals/me/entries')
+      .auth(token(forgedUserId), { type: 'bearer' })
+      .send({
+        foodId: REFERENCE_FOODS[0].id,
+        quantiteGrammes: 200,
+        caloriesKcal: 1,
+        proteinesG: 0,
+        nom: 'Aliment falsifie',
+      })
+      .expect(400);
+    expect(JSON.stringify(forged.body)).not.toContain('Aliment falsifie');
+    const row = await collection.findOne({ _id: forgedUserId });
+    expect(row?.journauxAlimentaires).toEqual([]);
+    expect(row?.version).toBe(0);
+  });
+
+  it('applique un ajout et un retrait simultanés sans perdre ni restaurer d’entrée', async () => {
+    const rice = await add(mixedUserId, REFERENCE_FOODS[0].id, 200).expect(201);
+    const riceId = (rice.body as { entrees: { id: string }[] }).entrees[0].id;
+    const results = await Promise.all([
+      add(mixedUserId, REFERENCE_FOODS[1].id, 100),
+      request(app.getHttpServer())
+        .delete(`/api/food-journals/me/entries/${riceId}`)
+        .auth(token(mixedUserId), { type: 'bearer' }),
+    ]);
+    expect(results.map((result) => result.status)).toEqual([201, 200]);
+    const row = await collection.findOne({ _id: mixedUserId });
+    expect(row?.version).toBe(3);
+    expect(row?.journauxAlimentaires).toHaveLength(1);
+    const journal = row?.journauxAlimentaires[0];
+    expect(journal?.entrees).toHaveLength(1);
+    expect(journal?.entrees[0].aliment.nom).toBe(REFERENCE_FOODS[1].nom);
+    expect(journal?.totalCaloriesKcal).toBe(427 - 260);
   });
 });
