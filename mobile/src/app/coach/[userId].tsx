@@ -1,7 +1,9 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
-import { Client, Plan, Preview, clients, currentPlan, planSchema, previewSchema, requestApi } from "../../plans/api";
+import { clientProgression, type ClientProgression } from "../../coaching/api";
+import { ClientProgress } from "../../coaching/ClientProgress";
+import { Client, Plan, Preview, currentPlan, planSchema, previewSchema, requestApi } from "../../plans/api";
 import { budgetSchema, goalsSchema, weeklyRate } from "../../plans/form";
 import { Button, Field, InfoRow, Screen } from "../../plans/ui";
 import { colors } from "../../ui/theme";
@@ -16,6 +18,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 export default function UserPlan() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const [client, setClient] = useState<Client | null>(null);
+  const [progression, setProgression] = useState<ClientProgression | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -32,11 +35,10 @@ export default function UserPlan() {
   const [suggestedBudget, setSuggestedBudget] = useState<number | null>(null);
   useEffect(() => {
     let active = true;
-    void Promise.all([clients(), currentPlan(userId)]).then(([all, current]) => {
+    // La fiche de progression contrôle aussi le rattachement (403 sinon).
+    void Promise.all([clientProgression(userId), currentPlan(userId)]).then(([suivi, current]) => {
       if (!active) return;
-      const selected = all.find((u) => u.id === userId);
-      if (!selected) throw new Error("Cet utilisateur n’est pas rattaché à votre compte.");
-      setClient(selected); setPlan(current);
+      setClient(suivi.utilisateur); setProgression(suivi); setPlan(current);
     }).catch((e: Error) => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [userId, reload]);
@@ -82,14 +84,14 @@ export default function UserPlan() {
       // Sans modification, laisser le serveur recalculer la suggestion et son avertissement.
       ...(suggestedBudget !== null && parsed.data === suggestedBudget ? {} : { budgetCalorique: parsed.data }),
     }));
-    setPlan(result); setStep("detail"); setNotice("Le plan a été soumis et enregistré."); setPreview(null);
+    setPlan(result); setStep("detail"); setNotice("Le plan a été soumis et enregistré."); setPreview(null); setReload((v) => v + 1);
   });
   const cancel = () => Alert.alert("Annuler le plan ?", "L’utilisateur n’aura plus de plan actif.", [
     { text: "Conserver", style: "cancel" },
     { text: "Annuler le plan", style: "destructive", onPress: () => void run(async () => {
       if (!plan) return;
       await requestApi(`/plans/${encodeURIComponent(plan.id)}/cancel`, "POST");
-      setPlan(null); setNotice("Le plan a été annulé.");
+      setPlan(null); setNotice("Le plan a été annulé."); setReload((v) => v + 1);
     }) },
   ]);
   const refresh = () => { setLoading(true); setError(""); setReload((v) => v + 1); };
@@ -111,6 +113,7 @@ export default function UserPlan() {
     {!!notice && <Text accessibilityRole="alert" style={s.text}>{notice}</Text>}
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
     {loading ? <ActivityIndicator color={colors.brand} /> : client && <>
+      {step === "detail" && progression && <ClientProgress progression={progression} />}
       {step === "detail" && <View style={s.card}>
         <View style={[s.summaryRow, { alignItems: "center" }]}>
           <Text style={s.cardTitle}>Plan actuel</Text>
