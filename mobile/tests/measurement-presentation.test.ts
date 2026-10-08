@@ -3,6 +3,7 @@ import {
   formatSignedWeight,
   formatUtcDay,
   formatWeight,
+  goalProgress,
   measurementSourceLabel,
   measurementStatusLabel,
   trackingPresentation,
@@ -60,4 +61,15 @@ test("présente toutes les sources et tous les statuts de mesure", () => {
     suspecte: "Suspecte",
     "hors-plan": "Hors plan",
   });
+});
+
+test("calcule l'avancement vers le poids cible, en perte comme en prise", () => {
+  expect(goalProgress(75, 70, 74)).toEqual({ fraction: 0.2, parcouruKg: 1, totalKg: 5 });
+  expect(goalProgress(60, 64, 62)).toEqual({ fraction: 0.5, parcouruKg: 2, totalKg: 4 });
+});
+
+test("borne l'avancement quand le poids s'éloigne ou dépasse la cible", () => {
+  expect(goalProgress(75, 70, 76).fraction).toBe(0);
+  expect(goalProgress(75, 70, 69)).toEqual({ fraction: 1, parcouruKg: 5, totalKg: 5 });
+  expect(goalProgress(70, 70, 70).fraction).toBe(1);
 });

@@ -1,4 +1,3 @@
-import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform,
@@ -151,11 +150,7 @@ export default function AddFoodScreen() {
   };
 
   return (
-    <Screen>
-      <View>
-        <Text style={s.eyebrow}>ESPACE UTILISATEUR</Text>
-        <Text style={s.title}>Ajouter un aliment</Text>
-      </View>
+    <Screen back="/user/journal" title="Ajouter un aliment">
       <SyncStatus />
 
       <View style={s.card}>
@@ -256,8 +251,6 @@ export default function AddFoodScreen() {
           </View>
         )}
       </View>
-
-      <Button title="Voir mon journal" onPress={() => router.replace("/user/journal")} disabled={busy} />
 
       <Modal
         visible={selected !== null}

@@ -30,9 +30,9 @@ export function SyncStatus() {
           alignItems: "center",
           gap: 12,
           backgroundColor: couleur.fond,
-          borderRadius: 12,
-          paddingHorizontal: 14,
-          paddingVertical: 8,
+          borderRadius: 999,
+          paddingHorizontal: 16,
+          paddingVertical: 6,
         }}
       >
         <Text style={{ flex: 1, color: couleur.texte, fontSize: 14, fontWeight: "600" }}>

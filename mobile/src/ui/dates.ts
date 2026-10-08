@@ -14,3 +14,10 @@ export function nextDate(value: string): string {
 export function displayDate(value: string): string {
   return value.slice(0, 10).split("-").reverse().join("/");
 }
+
+/** Date du jour en en-tête : « JEUDI 8 OCTOBRE ». */
+export function todayLabel(date = new Date()): string {
+  return date
+    .toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+    .toUpperCase();
+}
