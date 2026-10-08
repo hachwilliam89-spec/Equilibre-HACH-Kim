@@ -28,15 +28,41 @@ const normalize = (value: string) => value.normalize("NFD")
   .replace(/[̀-ͯ]/g, "").toLocaleLowerCase("fr-FR");
 const isLocal = (category: LibraryCategory) => category === "favoris" || category === "recents";
 
-const filters: { value: LibraryCategory; label: string }[] = [
+type Source = "tous" | "recents" | "favoris";
+const sources: { value: Source; label: string }[] = [
   { value: "tous", label: "Tous" },
   { value: "recents", label: "Récents" },
   { value: "favoris", label: "Favoris" },
-  ...foodCategories,
 ];
 
-function FilterChip({ value, label, selected, onPress }: { value: LibraryCategory; label: string; selected: boolean; onPress: () => void }) {
-  const tint = selected ? colors.onBrand : colors.ink;
+/** Ligne 1 : d'où viennent les aliments (catalogue, récents, favoris). */
+function SourceTabs({ value, onChange }: { value: Source; onChange: (source: Source) => void }) {
+  return (
+    <View style={[s.tabs, { marginHorizontal: 16, padding: 3 }]} accessibilityRole="tablist">
+      {sources.map((source) => {
+        const selected = value === source.value;
+        const tint = selected ? colors.onBrand : colors.muted;
+        return (
+          <Pressable
+            key={source.value}
+            accessibilityRole="tab"
+            accessibilityLabel={source.label}
+            accessibilityState={{ selected }}
+            onPress={() => onChange(source.value)}
+            style={[s.tab, { minHeight: 40, flexDirection: "row", gap: 6 }, selected && s.tabSelected]}
+          >
+            {source.value === "recents" && <ClockIcon size={16} color={tint} />}
+            {source.value === "favoris" && <StarIcon size={16} color={selected ? colors.onBrand : "#c2881c"} filled />}
+            <Text style={[s.tabText, { fontSize: 14 }, selected && s.tabTextSelected]}>{source.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Ligne 2 : familles du catalogue ; un second appui retire le filtre. */
+function FamilyChip({ value, label, selected, onPress }: { value: FoodCategory; label: string; selected: boolean; onPress: () => void }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -44,16 +70,12 @@ function FilterChip({ value, label, selected, onPress }: { value: LibraryCategor
       accessibilityLabel={label}
       onPress={onPress}
       style={[
-        { flexDirection: "row", alignItems: "center", gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 19, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
-        selected && { backgroundColor: colors.brand, borderColor: colors.brand },
+        { flexDirection: "row", alignItems: "center", gap: 6, height: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+        selected && { backgroundColor: colors.mint, borderColor: colors.brand },
       ]}
     >
-      {value === "recents" && <ClockIcon size={16} color={tint} />}
-      {value === "favoris" && <StarIcon size={16} color={selected ? colors.onBrand : "#c2881c"} filled />}
-      {!isLocal(value) && value !== "tous" && (
-        <FoodIcon kind={categoryIconKind[value as FoodCategory]} size={20} boxed={false} />
-      )}
-      <Text style={{ fontSize: 14, fontWeight: "700", color: tint }}>{label}</Text>
+      <FoodIcon kind={categoryIconKind[value]} size={20} boxed={false} />
+      <Text style={{ fontSize: 14, fontWeight: "700", color: selected ? colors.brand : colors.ink }}>{label}</Text>
     </Pressable>
   );
 }
@@ -200,16 +222,28 @@ export default function AddFoodScreen() {
             </Pressable>
           )}
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
-        >
-          {filters.map(({ value, label }) => (
-            <FilterChip key={value} value={value} label={label} selected={category === value} onPress={() => changeCategory(value)} />
-          ))}
-        </ScrollView>
+        <SourceTabs
+          value={isLocal(category) ? (category as Source) : "tous"}
+          onChange={(source) => changeCategory(source)}
+        />
+        {!isLocal(category) && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
+          >
+            {foodCategories.map(({ value, label }) => (
+              <FamilyChip
+                key={value}
+                value={value}
+                label={label}
+                selected={category === value}
+                onPress={() => changeCategory(category === value ? "tous" : value)}
+              />
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       <FlatList
