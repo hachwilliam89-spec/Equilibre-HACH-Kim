@@ -62,10 +62,25 @@ try {
     plans.find({}).toArray(),
     measurements.find({}).toArray(),
   ]);
-  const userIds = new Set([
+  // Un utilisateur qui possède déjà un document suivis l'a obtenu de la
+  // nouvelle API : il contient des données plus récentes que les anciennes
+  // collections (plan actif, mesures, journal alimentaire). Le remplacer les
+  // ferait perdre ; il est donc conservé tel quel.
+  const existingSuivis = new Set(
+    (await suivis.find({}, { projection: { _id: 1 } }).toArray()).map((suivi) =>
+      String(suivi._id),
+    ),
+  );
+  const legacyUserIds = new Set([
     ...allPlans.map((plan) => plan.userId),
     ...allMeasurements.map((measurement) => measurement.userId),
   ]);
+  const skippedUserIds = [...legacyUserIds].filter((userId) =>
+    existingSuivis.has(userId),
+  );
+  const userIds = new Set(
+    [...legacyUserIds].filter((userId) => !existingSuivis.has(userId)),
+  );
   const replacements = [];
   const existingUserIds = new Set(allUsers.map((user) => String(user._id)));
 
@@ -148,6 +163,7 @@ try {
       {
         mode: apply ? 'apply' : 'dry-run',
         suivis: replacements.length,
+        suivisExistantsConserves: skippedUserIds.length,
         profils: profiles.length,
         mesuresConservees: replacements.reduce(
           (total, suivi) => total + suivi.mesures.length,
