@@ -169,3 +169,40 @@ existant doit être reconstruit pour intégrer les nouvelles dépendances native
 Recette confirmée par Hach Kim le 24/09/2026 sur iPhone 17 :
 sélection, annulation conservant la valeur, saisie au clavier et modification
 de la date de début au-delà de la cible. La recette Android reste à effectuer.
+
+## Générer l’APK Android (EAS Build)
+
+L’APK est construit dans le cloud par EAS Build à partir de `eas.json` : la
+configuration est versionnée, le build est reproductible et ne dépend pas d’un
+poste équipé d’Android Studio.
+
+| Profil | Sortie | Usage |
+| --- | --- | --- |
+| `preview` | `.apk` installable directement | démo, formateur, tests sur téléphone |
+| `production` | `.aab` | publication sur le Play Store (non utilisée pour l’instant) |
+
+Les deux profils pointent l’application vers l’API de recette en HTTPS
+(`https://equilibre.164-132-246-49.sslip.io/api`), joignable depuis n’importe quel
+réseau. Le numéro de version Android (`versionCode`) est géré par EAS et
+incrémenté à chaque build (`appVersionSource: remote`).
+
+Première fois (une seule fois, depuis `mobile/`) :
+
+```bash
+pnpm dlx eas-cli login
+pnpm dlx eas-cli init        # crée le projet Expo et ajoute son identifiant dans app.json
+```
+
+Construire l’APK :
+
+```bash
+pnpm dlx eas-cli build --platform android --profile preview
+```
+
+À la fin du build, EAS affiche un lien et un QR code de téléchargement de
+l’APK. Sur Android, autoriser l’installation depuis cette source puis ouvrir
+le fichier.
+
+L’identifiant Android de l’application est `dev.wkhach.equilibre`. Il ne doit
+plus changer une fois l’application installée chez quelqu’un : un autre
+identifiant serait considéré comme une autre application.
