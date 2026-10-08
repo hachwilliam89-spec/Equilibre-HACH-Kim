@@ -1,26 +1,29 @@
 import { router } from "expo-router";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { DailyBudgetChart } from "../../charts/DailyBudgetChart";
+import { DailyBudgetChart } from "../../../charts/DailyBudgetChart";
 import {
   foodStatusPresentation,
   formatNutrition,
   groupEntriesByMeal,
   referenceFoodFromEntry,
-} from "../../nutrition/presentation";
-import { FoodIcon } from "../../nutrition/FoodIcon";
-import { foodIconKind } from "../../nutrition/food-icon-kind";
-import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
-import { formatUtcDay } from "../../measurements/presentation";
-import { Button, Screen } from "../../plans/ui";
-import type { LocalFoodEntry } from "../../sync/contracts";
-import { etatChargement } from "../../sync/presentation";
-import { SyncStatus } from "../../sync/SyncStatus";
-import { useSync } from "../../sync/useSync";
-import { styles as s } from "../../ui/styles";
+} from "../../../nutrition/presentation";
+import { FoodIcon } from "../../../nutrition/FoodIcon";
+import { foodIconKind } from "../../../nutrition/food-icon-kind";
+import { MacroBreakdown } from "../../../nutrition/MacroBreakdown";
+import { formatUtcDay } from "../../../measurements/presentation";
+import { Button, Screen } from "../../../plans/ui";
+import { todayLabel } from "../../../ui/dates";
+import { PlusIcon } from "../../../ui/icons";
+import { colors } from "../../../ui/theme";
+import type { LocalFoodEntry } from "../../../sync/contracts";
+import { etatChargement } from "../../../sync/presentation";
+import { SyncStatus } from "../../../sync/SyncStatus";
+import { useSync } from "../../../sync/useSync";
+import { styles as s } from "../../../ui/styles";
 
 const localStyles = StyleSheet.create({
-  note: { color: "#536861", fontSize: 14, lineHeight: 20 },
+  note: { color: colors.muted, fontSize: 13, lineHeight: 19 },
 });
 
 function Entry({
@@ -114,18 +117,35 @@ export default function FoodJournalScreen() {
     }
   };
 
-  return (
-    <Screen>
-      <View>
-        <Text style={s.eyebrow}>ESPACE UTILISATEUR</Text>
-        <Text style={s.title}>Mon journal alimentaire</Text>
-      </View>
-      <SyncStatus />
+  const addFood = () => router.push("/user/add-food");
+  const statusPresentation = status ? foodStatusPresentation[status.statut.statut] : null;
 
+  return (
+    <Screen
+      inTabs
+      eyebrow={todayLabel()}
+      title="Mon journal"
+      refreshing={enCours && !loading}
+      onRefresh={() => void synchroniser()}
+      floating={
+        status && !loading && !error ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ajouter un aliment"
+            disabled={removingId !== null}
+            onPress={addFood}
+            style={({ pressed }) => [s.fab, pressed && { opacity: 0.9 }]}
+          >
+            <PlusIcon color={colors.onBrand} size={22} strokeWidth={2.6} />
+            <Text style={s.buttonText}>Ajouter</Text>
+          </Pressable>
+        ) : undefined
+      }
+    >
       {loading ? (
         <View style={s.card}>
           <ActivityIndicator
-            color="#087454"
+            color={colors.brand}
             accessibilityLabel="Chargement du journal alimentaire"
           />
           <Text style={s.text}>Chargement du journal…</Text>
@@ -135,7 +155,7 @@ export default function FoodJournalScreen() {
           <Text accessibilityRole="alert" style={s.error}>{error}</Text>
           <Button title="Réessayer" onPress={() => void synchroniser()} />
         </View>
-      ) : status === null ? (
+      ) : status === null || statusPresentation === null ? (
         <View style={s.card}>
           <Text style={s.cardTitle}>Aucun plan actif</Text>
           <Text style={s.text}>
@@ -144,34 +164,19 @@ export default function FoodJournalScreen() {
         </View>
       ) : (
         <>
-          <View
-            accessible
-            accessibilityLabel={`Statut alimentaire : ${foodStatusPresentation[status.statut.statut].label}`}
-            style={[
-              s.statusCard,
-              { backgroundColor: foodStatusPresentation[status.statut.statut].background },
-            ]}
-          >
-            <Text style={[s.statusSymbol, { color: foodStatusPresentation[status.statut.statut].color }]}>
-              {foodStatusPresentation[status.statut.statut].symbol}
-            </Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.metricLabel}>SUIVI ALIMENTAIRE</Text>
-              <Text style={[s.statusLabel, { color: foodStatusPresentation[status.statut.statut].color }]}>
-                {foodStatusPresentation[status.statut.statut].label}
-              </Text>
-            </View>
-          </View>
-
-          <Text style={localStyles.note}>
-            {status.statut.journal
-              ? `Statut calculé à partir du dernier jour renseigné : ${formatUtcDay(status.statut.journal.jourUtc)} (UTC).`
-              : "Aucune entrée alimentaire aujourd’hui ni hier."}
-          </Text>
-
           <View style={s.card}>
-            <Text style={s.cardTitle}>Aujourd’hui · {formatUtcDay(todayUtc)} (UTC)</Text>
-            <Text style={s.metricValue}>
+            <View style={[s.summaryRow, { alignItems: "center" }]}>
+              <Text style={s.metricLabel}>Aujourd’hui · {formatUtcDay(todayUtc)} (UTC)</Text>
+              <View
+                accessible
+                accessibilityLabel={`Statut alimentaire : ${statusPresentation.label}`}
+                style={[s.pill, { backgroundColor: statusPresentation.background, flexDirection: "row", gap: 5 }]}
+              >
+                <Text style={[s.pillText, { color: statusPresentation.color }]}>{statusPresentation.symbol}</Text>
+                <Text style={[s.pillText, { color: statusPresentation.color }]}>{statusPresentation.label}</Text>
+              </View>
+            </View>
+            <Text style={{ fontSize: 30, fontWeight: "800", color: colors.ink }}>
               {budgetKcal <= 0
                 ? `${formatNutrition(totalKcal)} kcal consommées`
                 : totalKcal <= budgetKcal
@@ -197,20 +202,29 @@ export default function FoodJournalScreen() {
                   : undefined
               }
             />
-            <Text style={s.historyMeta}>
+            <Text style={localStyles.note}>
               Cibles indicatives selon ton budget et ton activité ; le suivi reste calorique.
+              {" "}
+              {status.statut.journal
+                ? `Statut calculé sur le ${formatUtcDay(status.statut.journal.jourUtc)} (UTC).`
+                : "Aucune entrée alimentaire aujourd’hui ni hier."}
             </Text>
           </View>
 
+          <SyncStatus />
+
           <View style={s.card}>
-            <Text style={s.cardTitle}>Aliments consommés aujourd’hui</Text>
+            <Text style={s.cardTitle}>Aliments consommés</Text>
             {entries.length === 0 ? (
-              <Text style={s.text}>Aucun aliment consigné aujourd’hui.</Text>
+              <>
+                <Text style={s.text}>Aucun aliment consigné aujourd’hui.</Text>
+                <Button title="Ajouter mon premier aliment" variant="secondary" onPress={addFood} />
+              </>
             ) : (
               mealGroups.map((group) => (
                 <View key={group.value} style={{ gap: 4 }}>
-                  <View style={s.historyMain}>
-                    <Text accessibilityRole="header" style={s.label}>{group.label}</Text>
+                  <View style={[s.historyMain, { marginTop: 4 }]}>
+                    <Text accessibilityRole="header" style={[s.metricLabel, { color: colors.brand }]}>{group.label}</Text>
                     <Text style={s.historyMeta}>
                       {formatNutrition(group.caloriesKcal)} kcal
                     </Text>
@@ -227,7 +241,7 @@ export default function FoodJournalScreen() {
               ))
             )}
             {undoEntry && (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#eef4fa", borderRadius: 12, padding: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.mint, borderRadius: 12, padding: 12 }}>
                 <Text style={[s.text, { flex: 1 }]}>{undoEntry.nom} retiré.</Text>
                 <Pressable accessibilityRole="button" accessibilityLabel="Annuler le retrait" onPress={() => void undoRemove()}>
                   <Text style={s.link}>Annuler</Text>
@@ -235,13 +249,11 @@ export default function FoodJournalScreen() {
               </View>
             )}
             {!!removeError && <Text accessibilityRole="alert" style={s.error}>{removeError}</Text>}
-            <Button title="Ajouter un aliment" onPress={() => router.push("/user/add-food")} disabled={removingId !== null} />
           </View>
-          <Button title={enCours ? "Synchronisation…" : "Actualiser"} disabled={enCours} onPress={() => void synchroniser()} />
         </>
       )}
 
-      <Button title="Retour au suivi de poids" onPress={() => router.replace("/user")} />
+      {(loading || error || status === null) && <SyncStatus />}
     </Screen>
   );
 }

@@ -52,7 +52,7 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
           <Pressable accessibilityRole="button" onPress={() => setVisible(!visible)}><Text style={s.link}>{visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}</Text></Pressable>
           <Text style={s.label}>Rôle</Text>
           <View style={{ flexDirection: "row", gap: 12 }}>
-            {(["utilisateur", "coach"] as const).map((choice) => <Pressable key={choice} accessibilityRole="radio" accessibilityState={{ checked: role === choice }} disabled={busy} onPress={() => { setRole(choice); setError(null); }} style={[s.input, { flex: 1 }, role === choice && { backgroundColor: "#e4efea", borderColor: "#087454" }]}><Text style={s.label}>{choice === "coach" ? "Coach" : "Utilisateur"}</Text></Pressable>)}
+            {(["utilisateur", "coach"] as const).map((choice) => <Pressable key={choice} accessibilityRole="radio" accessibilityState={{ checked: role === choice }} disabled={busy} onPress={() => { setRole(choice); setError(null); }} style={[s.choice, { flex: 1, minHeight: 50, justifyContent: "center" }, role === choice && s.choiceSelected]}><Text style={s.label}>{choice === "coach" ? "Coach" : "Utilisateur"}</Text></Pressable>)}
           </View>
           {role === "utilisateur" && <>
             <Text style={s.label}>Code du coach</Text>
@@ -64,7 +64,7 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
             <TextInput accessibilityLabel="Âge en années" style={s.input} value={age} onChangeText={setAge} keyboardType="number-pad" editable={!busy} />
             <Text style={s.label}>Sexe biologique · facultatif</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              {([undefined, "femme", "homme"] as const).map((choice) => <Pressable key={choice ?? "non-renseigne"} accessibilityRole="radio" accessibilityState={{ checked: sexe === choice, disabled: busy }} disabled={busy} onPress={() => setSexe(choice)} style={[s.input, sexe === choice && { backgroundColor: "#e4efea", borderColor: "#087454" }]}><Text>{choice === undefined ? "Non renseigné" : choice === "femme" ? "Femme" : "Homme"}</Text></Pressable>)}
+              {([undefined, "femme", "homme"] as const).map((choice) => <Pressable key={choice ?? "non-renseigne"} accessibilityRole="radio" accessibilityState={{ checked: sexe === choice, disabled: busy }} disabled={busy} onPress={() => setSexe(choice)} style={[s.choice, sexe === choice && s.choiceSelected]}><Text style={s.label}>{choice === undefined ? "Non renseigné" : choice === "femme" ? "Femme" : "Homme"}</Text></Pressable>)}
             </View>
             <Text style={s.text}>L’âge et le sexe servent au calcul du budget calorique. Sans ces informations, votre coach le saisira manuellement.</Text>
           </>}

@@ -35,7 +35,7 @@ export default function UserLayout() {
 
   if (!ready) {
     return (
-      <Screen>
+      <Screen brand>
         {busy ? (
           <ActivityIndicator accessibilityLabel="Restauration de la session" />
         ) : (

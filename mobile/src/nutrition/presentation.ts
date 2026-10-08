@@ -164,6 +164,23 @@ const HOUSEHOLD_UNITS: { pattern: RegExp; label: string; grams: number }[] = [
 const normalizePortion = (name: string) => name.normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").replace(/œ/g, "oe");
 
+/** Portion proposée par défaut : l'unité ménagère connue, sinon 100 g. */
+export function defaultPortion(food: ReferenceFood): number {
+  const value = normalizePortion(food.nom);
+  return HOUSEHOLD_UNITS.find((u) => u.pattern.test(value))?.grams ?? 100;
+}
+
+/**
+ * Repas proposé selon l'heure locale de la saisie. L'utilisateur peut
+ * toujours en choisir un autre : ce n'est qu'une présélection.
+ */
+export function suggestedMeal(hour: number): Exclude<MealCategory, "non-classe"> {
+  if (hour >= 5 && hour < 11) return "petit-dejeuner";
+  if (hour >= 11 && hour < 15) return "dejeuner";
+  if (hour >= 18 && hour < 23) return "diner";
+  return "collation";
+}
+
 /** Suggestions de portions pour eviter la saisie au gramme pres. */
 export function quickPortions(food: ReferenceFood): QuickPortion[] {
   const value = normalizePortion(food.nom);

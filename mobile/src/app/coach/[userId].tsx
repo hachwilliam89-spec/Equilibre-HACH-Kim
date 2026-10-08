@@ -1,9 +1,10 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { Client, Plan, Preview, clients, currentPlan, planSchema, previewSchema, requestApi } from "../../plans/api";
 import { budgetSchema, goalsSchema, weeklyRate } from "../../plans/form";
-import { Button, Field, Screen } from "../../plans/ui";
+import { Button, Field, InfoRow, Screen } from "../../plans/ui";
+import { colors } from "../../ui/theme";
 import { styles as s } from "../../ui/styles";
 
 import { DateField } from "../../ui/DateField";
@@ -91,22 +92,40 @@ export default function UserPlan() {
       setPlan(null); setNotice("Le plan a été annulé.");
     }) },
   ]);
-  return <Screen>
-    <Text style={s.title}>{step === "detail" ? "Suivi d’un utilisateur" : step === "goals" ? "Objectifs · 1/2" : "Budget et validation · 2/2"}</Text>
-    {client && <Text style={s.text}>{client.email}{client.tailleCm ? ` · ${client.tailleCm} cm` : " · Taille non renseignée"}</Text>}
+  const refresh = () => { setLoading(true); setError(""); setReload((v) => v + 1); };
+  return <Screen
+    back="/coach"
+    title={step === "detail" ? "Suivi d’un utilisateur" : step === "goals" ? "Objectifs · 1/2" : "Budget et validation · 2/2"}
+    refreshing={false}
+    onRefresh={step === "detail" && !busy ? refresh : undefined}
+  >
+    {client && <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" }}>
+        <Text style={{ color: colors.brand, fontSize: 18, fontWeight: "800" }}>{client.email.charAt(0).toUpperCase()}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text numberOfLines={1} style={s.label}>{client.email}</Text>
+        <Text style={s.historyMeta}>{client.tailleCm ? `${client.tailleCm} cm` : "Taille non renseignée"}{client.age ? ` · ${client.age} ans` : ""}</Text>
+      </View>
+    </View>}
     {!!notice && <Text accessibilityRole="alert" style={s.text}>{notice}</Text>}
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
-    {loading ? <ActivityIndicator /> : client && <>
+    {loading ? <ActivityIndicator color={colors.brand} /> : client && <>
       {step === "detail" && <View style={s.card}>
-        <Text style={s.label}>Plan actuel</Text>
+        <View style={[s.summaryRow, { alignItems: "center" }]}>
+          <Text style={s.cardTitle}>Plan actuel</Text>
+          {plan && <View style={s.pill}><Text style={s.pillText}>Actif</Text></View>}
+        </View>
         {plan ? <>
-          <Text style={s.text}>{plan.poidsDepart} kg → {plan.poidsCible} kg</Text>
-          <Text style={s.text}>{displayDate(plan.dateDebut)} → {displayDate(plan.dateCible)}</Text>
-          <Text style={s.text}>IMC cible : {plan.imcCible.toFixed(1)}</Text>
-          <Text style={s.text}>Budget : {plan.budgetCalorique.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour</Text>
-          <Text style={s.text}>Statut : actif</Text>
-          {plan.budgetPlafonneAuBmr && <Text style={s.text}>Le budget suggéré a été ramené au BMR.</Text>}
-          <Button title="Annuler le plan actif" disabled={busy} onPress={cancel} />
+          <View style={s.metricsRow}>
+            <View style={s.metric}><Text style={s.metricLabel}>Départ</Text><Text style={[s.metricValue, { fontSize: 18 }]}>{plan.poidsDepart} kg</Text></View>
+            <View style={s.metric}><Text style={s.metricLabel}>Cible</Text><Text style={[s.metricValue, { fontSize: 18 }]}>{plan.poidsCible} kg</Text></View>
+          </View>
+          <InfoRow label="Période" value={`${displayDate(plan.dateDebut)} → ${displayDate(plan.dateCible)}`} />
+          <InfoRow label="IMC cible" value={plan.imcCible.toFixed(1)} />
+          <InfoRow label="Budget" value={`${plan.budgetCalorique.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour`} />
+          {plan.budgetPlafonneAuBmr && <Text style={s.historyMeta}>Le budget suggéré a été ramené au BMR.</Text>}
+          <Button title="Annuler le plan actif" variant="danger" disabled={busy} onPress={cancel} />
         </> : <>
           <Text style={s.text}>Aucun plan actif.</Text>
           {!client.tailleCm && <Text style={s.error}>La taille du profil doit être renseignée avant la soumission.</Text>}
@@ -123,12 +142,12 @@ export default function UserPlan() {
         <DateField label="Date cible" value={fields.dateCible} minimum={fields.dateDebut ? nextDate(fields.dateDebut) : undefined} onChange={(value) => { setFields((old) => ({ ...old, dateCible: value })); setFieldErrors((old) => ({ ...old, dateCible: "" })); }} error={fieldErrors.dateCible} />
         {rate !== null && <Text style={s.text}>Rythme : {rate.toFixed(2)} kg/semaine · IMC cible : {imc?.toFixed(1)}</Text>}
         <Button title="Continuer vers le budget" onPress={next} />
-        <Button title="Abandonner" onPress={() => { setStep("detail"); setError(""); }} />
+        <Button title="Abandonner" variant="ghost" onPress={() => { setStep("detail"); setError(""); }} />
       </View>}
       {step === "budget" && <View style={s.card}>
         <Text style={s.label}>Niveau d’activité</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {(Object.keys(activities) as (keyof typeof activities)[]).map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: activity === key }} disabled={busy} onPress={() => { setActivity(key); setPreview(null); setSuggestedBudget(null); if (automatic) setBudget(""); }} style={[s.input, activity === key && { backgroundColor: "#e4efea" }]}><Text>{activities[key]}</Text></Pressable>)}
+          {(Object.keys(activities) as (keyof typeof activities)[]).map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: activity === key }} disabled={busy} onPress={() => { setActivity(key); setPreview(null); setSuggestedBudget(null); if (automatic) setBudget(""); }} style={[s.choice, activity === key && s.choiceSelected]}><Text style={s.label}>{activities[key]}</Text></Pressable>)}
         </View>
         {!automatic && <Text style={s.text}>Âge ou sexe non renseigné : saisissez le budget manuellement.</Text>}
         {(!automatic || preview) && <Field label="Budget retenu (kcal/jour)" value={budget} onChange={(value) => { setBudget(value); if (!automatic) setPreview(null); }} numeric disabled={busy} />}
@@ -143,10 +162,8 @@ export default function UserPlan() {
           <Text style={s.text}>Budget retenu : {budget} kcal/jour</Text>
           <Button title={busy ? "Traitement…" : "Créer et soumettre le plan"} disabled={busy} onPress={() => void submit()} />
         </>}
-        <Button title="Retour aux objectifs" disabled={busy} onPress={() => { setStep("goals"); setPreview(null); setError(""); }} />
+        <Button title="Retour aux objectifs" variant="ghost" disabled={busy} onPress={() => { setStep("goals"); setPreview(null); setError(""); }} />
       </View>}
     </>}
-    {step === "detail" && <Button title="Actualiser le plan" disabled={busy || loading} onPress={() => { setLoading(true); setError(""); setReload((v) => v + 1); }} />}
-    <Button title="Retour à mes utilisateurs" disabled={busy} onPress={() => router.replace("/coach")} />
   </Screen>;
 }
