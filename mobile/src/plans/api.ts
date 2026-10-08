@@ -45,7 +45,8 @@ export async function requestApi(path: string, method = "GET", body?: unknown, r
     if (useSession.getState().session?.accessToken === session.accessToken) await renewSession();
     return requestApi(path, method, body, false);
   }
-  const data: unknown = response.status === 204 ? null : await response.json();
+  const text = await response.text();
+  const data: unknown = response.status === 204 || !text ? null : JSON.parse(text);
   if (!response.ok) {
     const problem = z.object({ detail: z.string().optional(), errors: z.array(z.object({ message: z.string() })).optional() }).safeParse(data);
     throw new ApiError(problem.success ? problem.data.errors?.map((e) => e.message).join("\n") || problem.data.detail || "Opération refusée." : "Opération refusée.", response.status);
