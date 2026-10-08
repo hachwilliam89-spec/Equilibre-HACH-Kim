@@ -34,6 +34,8 @@ type ScreenProps = {
   floating?: ReactNode;
   /** Sous une barre d'onglets : la marge basse est déjà gérée par la barre. */
   inTabs?: boolean;
+  /** Contenu non défilant : l'écran gère sa propre liste (FlatList). */
+  fixed?: boolean;
 };
 
 export function Screen({
@@ -48,6 +50,7 @@ export function Screen({
   onRefresh,
   floating,
   inTabs = false,
+  fixed = false,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const hero = !!title && !back;
@@ -75,39 +78,43 @@ export function Screen({
           </Text>
         </View>
       )}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView
-          ref={scrollRef}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: (inTabs ? 24 : insets.bottom + 24) + (floating ? 72 : 0) }}
-          refreshControl={
-            onRefresh ? (
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={hero ? colors.onBrand : colors.brand}
-                colors={[colors.brand]}
-                progressBackgroundColor={colors.card}
-              />
-            ) : undefined
-          }
-        >
-          {hero && (
-            <View style={s.hero}>
-              <View style={s.heroHalo} />
-              <View style={s.heroInner}>
-                {!!eyebrow && <Text style={s.heroEyebrow}>{eyebrow}</Text>}
-                <Text accessibilityRole="header" style={s.heroTitle}>{title}</Text>
-                {!!subtitle && <Text style={s.heroSubtitle}>{subtitle}</Text>}
+      {fixed ? (
+        <View style={{ flex: 1 }}>{children}</View>
+      ) : (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView
+            ref={scrollRef}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: (inTabs ? 24 : insets.bottom + 24) + (floating ? 72 : 0) }}
+            refreshControl={
+              onRefresh ? (
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={hero ? colors.onBrand : colors.brand}
+                  colors={[colors.brand]}
+                  progressBackgroundColor={colors.card}
+                />
+              ) : undefined
+            }
+          >
+            {hero && (
+              <View style={s.hero}>
+                <View style={s.heroHalo} />
+                <View style={s.heroInner}>
+                  {!!eyebrow && <Text style={s.heroEyebrow}>{eyebrow}</Text>}
+                  <Text accessibilityRole="header" style={s.heroTitle}>{title}</Text>
+                  {!!subtitle && <Text style={s.heroSubtitle}>{subtitle}</Text>}
+                </View>
               </View>
+            )}
+            <View style={[s.content, hero && { paddingTop: 0, marginTop: -28 }]}>
+              {brand && <Brand />}
+              {children}
             </View>
-          )}
-          <View style={[s.content, hero && { paddingTop: 0, marginTop: -28 }]}>
-            {brand && <Brand />}
-            {children}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      )}
       {floating}
     </View>
   );

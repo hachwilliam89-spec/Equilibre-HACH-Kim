@@ -93,3 +93,50 @@ export const KeyIcon = (p: IconProps) => (
     )}
   </Icon>
 );
+
+export const SearchIcon = (p: IconProps) => (
+  <Icon {...p}>
+    {(st) => (
+      <>
+        <Circle cx={11} cy={11} r={6.5} {...st} />
+        <Path d="M16 16l4 4" {...st} {...line} />
+      </>
+    )}
+  </Icon>
+);
+
+export const CloseIcon = (p: IconProps) => (
+  <Icon {...p}>{(st) => <Path d="M6 6l12 12M18 6L6 18" {...st} {...line} />}</Icon>
+);
+
+export const MinusIcon = (p: IconProps) => (
+  <Icon {...p}>{(st) => <Path d="M5 12h14" {...st} {...line} />}</Icon>
+);
+
+export const CheckIcon = (p: IconProps) => (
+  <Icon {...p}>{(st) => <Path d="M5 12.5l4.5 4.5L19 7.5" {...st} {...line} />}</Icon>
+);
+
+/** Étoile des favoris : pleine quand l'aliment est en favori. */
+export const StarIcon = ({ filled = false, ...p }: IconProps & { filled?: boolean }) => (
+  <Svg width={p.size ?? 24} height={p.size ?? 24} viewBox="0 0 24 24">
+    <Path
+      d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"
+      fill={filled ? (p.color ?? colors.ink) : "none"}
+      stroke={p.color ?? colors.ink}
+      strokeWidth={p.strokeWidth ?? 1.8}
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <Icon {...p}>
+    {(st) => (
+      <>
+        <Circle cx={12} cy={12} r={8} {...st} />
+        <Path d="M12 7.5V12l3 2" {...st} {...line} />
+      </>
+    )}
+  </Icon>
+);

@@ -1,38 +1,72 @@
-import { useEffect, useRef, useState } from "react";
+import { router } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform,
-  Pressable, ScrollView, Text, TextInput, View,
+  ActivityIndicator, FlatList, Keyboard, Pressable, ScrollView, Text, TextInput, View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ApiError } from "../../auth/api";
+import { AddFoodSheet, mealTarget } from "../../nutrition/AddFoodSheet";
 import {
   searchReferenceFoods,
   type FoodCategory, type MealCategory, type ReferenceFood,
 } from "../../nutrition/api";
-import {
-  foodCategories, formatNutrition, mealCategories,
-  nutritionForQuantity, parseFoodQuantity, quickPortions,
-} from "../../nutrition/presentation";
 import { FoodIcon } from "../../nutrition/FoodIcon";
-import { foodIconKind, categoryIconKind } from "../../nutrition/food-icon-kind";
-import { MacroBreakdown } from "../../nutrition/MacroBreakdown";
-import { ApiError } from "../../auth/api";
-import { Button, Field, Screen } from "../../plans/ui";
+import { categoryIconKind } from "../../nutrition/food-icon-kind";
+import { FoodRow } from "../../nutrition/FoodRow";
+import { foodCategories, suggestedMeal } from "../../nutrition/presentation";
+import { Button, Screen } from "../../plans/ui";
 import { SyncStatus } from "../../sync/SyncStatus";
 import { useSync } from "../../sync/useSync";
+import { CheckIcon, ClockIcon, CloseIcon, SearchIcon, StarIcon } from "../../ui/icons";
 import { styles as s } from "../../ui/styles";
+import { colors } from "../../ui/theme";
 
 type LibraryCategory = FoodCategory | "tous" | "favoris" | "recents";
+type Meal = Exclude<MealCategory, "non-classe">;
 const PAGE_SIZE = 50;
 const normalize = (value: string) => value.normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR");
+  .replace(/[̀-ͯ]/g, "").toLocaleLowerCase("fr-FR");
+const isLocal = (category: LibraryCategory) => category === "favoris" || category === "recents";
+
+const filters: { value: LibraryCategory; label: string }[] = [
+  { value: "tous", label: "Tous" },
+  { value: "recents", label: "Récents" },
+  { value: "favoris", label: "Favoris" },
+  ...foodCategories,
+];
+
+function FilterChip({ value, label, selected, onPress }: { value: LibraryCategory; label: string; selected: boolean; onPress: () => void }) {
+  const tint = selected ? colors.onBrand : colors.ink;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[
+        { flexDirection: "row", alignItems: "center", gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 19, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+        selected && { backgroundColor: colors.brand, borderColor: colors.brand },
+      ]}
+    >
+      {value === "recents" && <ClockIcon size={16} color={tint} />}
+      {value === "favoris" && <StarIcon size={16} color={selected ? colors.onBrand : "#c2881c"} filled />}
+      {!isLocal(value) && value !== "tous" && (
+        <FoodIcon kind={categoryIconKind[value as FoodCategory]} size={20} boxed={false} />
+      )}
+      <Text style={{ fontSize: 14, fontWeight: "700", color: tint }}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function AddFoodScreen() {
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<LibraryCategory>("tous");
   const [foods, setFoods] = useState<ReferenceFood[]>([]);
   // Favoris et récents viennent de la base embarquée : disponibles hors ligne.
   const favoriteFoods = useSync((state) => state.vue.favoris);
   const recentFoods = useSync((state) => state.vue.recents);
-  const { ajouterAliment, basculerFavori } = useSync.getState();
+  const basculerFavori = useSync((state) => state.basculerFavori);
   const [searching, setSearching] = useState(true);
   const [searchError, setSearchError] = useState("");
   const [favoriteError, setFavoriteError] = useState("");
@@ -41,15 +75,14 @@ export default function AddFoodScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [searchNonce, setSearchNonce] = useState(0);
   const [selected, setSelected] = useState<ReferenceFood | null>(null);
-  const [quantityText, setQuantityText] = useState("");
-  const [mealCategory, setMealCategory] = useState<MealCategory | null>(null);
-  const [submitError, setSubmitError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [busy, setBusy] = useState(false);
-  const submitInFlight = useRef(false);
+  // Repas présélectionné selon l'heure, conservé pour les ajouts suivants.
+  const [meal, setMeal] = useState<Meal>(() => suggestedMeal(new Date().getHours()));
+  const [added, setAdded] = useState<{ nom: string; meal: Meal; count: number } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listRef = useRef<FlatList<ReferenceFood>>(null);
 
   useEffect(() => {
-    if (category === "favoris" || category === "recents") return;
+    if (isLocal(category)) return;
     let active = true;
     const timer = setTimeout(() => {
       void searchReferenceFoods(query, category === "tous" ? undefined : category, page)
@@ -70,22 +103,25 @@ export default function AddFoodScreen() {
     return () => { active = false; clearTimeout(timer); };
   }, [query, category, page, searchNonce]);
 
-  const changeQuery = (value: string) => {
-    setQuery(value);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+  const resetResults = (nextCategory: LibraryCategory) => {
     setPage(1);
     setFoods([]);
-    if (category !== "favoris" && category !== "recents") setSearching(true);
+    if (!isLocal(nextCategory)) setSearching(true);
     setSearchError("");
-    setSuccess("");
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    resetResults(category);
   };
 
   const changeCategory = (value: LibraryCategory) => {
+    if (value === category) return;
     setCategory(value);
-    setPage(1);
-    setFoods([]);
-    if (value !== "favoris" && value !== "recents") setSearching(true);
-    setSearchError("");
-    setSuccess("");
+    resetResults(value);
   };
 
   const favoriteIds = new Set(favoriteFoods.map((food) => food.id));
@@ -94,14 +130,10 @@ export default function AddFoodScreen() {
     : category === "recents"
       ? recentFoods.filter((food) => normalize(food.nom).includes(normalize(query.trim())))
       : foods;
-  const quantity = parseFoodQuantity(quantityText);
-  const preview = selected && quantity !== null
-    ? nutritionForQuantity(selected, quantity)
-    : null;
 
-  const toggleFavorite = async (food: ReferenceFood) => {
+  const toggleFavorite = useCallback(async (food: ReferenceFood) => {
     if (favoritesBusyId) return;
-    const isFavorite = favoriteIds.has(food.id);
+    const isFavorite = useSync.getState().vue.favoris.some((f) => f.id === food.id);
     setFavoritesBusyId(food.id);
     setFavoriteError("");
     try {
@@ -111,60 +143,49 @@ export default function AddFoodScreen() {
     } finally {
       setFavoritesBusyId(null);
     }
-  };
+  }, [basculerFavori, favoritesBusyId]);
 
-  const openFood = (food: ReferenceFood) => {
+  const chooseFood = useCallback((food: ReferenceFood) => {
     Keyboard.dismiss();
     setSelected(food);
-    setQuantityText("");
-    setMealCategory(null);
-    setSubmitError("");
-    setSuccess("");
+  }, []);
+
+  const onAdded = (food: ReferenceFood, addedMeal: Meal) => {
+    setSelected(null);
+    setAdded((previous) => ({ nom: food.nom, meal: addedMeal, count: (previous?.count ?? 0) + 1 }));
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setAdded((previous) => previous && { ...previous, nom: "" }), 5000);
   };
 
-  const submit = async () => {
-    if (submitInFlight.current || !selected) return;
-    if (quantity === null) {
-      setSubmitError("Saisissez une quantité supérieure à 0 g et au plus égale à 10 000 g.");
-      return;
-    }
-    if (!mealCategory) {
-      setSubmitError("Choisissez le repas associé à cet aliment.");
-      return;
-    }
-    submitInFlight.current = true;
-    setBusy(true);
-    setSubmitError("");
-    try {
-      await ajouterAliment(selected, quantity, mealCategory === "non-classe" ? undefined : mealCategory);
-      setSuccess(`${selected.nom} ajouté au journal. Vous pouvez choisir un autre aliment.`);
-      setSelected(null);
-      setQuantityText("");
-      setMealCategory(null);
-    } catch {
-      setSubmitError("Ajout impossible sur l’appareil. Vérifiez votre journal avant de réessayer.");
-    } finally {
-      submitInFlight.current = false;
-      setBusy(false);
-    }
+  const loadMore = () => {
+    if (isLocal(category) || !hasMore || searching || searchError) return;
+    setSearching(true);
+    setPage((value) => value + 1);
   };
+
+  const emptyMessage = category === "favoris"
+    ? "Aucun favori ici. Touchez l’étoile d’un aliment pour le retrouver rapidement."
+    : category === "recents"
+      ? "Aucun aliment récent. Vos derniers ajouts apparaîtront ici."
+      : query.trim()
+        ? `Aucun aliment trouvé pour « ${query.trim()} ». Essayez un autre mot ou une autre famille.`
+        : "Aucun aliment dans cette famille.";
 
   return (
-    <Screen back="/user/journal" title="Ajouter un aliment">
-      <SyncStatus />
-
-      <View style={s.card}>
-        <Text style={s.cardTitle}>Bibliothèque alimentaire</Text>
-        <Text style={s.text}>Parcourez les familles ou recherchez un aliment. Les valeurs sont indiquées pour 100 g.</Text>
-        <View style={{ position: "relative", justifyContent: "center" }}>
+    <Screen back="/user/journal" title="Ajouter un aliment" fixed>
+      <View style={{ gap: 12, paddingTop: 12, paddingBottom: 10, backgroundColor: colors.page, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        <View style={{ paddingHorizontal: 16, flexDirection: "row", alignItems: "center", height: 50, borderRadius: 25, marginHorizontal: 16, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.borderStrong, gap: 8 }}>
+          <SearchIcon size={20} color={colors.muted} />
           <TextInput
             accessibilityLabel="Rechercher un aliment par nom"
-            style={[s.input, query.length > 0 && { paddingRight: 44 }]}
+            style={{ flex: 1, fontSize: 16, color: colors.ink, paddingVertical: 0 }}
             value={query}
             onChangeText={changeQuery}
-            placeholder="Ex. fromage blanc, yaourt…"
+            placeholder="Rechercher : yaourt, riz, pomme…"
+            placeholderTextColor={colors.subtle}
             autoCapitalize="none"
             autoCorrect={false}
+            returnKeyType="search"
             maxLength={100}
           />
           {query.length > 0 && (
@@ -172,168 +193,107 @@ export default function AddFoodScreen() {
               accessibilityRole="button"
               accessibilityLabel="Effacer la recherche"
               onPress={() => changeQuery("")}
-              style={{ position: "absolute", right: 6, width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+              hitSlop={8}
+              style={{ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.mint }}
             >
-              <Text style={{ fontSize: 20, color: "#63756b" }}>✕</Text>
+              <CloseIcon size={14} color={colors.brand} strokeWidth={2.6} />
             </Pressable>
           )}
         </View>
-        <View style={s.choiceRow}>
-          {[
-            { value: "tous" as const, label: "Tous" },
-            { value: "recents" as const, label: "Récents" },
-            { value: "favoris" as const, label: "★ Favoris" },
-            ...foodCategories,
-          ].map(({ value, label }) => (
-            <Pressable
-              key={value}
-              accessibilityRole="button"
-              accessibilityState={{ selected: category === value }}
-              onPress={() => changeCategory(value)}
-              style={[s.choice, { flexDirection: "row", alignItems: "center", gap: 6 }, category === value && s.choiceSelected]}
-            >
-              {value !== "tous" && value !== "favoris" && value !== "recents" && (
-                <FoodIcon kind={categoryIconKind[value]} size={22} boxed={false} />
-              )}
-              <Text style={s.label}>{label}</Text>
-            </Pressable>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
+        >
+          {filters.map(({ value, label }) => (
+            <FilterChip key={value} value={value} label={label} selected={category === value} onPress={() => changeCategory(value)} />
           ))}
-        </View>
-
-        {!!success && <Text accessibilityRole="alert" style={s.success}>{success}</Text>}
-        {!!favoriteError && <Text accessibilityRole="alert" style={s.error}>{favoriteError}</Text>}
-        {category !== "favoris" && category !== "recents" && searching && page === 1 ? (
-          <ActivityIndicator color="#087454" accessibilityLabel="Chargement des aliments" />
-        ) : searchError ? (
-          <View style={{ gap: 8 }}>
-            <Text accessibilityRole="alert" style={s.error}>{searchError}</Text>
-            <Button title="Réessayer" onPress={() => { setSearchError(""); setSearching(true); setSearchNonce((value) => value + 1); }} />
-          </View>
-        ) : visibleFoods.length === 0 ? (
-          <Text style={s.text}>{category === "favoris"
-            ? "Aucun favori ici. Touchez l’étoile d’un aliment pour le retrouver rapidement."
-            : category === "recents"
-              ? "Aucun aliment récent. Vos derniers ajouts apparaîtront ici."
-              : "Aucun aliment trouvé. Essayez une autre recherche ou une autre famille."}</Text>
-        ) : (
-          <View style={{ gap: 8 }}>
-            {visibleFoods.map((food) => (
-              <View key={food.id} style={[s.choice, { flexDirection: "row", alignItems: "center", gap: 8, padding: 0 }]}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Choisir ${food.nom}`}
-                  onPress={() => openFood(food)}
-                  style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 }}
-                >
-                  <FoodIcon kind={foodIconKind(food.nom, food.categorie)} size={40} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.label}>{food.nom}</Text>
-                    <Text style={s.historyMeta}>{formatNutrition(food.caloriesKcalPour100g)} kcal / 100 g</Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${favoriteIds.has(food.id) ? "Retirer" : "Ajouter"} ${food.nom} ${favoriteIds.has(food.id) ? "des" : "aux"} favoris`}
-                  accessibilityState={{ selected: favoriteIds.has(food.id), disabled: Boolean(favoritesBusyId) }}
-                  disabled={Boolean(favoritesBusyId)}
-                  onPress={() => void toggleFavorite(food)}
-                  style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}
-                >
-                  <Text style={{ fontSize: 25, color: favoriteIds.has(food.id) ? "#b36b00" : "#63756b" }}>
-                    {favoritesBusyId === food.id ? "…" : favoriteIds.has(food.id) ? "★" : "☆"}
-                  </Text>
-                </Pressable>
-              </View>
-            ))}
-            {category !== "favoris" && hasMore && (
-              <Button title={searching ? "Chargement…" : "Voir plus d’aliments"} disabled={searching} onPress={() => { setSearching(true); setPage((value) => value + 1); }} />
-            )}
-          </View>
-        )}
+        </ScrollView>
       </View>
 
-      <Modal
-        visible={selected !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => { if (!busy) setSelected(null); }}
-      >
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#0008" }}>
-          <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "90%" }}>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 24, gap: 16 }}>
-              <View style={s.summaryRow}>
-                <Text style={[s.cardTitle, { flex: 1 }]}>{selected?.nom}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Fermer" disabled={busy} onPress={() => setSelected(null)}>
-                  <Text style={s.link}>Fermer</Text>
-                </Pressable>
-              </View>
-              {!!selected && (
-                <View style={{ gap: 8 }}>
-                  <Text style={s.historyMeta}>Pour 100 g · {formatNutrition(selected.caloriesKcalPour100g)} kcal</Text>
-                  <MacroBreakdown
-                    proteines={selected.proteinesGPour100g}
-                    glucides={selected.glucidesGPour100g}
-                    lipides={selected.lipidesGPour100g}
-                  />
-                </View>
-              )}
-              <Field
-                label="Quantité consommée (g)"
-                value={quantityText}
-                onChange={(value) => { setQuantityText(value); setSubmitError(""); }}
-                numeric disabled={busy}
-              />
-              {!!selected && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                  {quickPortions(selected).map((portion) => (
-                    <Pressable
-                      key={portion.label}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Portion ${portion.label}`}
-                      disabled={busy}
-                      onPress={() => { setQuantityText(String(portion.grams)); setSubmitError(""); }}
-                      style={[s.choice, { paddingVertical: 8, paddingHorizontal: 12 }, quantity === portion.grams && s.choiceSelected]}
-                    >
-                      <Text style={s.label}>{portion.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-              <Text style={s.label}>Repas</Text>
-              <Text style={s.historyMeta}>Le repas organise le journal ; le budget reste celui de la journée.</Text>
-              <View style={s.choiceRow}>
-                {mealCategories.map(({ value, label }) => (
-                  <Pressable
-                    key={value}
-                    accessibilityRole="radio"
-                    accessibilityLabel={label}
-                    accessibilityState={{ checked: mealCategory === value }}
-                    disabled={busy}
-                    onPress={() => { setMealCategory(value); setSubmitError(""); }}
-                    style={[s.choice, { flexGrow: 1, minWidth: 100, alignItems: "center" }, mealCategory === value && s.choiceSelected]}
-                  >
-                    <Text style={s.label}>{value === "petit-dejeuner" ? "Petit-déj." : label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              {preview && (
-                <View style={{ gap: 5 }}>
-                  <Text style={s.label}>Pour {formatNutrition(quantity!)} g</Text>
-                  <Text style={s.metricValue}>{formatNutrition(preview.caloriesKcal)} kcal</Text>
-                  <MacroBreakdown
-                    proteines={preview.proteinesG}
-                    glucides={preview.glucidesG}
-                    lipides={preview.lipidesG}
-                  />
-                  <Text style={s.historyMeta}>Estimation ; le journal affichera les valeurs confirmées par le serveur après synchronisation.</Text>
-                </View>
-              )}
-              {!!submitError && <Text accessibilityRole="alert" style={s.error}>{submitError}</Text>}
-              <Button title={busy ? "Ajout en cours…" : "Ajouter au journal"} onPress={() => void submit()} disabled={busy} />
-            </ScrollView>
+      <FlatList
+        ref={listRef}
+        data={searchError || (searching && page === 1 && !isLocal(category)) ? [] : visibleFoods}
+        keyExtractor={(food) => food.id}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: insets.bottom + (added ? 96 : 24) }}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        renderItem={({ item }) => (
+          <FoodRow
+            food={item}
+            favorite={favoriteIds.has(item.id)}
+            favoriteBusy={favoritesBusyId === item.id}
+            favoritesLocked={favoritesBusyId !== null}
+            onChoose={chooseFood}
+            onToggleFavorite={(food) => void toggleFavorite(food)}
+          />
+        )}
+        ListHeaderComponent={
+          <View style={{ gap: 8, marginBottom: 4 }}>
+            <SyncStatus />
+            {!!favoriteError && <Text accessibilityRole="alert" style={s.error}>{favoriteError}</Text>}
+            <Text style={s.historyMeta}>Valeurs pour 100 g · touchez un aliment pour choisir la quantité.</Text>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        }
+        ListEmptyComponent={
+          !isLocal(category) && searching ? (
+            <ActivityIndicator style={{ marginTop: 24 }} color={colors.brand} accessibilityLabel="Chargement des aliments" />
+          ) : searchError ? (
+            <View style={[s.card, { marginTop: 8 }]}>
+              <Text accessibilityRole="alert" style={s.error}>{searchError}</Text>
+              <Button title="Réessayer" onPress={() => { setSearchError(""); setSearching(true); setSearchNonce((value) => value + 1); }} />
+            </View>
+          ) : (
+            <View style={{ alignItems: "center", gap: 10, paddingVertical: 32, paddingHorizontal: 12 }}>
+              <SearchIcon size={36} color={colors.borderStrong} />
+              <Text style={[s.text, { textAlign: "center" }]}>{emptyMessage}</Text>
+            </View>
+          )
+        }
+        ListFooterComponent={
+          searching && page > 1 ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.brand} /> : null
+        }
+      />
+
+      {added && (
+        <View
+          accessibilityLiveRegion="polite"
+          style={{
+            position: "absolute", left: 16, right: 16, bottom: insets.bottom + 16,
+            flexDirection: "row", alignItems: "center", gap: 10,
+            backgroundColor: colors.brandDeep, borderRadius: 18, paddingVertical: 12, paddingLeft: 14, paddingRight: 8,
+            shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6,
+          }}
+        >
+          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandBright, alignItems: "center", justifyContent: "center" }}>
+            <CheckIcon size={16} color={colors.onBrand} strokeWidth={3} />
+          </View>
+          <Text numberOfLines={2} style={{ flex: 1, color: colors.onBrand, fontSize: 14, fontWeight: "600" }}>
+            {added.nom
+              ? `${added.nom} ajouté ${mealTarget[added.meal]}`
+              : `${added.count} aliment${added.count > 1 ? "s" : ""} ajouté${added.count > 1 ? "s" : ""}`}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Voir mon journal"
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/user/journal"))}
+            style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: "#ffffff22" }}
+          >
+            <Text style={{ color: colors.onBrand, fontWeight: "800", fontSize: 14 }}>Journal</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <AddFoodSheet
+        food={selected}
+        meal={meal}
+        onMealChange={setMeal}
+        onClose={() => setSelected(null)}
+        onAdded={onAdded}
+      />
     </Screen>
   );
 }

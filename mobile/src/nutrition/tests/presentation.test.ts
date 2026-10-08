@@ -5,6 +5,8 @@ import {
   nutritionForQuantity,
   parseFoodQuantity,
   quickPortions,
+  defaultPortion,
+  suggestedMeal,
 } from "../presentation";
 import type { FoodBudgetStatus, FoodEntry, ReferenceFood } from "../api";
 
@@ -128,5 +130,35 @@ describe("quickPortions", () => {
 
   it("limite la liste à cinq portions", () => {
     expect(quickPortions(food("Oeuf dur")).length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("defaultPortion", () => {
+  const food = (nom: string): ReferenceFood => ({
+    id: "x", nom, categorie: "autres",
+    caloriesKcalPour100g: 50, proteinesGPour100g: 1, glucidesGPour100g: 10, lipidesGPour100g: 0,
+  });
+
+  it("reprend l'unité ménagère connue", () => {
+    expect(defaultPortion(food("Banane crue"))).toBe(120);
+    expect(defaultPortion(food("Yaourt nature"))).toBe(125);
+  });
+
+  it("propose 100 g sans unité connue", () => {
+    expect(defaultPortion(food("Riz blanc cuit"))).toBe(100);
+  });
+});
+
+describe("suggestedMeal", () => {
+  it("présélectionne le repas selon l'heure", () => {
+    expect(suggestedMeal(7)).toBe("petit-dejeuner");
+    expect(suggestedMeal(12)).toBe("dejeuner");
+    expect(suggestedMeal(16)).toBe("collation");
+    expect(suggestedMeal(20)).toBe("diner");
+  });
+
+  it("classe les saisies nocturnes en collation", () => {
+    expect(suggestedMeal(23)).toBe("collation");
+    expect(suggestedMeal(2)).toBe("collation");
   });
 });
