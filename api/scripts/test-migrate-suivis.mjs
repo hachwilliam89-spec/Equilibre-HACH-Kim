@@ -13,6 +13,7 @@ const userId = randomUUID();
 const coachId = randomUUID();
 const planId = randomUUID();
 const measurementId = randomUUID();
+const migratedUserId = randomUUID();
 const now = new Date();
 
 const runMigration = (...args) =>
@@ -65,13 +66,47 @@ try {
     statut: 'valide',
   });
 
+  // Utilisateur déjà passé sur la nouvelle API : son document suivis est
+  // plus récent que ses anciens plans et ne doit pas être remplacé.
+  await db.collection('users').insertOne({
+    _id: migratedUserId,
+    email: 'deja-migre@equilibre.test',
+    passwordHash: 'hash',
+    role: 'utilisateur',
+    coachId,
+    profil: { tailleCm: 175 },
+  });
+  await db.collection('plans').insertOne({
+    _id: randomUUID(),
+    userId: migratedUserId,
+    coachId,
+    poidsDepart: 70,
+    poidsCible: 68,
+    dateDebut: now,
+    dateCible: now,
+    imcCible: 22,
+    niveauActivite: 'actif',
+    budgetCalorique: 1800,
+    budgetPlafonneAuBmr: false,
+    statut: 'annule',
+    createdAt: now,
+  });
+  await db.collection('suivis').insertOne({
+    _id: migratedUserId,
+    version: 14,
+    planActif: null,
+    plans: [],
+    mesures: [],
+    journauxAlimentaires: [{ jourUtc: '2026-10-08' }],
+  });
+
   await mongoose.disconnect();
   runMigration();
 
   await mongoose.connect(uri);
   assert.equal(
     await mongoose.connection.db.collection('suivis').countDocuments(),
-    0,
+    1,
   );
   await mongoose.disconnect();
 
@@ -82,7 +117,12 @@ try {
   const appliedDb = mongoose.connection.db;
   const suivi = await appliedDb.collection('suivis').findOne({ _id: userId });
   const user = await appliedDb.collection('users').findOne({ _id: userId });
-  assert.equal(await appliedDb.collection('suivis').countDocuments(), 1);
+  assert.equal(await appliedDb.collection('suivis').countDocuments(), 2);
+  const preserved = await appliedDb
+    .collection('suivis')
+    .findOne({ _id: migratedUserId });
+  assert.equal(preserved.version, 14);
+  assert.equal(preserved.journauxAlimentaires.length, 1);
   assert.equal(suivi.planActif.id, planId);
   assert.equal(suivi.mesures[0].id, measurementId);
   assert.equal(suivi.derniereMesureValide.id, measurementId);
