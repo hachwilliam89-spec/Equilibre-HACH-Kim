@@ -5,6 +5,10 @@ L’application mobile embarque une base **SQLite** (`expo-sqlite`) synchronisé
 retire des aliments, saisit son poids de secours et gère ses favoris **même sans
 réseau** ; les modifications partent dès que la connexion revient.
 
+Jira : tâche [FR403-767](https://uha4point0.atlassian.net/browse/FR403-767)
+(synchronisation), au service de [US2 — suivi du poids](https://uha4point0.atlassian.net/browse/FR403-668)
+et [US3 — suivi de l’alimentation](https://uha4point0.atlassian.net/browse/FR403-747).
+
 ## 1. Principes
 
 | Principe | Mise en œuvre |
@@ -20,15 +24,18 @@ Le rôle **coach** reste en ligne : il prépare des plans et ne saisit pas de su
 
 ## 2. Données embarquées
 
-| Donnée | Pourquoi elle est sur l’appareil | Origine |
-| --- | --- | --- |
-| Plan actif + statut de suivi du poids (attendu, écart) | Écran « Mon suivi de poids » | serveur |
-| Mesures des 3 derniers mois | Historique et courbe | serveur |
-| Budget calorique et cibles de macros | Journal et budget du jour | serveur |
-| Journaux alimentaires d’**aujourd’hui et d’hier** (UTC) | Journal du jour ; le statut alimentaire ne regarde pas plus loin qu’hier | serveur |
-| Aliments favoris | Ajout rapide hors ligne | serveur |
-| 8 aliments récents | Ajout rapide hors ligne | appareil uniquement |
-| Modifications en attente | File d’envoi | appareil uniquement |
+| Donnée | Pourquoi elle est sur l’appareil | Origine | Visible par | Conservée |
+| --- | --- | --- | --- | --- |
+| Plan actif + statut de suivi du poids (attendu, écart) | Écran « Mon suivi de poids » | serveur | l’utilisateur connecté | jusqu’au prochain instantané |
+| Mesures des 3 derniers mois | Historique et courbe | serveur | l’utilisateur connecté | fenêtre glissante de 3 mois |
+| Budget calorique et cibles de macros | Journal et budget du jour | serveur | l’utilisateur connecté | jusqu’au prochain instantané |
+| Journaux alimentaires d’**aujourd’hui et d’hier** (UTC) | Journal du jour ; le statut alimentaire ne regarde pas plus loin qu’hier | serveur | l’utilisateur connecté | fenêtre glissante J et J-1 |
+| Aliments favoris | Ajout rapide hors ligne | serveur | l’utilisateur connecté | jusqu’au retrait du favori |
+| 8 aliments récents | Ajout rapide hors ligne | appareil uniquement | l’utilisateur connecté | les 8 derniers utilisés |
+| Modifications en attente | File d’envoi | appareil uniquement | l’utilisateur connecté | jusqu’à acceptation, refus ou 5 tentatives |
+
+Toutes ces données sont effacées à la déconnexion. Le rôle coach n’a aucune
+donnée embarquée.
 
 Ne sont **pas** embarqués : le référentiel d’aliments (recherche en ligne), les
 journaux plus anciens, les données des autres utilisateurs, les jetons (stockés
@@ -154,6 +161,16 @@ et doit confirmer.
 | Balance et saisie manuelle le même jour | Règle « une mesure valide par jour » : la saisie hors ligne est rejetée et l’utilisateur en est informé |
 | Deux écritures simultanées sur le même suivi | Verrou optimiste (`version` du document `suivis`) côté serveur, nouvel essai automatique puis `a-reessayer` |
 | Donnée modifiée ailleurs (autre appareil, balance) | Le prochain instantané remplace la copie locale |
+
+### Suppressions
+
+| Sens | Règle |
+| --- | --- |
+| Appareil → serveur | Retirer un aliment hors ligne crée une opération `retrait-aliment` dans la file. L’entrée disparaît de l’écran, mais l’opération reste jusqu’à la réponse du serveur. Si l’entrée n’avait pas encore été envoyée, l’ajout et le retrait s’annulent sur l’appareil. Retirer un favori envoie `favori` à `false`. Les mesures de poids ne se suppriment pas (historique conservé, règles de l’US2). |
+| Serveur → appareil | Pas de marqueur de suppression : chaque instantané contient **tout** le périmètre embarqué et remplace les tables serveur dans une transaction. Un élément absent de l’instantané disparaît de l’appareil : entrée retirée depuis un autre appareil, favori retiré, journal sorti de la fenêtre J/J-1, mesure de plus de 3 mois. Il n’y a donc aucun marqueur à nettoyer. |
+
+Coût de ce choix : un instantané reste petit (2 journaux, environ 90 mesures,
+les favoris) et le curseur évite tout transfert quand rien n’a changé (`204`).
 
 ## 6. Diagrammes de séquence
 
@@ -289,13 +306,39 @@ pnpm --dir mobile test          # mobile
 
 ### Recette sur iPhone
 
-| Action | Résultat attendu |
-| --- | --- |
-| Se connecter, ouvrir le suivi | « Synchronisé à hh:mm » |
-| Activer le mode Avion, rouvrir l’app | Session reprise, données affichées, bandeau « Hors ligne » |
-| Ajouter un aliment hors ligne | Entrée visible « en attente », total et statut recalculés |
-| Ajouter puis retirer un aliment hors ligne | Rien en attente |
-| Désactiver le mode Avion | Bandeau « Synchronisé », entrée confirmée ; visible dans MongoDB |
-| Saisir un poids hors ligne alors que la balance a déjà envoyé une mesure valide | Message de refus explicite |
-| Se déconnecter avec des modifications en attente | Avertissement, confirmation demandée |
-| Se connecter avec un autre compte | Aucune donnée du compte précédent |
+**Jeu de données fictif** : un compte utilisateur de démonstration avec un plan
+actif créé par le coach (80 → 75 kg sur 30 jours, budget 1 800 kcal), au moins
+une mesure envoyée par le simulateur de balance, et l’aliment « Riz blanc cuit »
+(130 kcal pour 100 g) en favori. Aucune donnée personnelle réelle.
+
+**Modification côté serveur** : depuis Swagger (`/api/docs`), connecté avec le
+même compte, `POST /api/food-journals/me/entries` ajoute une entrée sans passer
+par le téléphone. Le simulateur de balance peut aussi envoyer une mesure.
+
+La colonne « Observé » se remplit pendant la recette (date, OK ou KO, remarque).
+
+| # | Action | Résultat attendu | Observé |
+| --- | --- | --- | --- |
+| 1 | Se connecter, ouvrir le suivi | « Synchronisé à hh:mm » | |
+| 2 | Activer le mode Avion, rouvrir l’app | Session reprise, données affichées, bandeau « Hors ligne » | |
+| 3 | Ajouter « Riz blanc cuit 200 g » hors ligne | Entrée visible « en attente », total +260 kcal, statut recalculé | |
+| 4 | Fermer complètement l’app, la rouvrir toujours hors ligne | L’entrée et l’opération en attente sont toujours là | |
+| 5 | Ajouter puis retirer un aliment hors ligne | Rien en attente pour cet aliment | |
+| 6 | Désactiver le mode Avion | Bandeau « Synchronisé », entrée confirmée ; visible dans MongoDB (collection `suivis`) | |
+| 7 | Couper le réseau pendant l’envoi (mode Avion juste après l’ajout), puis le rétablir | Une seule entrée dans MongoDB, aucun doublon | |
+| 8 | Ajouter une entrée depuis Swagger, puis « Actualiser » sur le téléphone | L’entrée apparaît ; toujours présente après fermeture et réouverture hors ligne | |
+| 9 | Retirer cette entrée depuis Swagger (`DELETE /api/food-journals/me/entries/{id}`), puis « Actualiser » | L’entrée disparaît du téléphone | |
+| 10 | « Actualiser » sans aucun changement | Réponse `204` côté API, rien de dupliqué ni d’effacé | |
+| 11 | Saisir un poids hors ligne alors que la balance a déjà envoyé une mesure valide | Message de refus explicite, la mesure de la balance est conservée | |
+| 12 | Se déconnecter avec des modifications en attente | Avertissement, confirmation demandée | |
+| 13 | Se connecter avec un autre compte | Aucune donnée du compte précédent | |
+
+## 9. Limites connues
+
+- **Abandon après 5 tentatives** : une opération qui reçoit 5 fois `a-reessayer` est retirée de la file et l’utilisateur en est informé ; elle n’est pas rejouée ensuite.
+- **Historique alimentaire** : seuls les journaux d’aujourd’hui et d’hier sont consultables hors ligne.
+- **Recherche d’aliments** : impossible hors ligne (le référentiel n’est pas embarqué) ; l’ajout hors ligne passe par les favoris et les aliments récents.
+- **Poids hors ligne** : accepté seulement s’il arrive le jour même (UTC) et qu’aucune mesure valide n’existe déjà ce jour-là.
+- **Instantané complet** : adapté au petit périmètre d’un utilisateur ; un volume plus grand demanderait des changements paginés par curseur.
+- **Aperçu web** : l’adaptateur mémoire ne persiste rien ; la synchronisation hors ligne se démontre sur téléphone.
+- **Coach** : aucune donnée hors ligne, toutes ses actions passent en ligne.
