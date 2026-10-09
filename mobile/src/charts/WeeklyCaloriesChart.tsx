@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import Svg, { G, Line, Rect, Text as SvgText } from "react-native-svg";
 import type { JourCalorique } from "../coaching/api";
-import { formatNutrition } from "../nutrition/presentation";
+import { formatNutrition, formatKcal } from "../nutrition/presentation";
 import { styles as s } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { CHART_COLORS } from "./colors";
@@ -46,8 +46,8 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
       </View>
       <View
         accessible
-        accessibilityLabel={`Calories des ${jours.length} derniers jours. Budget ${formatNutrition(budget)} kilocalories. ${jours
-          .map((j) => (j.statut === "aucune-entree" ? `${j.jourUtc} : aucune saisie` : `${j.jourUtc} : ${formatNutrition(j.totalCaloriesKcal)} kilocalories`))
+        accessibilityLabel={`Calories des ${jours.length} derniers jours. Budget ${formatKcal(budget)} kilocalories. ${jours
+          .map((j) => (j.statut === "aucune-entree" ? `${j.jourUtc} : aucune saisie` : `${j.jourUtc} : ${formatKcal(j.totalCaloriesKcal)} kilocalories`))
           .join(". ")}`}
       >
         <Svg width="100%" height={FRAME.height} viewBox={`0 0 ${FRAME.width} ${FRAME.height}`}>
@@ -90,7 +90,7 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
         </Svg>
       </View>
       <Text style={s.historyMeta}>
-        Pointillé : budget {formatNutrition(budget)} kcal · bande : ± {TOLERANCE_KCAL} kcal · orange : dépassement · contour : aucune saisie
+        Pointillé : budget {formatKcal(budget)} kcal · bande : ± {TOLERANCE_KCAL} kcal · orange : dépassement · contour : aucune saisie
       </Text>
     </View>
   );

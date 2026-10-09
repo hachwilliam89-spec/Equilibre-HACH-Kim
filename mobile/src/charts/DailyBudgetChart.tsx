@@ -1,8 +1,5 @@
 import { Text, View } from "react-native";
-import {
-  dailyBudgetPresentation,
-  formatNutrition,
-} from "../nutrition/presentation";
+import { dailyBudgetPresentation, formatKcal } from "../nutrition/presentation";
 import { styles as s } from "../ui/styles";
 import { CHART_COLORS } from "./colors";
 
@@ -28,16 +25,16 @@ export function DailyBudgetChart({
     <View style={{ gap: 10 }}>
       {showTotal ? (
         <Text style={s.metricValue}>
-          {formatNutrition(total)} / {formatNutrition(budget)} kcal
+          {formatKcal(total)} / {formatKcal(budget)} kcal
         </Text>
       ) : (
         <Text style={s.historyMeta}>
-          {formatNutrition(total)} kcal consommées sur {formatNutrition(Math.round(budget))}
+          {formatKcal(total)} kcal consommées sur {formatKcal(budget)}
         </Text>
       )}
       <View
         accessible
-        accessibilityLabel={`${formatNutrition(total)} kilocalories consignées aujourd’hui. Zone cible de ${formatNutrition(display.zoneStart)} à ${formatNutrition(display.zoneEnd)} kilocalories. ${display.note}`}
+        accessibilityLabel={`${formatKcal(total)} kilocalories consignées aujourd’hui. Zone cible de ${formatKcal(display.zoneStart)} à ${formatKcal(display.zoneEnd)} kilocalories. ${display.note}`}
         style={{ height: 24, justifyContent: "center" }}
       >
         <View
@@ -78,7 +75,7 @@ export function DailyBudgetChart({
         />
       </View>
       <Text style={s.historyMeta}>
-        Objectif {formatNutrition(Math.round(budget))} kcal (trait) · zone verte : ± 150 kcal
+        Objectif {formatKcal(budget)} kcal (trait) · zone verte : ± 150 kcal
       </Text>
       <Text style={display.phase === "target"
         ? { color: CHART_COLORS.measured, fontWeight: "600" }

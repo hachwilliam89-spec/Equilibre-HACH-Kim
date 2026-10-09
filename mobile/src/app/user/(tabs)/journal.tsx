@@ -6,8 +6,7 @@ import {
   foodStatusPresentation,
   formatNutrition,
   groupEntriesByMeal,
-  referenceFoodFromEntry,
-} from "../../../nutrition/presentation";
+  referenceFoodFromEntry, formatKcal } from "../../../nutrition/presentation";
 import { FoodIcon } from "../../../nutrition/FoodIcon";
 import { foodIconKind } from "../../../nutrition/food-icon-kind";
 import { MacroBreakdown } from "../../../nutrition/MacroBreakdown";
@@ -39,7 +38,7 @@ function Entry({
       <View style={[s.historyMain, { alignItems: "center", gap: 10 }]}>
         <FoodIcon kind={foodIconKind(entry.nom)} size={34} />
         <Text style={[s.historyWeight, { flex: 1 }]}>{entry.nom}</Text>
-        <Text style={s.label}>{formatNutrition(entry.caloriesKcal)} kcal</Text>
+        <Text style={s.label}>{formatKcal(entry.caloriesKcal)} kcal</Text>
       </View>
       <Text style={s.historyMeta}>
         {formatNutrition(entry.quantiteGrammes)} g
@@ -177,10 +176,10 @@ export default function FoodJournalScreen() {
             </View>
             <Text style={{ fontSize: 30, fontWeight: "800", color: colors.ink }}>
               {budgetKcal <= 0
-                ? `${formatNutrition(totalKcal)} kcal consommées`
+                ? `${formatKcal(totalKcal)} kcal consommées`
                 : totalKcal <= budgetKcal
-                  ? `${formatNutrition(budgetKcal - totalKcal)} kcal restantes`
-                  : `${formatNutrition(totalKcal - budgetKcal)} kcal au-dessus de la cible`}
+                  ? `${formatKcal(budgetKcal - totalKcal)} kcal restantes`
+                  : `${formatKcal(totalKcal - budgetKcal)} kcal au-dessus de la cible`}
             </Text>
             <DailyBudgetChart
               total={totalKcal}
@@ -228,7 +227,7 @@ export default function FoodJournalScreen() {
                   <View style={[s.historyMain, { marginTop: 4 }]}>
                     <Text accessibilityRole="header" style={[s.metricLabel, { color: colors.brand }]}>{group.label}</Text>
                     <Text style={s.historyMeta}>
-                      {formatNutrition(group.caloriesKcal)} kcal
+                      {formatKcal(group.caloriesKcal)} kcal
                     </Text>
                   </View>
                   {group.entries.map((entry) => (

@@ -32,6 +32,8 @@ type ScreenProps = {
   onRefresh?: () => void;
   /** Élément flottant hors défilement (bouton d'action). */
   floating?: ReactNode;
+  /** Action discrète en haut à droite du bandeau (ex. déconnexion). */
+  heroAction?: ReactNode;
   /** Sous une barre d'onglets : la marge basse est déjà gérée par la barre. */
   inTabs?: boolean;
   /** Contenu non défilant : l'écran gère sa propre liste (FlatList). */
@@ -51,6 +53,7 @@ export function Screen({
   floating,
   inTabs = false,
   fixed = false,
+  heroAction,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const hero = !!title && !back;
@@ -102,6 +105,7 @@ export function Screen({
               <View style={s.hero}>
                 <View style={s.heroHalo} />
                 <View style={s.heroInner}>
+                  {heroAction && <View style={{ position: "absolute", right: 16, top: 10, zIndex: 1 }}>{heroAction}</View>}
                   {!!eyebrow && <Text style={s.heroEyebrow}>{eyebrow}</Text>}
                   <Text accessibilityRole="header" style={s.heroTitle}>{title}</Text>
                   {!!subtitle && <Text style={s.heroSubtitle}>{subtitle}</Text>}

@@ -5,6 +5,7 @@ import {
   nutritionForQuantity,
   parseFoodQuantity,
   quickPortions,
+  formatKcal,
   defaultPortion,
   suggestedMeal,
 } from "../presentation";
@@ -160,5 +161,19 @@ describe("suggestedMeal", () => {
   it("classe les saisies nocturnes en collation", () => {
     expect(suggestedMeal(23)).toBe("collation");
     expect(suggestedMeal(2)).toBe("collation");
+  });
+});
+
+describe("formatKcal", () => {
+  it("arrondit les calories à l'unité à l'affichage seulement", () => {
+    expect(formatKcal(2237.7)).toBe((2238).toLocaleString("fr-FR"));
+    expect(formatKcal(106.8)).toBe("107");
+    expect(formatKcal(-1480.4)).toBe((-1480).toLocaleString("fr-FR"));
+  });
+
+  it("garde la précision dans les calculs du budget", () => {
+    const display = dailyBudgetPresentation(1330.4, 2237.7, true);
+    expect(display.zoneStart).toBeCloseTo(2087.7);
+    expect(display.note).toBe(`${formatKcal(757.3)} kcal avant la zone cible.`);
   });
 });

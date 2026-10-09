@@ -73,6 +73,14 @@ export function journalForDay(
   return status?.journal?.jourUtc === dayUtc ? status.journal : null;
 }
 
+/**
+ * Calories à l'affichage : arrondies à l'unité. Les calculs gardent la
+ * précision ; seul le résultat montré est arrondi.
+ */
+export function formatKcal(value: number): string {
+  return Math.round(value).toLocaleString("fr-FR");
+}
+
 export function formatNutrition(value: number): string {
   return Number(value.toFixed(1)).toLocaleString("fr-FR", {
     maximumFractionDigits: 1,
@@ -120,14 +128,14 @@ export function dailyBudgetPresentation(
   const note = !hasEntries
     ? "Aucune entrée consignée aujourd’hui."
     : overTolerance
-      ? `${formatNutrition(total - budget)} kcal au-dessus de la cible : dépassement.`
+      ? `${formatKcal(total - budget)} kcal au-dessus de la cible : dépassement.`
       : !inTargetZone
-        ? `${formatNutrition(zoneStart - total)} kcal avant la zone cible.`
+        ? `${formatKcal(zoneStart - total)} kcal avant la zone cible.`
         : total < budget
-          ? `Zone cible atteinte, ${formatNutrition(budget - total)} kcal sous la cible.`
+          ? `Zone cible atteinte, ${formatKcal(budget - total)} kcal sous la cible.`
           : total === budget
             ? "Cible calorique atteinte."
-            : `Zone cible atteinte, ${formatNutrition(total - budget)} kcal au-dessus de la cible.`;
+            : `Zone cible atteinte, ${formatKcal(total - budget)} kcal au-dessus de la cible.`;
   return {
     note,
     phase,

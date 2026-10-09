@@ -13,7 +13,7 @@ import { FoodIcon } from "./FoodIcon";
 import { foodIconKind } from "./food-icon-kind";
 import { MacroBreakdown } from "./MacroBreakdown";
 import {
-  defaultPortion, formatNutrition, mealCategories,
+  defaultPortion, formatKcal, mealCategories,
   nutritionForQuantity, parseFoodQuantity, quickPortions,
 } from "./presentation";
 
@@ -136,7 +136,7 @@ function SheetContent({
             <FoodIcon kind={foodIconKind(food.nom, food.categorie)} size={52} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={s.cardTitle}>{food.nom}</Text>
-              <Text style={s.historyMeta}>{formatNutrition(food.caloriesKcalPour100g)} kcal pour 100 g</Text>
+              <Text style={s.historyMeta}>{formatKcal(food.caloriesKcalPour100g)} kcal pour 100 g</Text>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Fermer" disabled={busy} onPress={close} hitSlop={8}
               style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.page }}>
@@ -209,13 +209,13 @@ function SheetContent({
           {preview && (
             <View style={{ gap: 10, backgroundColor: colors.mintSoft, borderRadius: 18, padding: 16 }}>
               <Text style={{ fontSize: 28, fontWeight: "800", color: colors.ink }}>
-                {formatNutrition(preview.caloriesKcal)} kcal
+                {formatKcal(preview.caloriesKcal)} kcal
               </Text>
               {remaining !== null && (
                 <Text style={[s.label, { color: remaining < 0 ? colors.warning : colors.brand }]}>
                   {remaining >= 0
-                    ? `Il vous restera ${formatNutrition(remaining)} kcal aujourd’hui`
-                    : `${formatNutrition(-remaining)} kcal au-dessus du budget du jour`}
+                    ? `Il vous restera ${formatKcal(remaining)} kcal aujourd’hui`
+                    : `${formatKcal(-remaining)} kcal au-dessus du budget du jour`}
                 </Text>
               )}
               <MacroBreakdown variant="compact" proteines={preview.proteinesG} glucides={preview.glucidesG} lipides={preview.lipidesG} />
@@ -227,7 +227,7 @@ function SheetContent({
         </ScrollView>
         <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: insets.bottom + 16, borderTopWidth: 1, borderTopColor: colors.border }}>
           <Button
-            title={busy ? "Ajout en cours…" : `Ajouter ${mealTarget[meal]}${preview ? ` · ${formatNutrition(preview.caloriesKcal)} kcal` : ""}`}
+            title={busy ? "Ajout en cours…" : `Ajouter ${mealTarget[meal]}${preview ? ` · ${formatKcal(preview.caloriesKcal)} kcal` : ""}`}
             onPress={() => void submit()}
             disabled={busy}
           />

@@ -6,7 +6,7 @@ import { colors } from "../ui/theme";
 import type { ReferenceFood } from "./api";
 import { FoodIcon } from "./FoodIcon";
 import { foodIconKind } from "./food-icon-kind";
-import { formatNutrition } from "./presentation";
+import { formatNutrition, formatKcal } from "./presentation";
 
 /** Ligne de la bibliothèque : valeurs pour 100 g, choix et favori. */
 export const FoodRow = memo(function FoodRow({
@@ -49,7 +49,7 @@ export const FoodRow = memo(function FoodRow({
           <Text numberOfLines={2} style={s.label}>{food.nom}</Text>
           <Text style={s.historyMeta}>
             <Text style={{ fontWeight: "700", color: colors.ink }}>
-              {formatNutrition(food.caloriesKcalPour100g)} kcal
+              {formatKcal(food.caloriesKcalPour100g)} kcal
             </Text>
             {"  ·  "}P {formatNutrition(food.proteinesGPour100g)} · G {formatNutrition(food.glucidesGPour100g)} · L {formatNutrition(food.lipidesGPour100g)}
           </Text>
