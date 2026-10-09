@@ -9,13 +9,17 @@ import {
   measurementSourceLabel,
   measurementStatusLabel,
 } from "../measurements/presentation";
+import { MacroBreakdown } from "../nutrition/MacroBreakdown";
+import { foodStatusPresentation } from "../nutrition/presentation";
 import { Collapsible } from "../ui/Collapsible";
 import { styles as s } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { coachActionLabel, coachAlerts, type ClientProgression } from "./api";
 
 /** Progression d'un utilisateur vue par son coach : résumé, courbes, pesées. */
-export function ClientProgress({ progression }: { progression: ClientProgression }) {
+export type ClientSection = "suivi" | "alimentation";
+
+export function ClientProgress({ progression, section }: { progression: ClientProgression; section: ClientSection }) {
   const { suiviPoids, mesures, alimentation } = progression;
   if (!suiviPoids) return null;
   const derniere = suiviPoids.derniereMesure;
@@ -24,6 +28,51 @@ export function ClientProgress({ progression }: { progression: ClientProgression
     : null;
 
   const alerts = coachAlerts(progression);
+
+  if (section === "alimentation") {
+    if (!alimentation) {
+      return (
+        <View style={s.card}>
+          <Text style={s.text}>Aucun suivi alimentaire sans plan actif.</Text>
+        </View>
+      );
+    }
+    const saisis = alimentation.jours.filter((jour) => jour.statut !== "aucune-entree");
+    const moyenne = (key: "totalProteinesG" | "totalGlucidesG" | "totalLipidesG") =>
+      saisis.length ? saisis.reduce((sum, jour) => sum + jour[key], 0) / saisis.length : 0;
+    const food = foodStatusPresentation[alimentation.statut];
+    return (
+      <>
+        <View style={[s.card, { backgroundColor: food.background, borderColor: food.background }]}>
+          <Text style={[s.metricLabel, { color: food.color }]}>Statut alimentaire</Text>
+          <Text style={[s.cardTitle, { color: food.color }]}>{food.symbol} {food.label}</Text>
+          <Text style={s.historyMeta}>Calculé sur le dernier jour saisi, avec une tolérance de ± 150 kcal.</Text>
+        </View>
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Calories · 7 derniers jours</Text>
+          <WeeklyCaloriesChart jours={alimentation.jours} budget={alimentation.budgetCalorique} />
+        </View>
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Macros · moyenne des jours saisis</Text>
+          {saisis.length ? (
+            <MacroBreakdown
+              proteines={Math.round(moyenne("totalProteinesG"))}
+              glucides={Math.round(moyenne("totalGlucidesG"))}
+              lipides={Math.round(moyenne("totalLipidesG"))}
+              targets={{
+                proteines: alimentation.ciblesMacros.proteinesG,
+                glucides: alimentation.ciblesMacros.glucidesG,
+                lipides: alimentation.ciblesMacros.lipidesG,
+              }}
+            />
+          ) : (
+            <Text style={s.text}>Aucun repas saisi sur les 7 derniers jours.</Text>
+          )}
+          <Text style={s.historyMeta}>Totaux journaliers uniquement : le détail des aliments reste privé.</Text>
+        </View>
+      </>
+    );
+  }
 
   return (
     <>
@@ -86,14 +135,6 @@ export function ClientProgress({ progression }: { progression: ClientProgression
       <View style={s.card}>
         <WeightTrajectoryChart plan={suiviPoids.plan} measurements={mesures} showLast={false} />
       </View>
-
-      {alimentation && (
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Alimentation · 7 derniers jours</Text>
-          <WeeklyCaloriesChart jours={alimentation.jours} budget={alimentation.budgetCalorique} />
-          <Text style={s.historyMeta}>Totaux journaliers uniquement : le détail des aliments reste privé.</Text>
-        </View>
-      )}
 
       {mesures.length > 0 && (
         <Collapsible title="Dernières pesées" hint={`${mesures.length} pesée${mesures.length > 1 ? "s" : ""} sur 3 mois`}>
