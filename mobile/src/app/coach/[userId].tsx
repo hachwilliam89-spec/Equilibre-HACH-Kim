@@ -3,7 +3,9 @@ import { parseApiData } from "../../network/http";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { clientProgression, type ClientProgression } from "../../coaching/api";
-import { ClientProgress } from "../../coaching/ClientProgress";
+import { ClientProgress, type ClientSection } from "../../coaching/ClientProgress";
+import { BowlIcon, ScaleIcon, TargetIcon } from "../../ui/icons";
+import { SectionTabBar } from "../../ui/SectionTabBar";
 import { Client, Plan, Preview, currentPlan, planSchema, previewSchema, requestApi } from "../../plans/api";
 import { budgetSchema, goalsSchema, weeklyRate } from "../../plans/form";
 import { Button, Field, InfoRow, Screen } from "../../plans/ui";
@@ -25,6 +27,7 @@ export default function UserPlan() {
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [step, setStep] = useState<"detail" | "goals" | "budget">("detail");
+  const [section, setSection] = useState<ClientSection | "plan">("suivi");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
@@ -40,6 +43,8 @@ export default function UserPlan() {
     void Promise.all([clientProgression(userId), currentPlan(userId)]).then(([suivi, current]) => {
       if (!active) return;
       setClient(suivi.utilisateur); setProgression(suivi); setPlan(current);
+      // Sans plan actif, rien à suivre : on ouvre directement l’onglet Plan.
+      if (!suivi.suiviPoids) setSection("plan");
     }).catch((e: Error) => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [userId, reload]);
@@ -101,6 +106,18 @@ export default function UserPlan() {
     title={step === "detail" ? "Suivi d’un utilisateur" : step === "goals" ? "Objectifs · 1/2" : "Budget et validation · 2/2"}
     refreshing={false}
     onRefresh={step === "detail" && !busy ? refresh : undefined}
+    floating={client && !loading ? (
+      <SectionTabBar
+        sections={[
+          { value: "suivi" as const, label: "Poids", icon: ScaleIcon },
+          { value: "alimentation" as const, label: "Alimentation", icon: BowlIcon },
+          { value: "plan" as const, label: "Plan", icon: TargetIcon },
+        ]}
+        value={step === "detail" ? section : "plan"}
+        onChange={setSection}
+        disabled={step !== "detail" || busy}
+      />
+    ) : undefined}
   >
     {client && <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
       <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" }}>
@@ -114,8 +131,10 @@ export default function UserPlan() {
     {!!notice && <Text accessibilityRole="alert" style={s.text}>{notice}</Text>}
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
     {loading ? <ActivityIndicator color={colors.brand} /> : client && <>
-      {step === "detail" && progression && <ClientProgress progression={progression} />}
-      {step === "detail" && <View style={s.card}>
+      {step === "detail" && section !== "plan" && progression && (progression.suiviPoids
+        ? <ClientProgress progression={progression} section={section} />
+        : <View style={s.card}><Text style={s.text}>Aucun plan actif : le suivi démarrera avec le premier plan (onglet « Plan »).</Text></View>)}
+      {step === "detail" && section === "plan" && <View style={s.card}>
         <View style={[s.summaryRow, { alignItems: "center" }]}>
           <Text style={s.cardTitle}>Plan actuel</Text>
           {plan && <View style={s.pill}><Text style={s.pillText}>Actif</Text></View>}
