@@ -28,18 +28,18 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
 
   return (
     <View style={{ gap: 10 }}>
-      <View style={s.metricsRow}>
-        <View style={s.metric}>
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        <View style={[s.metric, { minWidth: 0, padding: 10 }]}>
           <Text style={s.metricLabel}>Moy. kcal</Text>
           <Text style={[s.metricValue, { fontSize: 17 }]}>
             {moyenne === null ? "—" : formatNutrition(Math.round(moyenne))}
           </Text>
         </View>
-        <View style={s.metric}>
+        <View style={[s.metric, { minWidth: 0, padding: 10 }]}>
           <Text style={s.metricLabel}>Saisis</Text>
           <Text style={[s.metricValue, { fontSize: 17 }]}>{renseignes.length} / {jours.length}</Text>
         </View>
-        <View style={s.metric}>
+        <View style={[s.metric, { minWidth: 0, padding: 10 }]}>
           <Text style={s.metricLabel}>Dépassés</Text>
           <Text style={[s.metricValue, { fontSize: 17, color: depassements ? colors.warning : colors.ink }]}>{depassements}</Text>
         </View>
@@ -81,7 +81,7 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
                 <SvgText x={cx} y={FRAME.bottom + 15} fontSize={11} fontWeight="700" fill={index === jours.length - 1 ? colors.ink : colors.muted} textAnchor="middle">
                   {index === jours.length - 1 ? "Auj." : JOURS[weekday]}
                 </SvgText>
-                <SvgText x={cx} y={FRAME.bottom + 28} fontSize={10} fill={colors.subtle} textAnchor="middle">
+                <SvgText x={cx} y={FRAME.bottom + 28} fontSize={11} fill={colors.subtle} textAnchor="middle">
                   {Number(jour.jourUtc.slice(8, 10))}
                 </SvgText>
               </G>
@@ -89,9 +89,21 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
           })}
         </Svg>
       </View>
-      <Text style={s.historyMeta}>
-        Pointillé : budget {formatKcal(budget)} kcal · bande : ± {TOLERANCE_KCAL} kcal · orange : dépassement · contour : aucune saisie
-      </Text>
+      <Text style={s.historyMeta}>Objectif : {formatKcal(budget)} kcal par jour, avec une marge de ± {TOLERANCE_KCAL} kcal.</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: colors.brand }} />
+          <Text style={s.historyMeta}>Saisi</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: CHART_COLORS.warning }} />
+          <Text style={s.historyMeta}>Dépassement</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+          <View style={{ width: 10, height: 10, borderRadius: 3, borderWidth: 1, borderStyle: "dashed", borderColor: CHART_COLORS.axis }} />
+          <Text style={s.historyMeta}>Non saisi</Text>
+        </View>
+      </View>
     </View>
   );
 }

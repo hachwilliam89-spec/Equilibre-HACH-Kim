@@ -14,7 +14,7 @@ export const colors = {
   borderStrong: "#b8cbc0",
   ink: "#173b33",
   muted: "#536861",
-  subtle: "#7c8f87",
+  subtle: "#60756b",
   onBrand: "#ffffff",
   onBrandMuted: "#bfe6d4",
   danger: "#a32d29",

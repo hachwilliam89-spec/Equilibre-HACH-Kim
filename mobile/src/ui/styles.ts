@@ -149,7 +149,7 @@ export const styles = StyleSheet.create({
   },
   metricLabel: {
     color: colors.muted,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
