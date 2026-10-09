@@ -90,10 +90,18 @@ export type QueuedOperation = LocalOperation & {
 /** Ce qui part réellement sur le réseau : le strict nécessaire. */
 export function toWire(operation: LocalOperation) {
   switch (operation.type) {
-    case "ajout-aliment": {
-      const { aliment: _aliment, ...wire } = operation;
-      return wire;
-    }
+    // Champs listés un par un : une opération lue dans la file locale porte
+    // aussi creeLe et tentatives, que la route (schéma strict) refuse.
+    case "ajout-aliment":
+      return {
+        id: operation.id,
+        type: operation.type,
+        entreeId: operation.entreeId,
+        foodId: operation.foodId,
+        quantiteGrammes: operation.quantiteGrammes,
+        ...(operation.categorieRepas ? { categorieRepas: operation.categorieRepas } : {}),
+        consommeLe: operation.consommeLe,
+      };
     case "favori":
       return {
         id: operation.id,

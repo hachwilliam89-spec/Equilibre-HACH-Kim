@@ -115,6 +115,43 @@ describe("useSync", () => {
     ]);
   });
 
+  it("modifier une entrée synchronisée envoie un retrait puis un ajout avec la nouvelle quantité", async () => {
+    const { envois } = preparer({ enLigne: true });
+    await useSync.getState().demarrer("u-1");
+    await useSync.getState().synchroniser();
+    const entree = useSync.getState().vue.alimentation!.journaux[0].entrees[0];
+
+    await useSync.getState().modifierEntree(entree, 150, "diner");
+    await useSync.getState().synchroniser();
+
+    expect(envois.flat()).toEqual([
+      expect.objectContaining({ type: "retrait-aliment", entreeId: "e-1" }),
+      expect.objectContaining({ type: "ajout-aliment", foodId: riz.id, quantiteGrammes: 150, categorieRepas: "diner" }),
+    ]);
+  });
+
+  it("modifier une entrée encore en attente remplace l'ajout sans retrait", async () => {
+    const { store, envois, retablir, couper } = preparer({ enLigne: true });
+    await useSync.getState().demarrer("u-1");
+    await useSync.getState().synchroniser();
+    couper();
+    await useSync.getState().ajouterAliment(pomme, 100, "collation");
+    await useSync.getState().synchroniser();
+    const entree = useSync
+      .getState()
+      .vue.alimentation!.journaux.flatMap((journal) => journal.entrees)
+      .find((entry) => entry.enAttente)!;
+
+    await useSync.getState().modifierEntree(entree, 200, "collation");
+    expect((await store.operations()).map((op) => op.type)).toEqual(["ajout-aliment"]);
+
+    retablir();
+    await useSync.getState().synchroniser();
+    expect(envois.flat()).toEqual([
+      expect.objectContaining({ type: "ajout-aliment", foodId: pomme.id, quantiteGrammes: 200 }),
+    ]);
+  });
+
   it("ne garde que le dernier choix de favori non envoyé", async () => {
     const { store, envois, retablir } = preparer({ enLigne: false });
     await useSync.getState().demarrer("u-1");

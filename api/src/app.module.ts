@@ -15,6 +15,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { FoodsModule } from './foods/foods.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { SyncModule } from './sync/sync.module';
+import { CoachingModule } from './coaching/coaching.module';
+import { NotFoundModule } from './common/not-found.module';
 
 @Module({
   imports: [
@@ -86,10 +88,13 @@ import { SyncModule } from './sync/sync.module';
     FoodsModule,
     NutritionModule,
     SyncModule,
+    CoachingModule,
     HealthModule,
     // Limite globale par IP, filet de securite general contre l'abus/DoS.
     // Les routes sensibles (ex: login) resserrent cette limite via @Throttle.
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    // Toujours en dernier : les routes applicatives doivent avoir priorité.
+    NotFoundModule,
   ],
   controllers: [AppController],
   providers: [

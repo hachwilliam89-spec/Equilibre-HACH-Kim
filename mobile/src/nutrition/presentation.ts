@@ -73,6 +73,14 @@ export function journalForDay(
   return status?.journal?.jourUtc === dayUtc ? status.journal : null;
 }
 
+/**
+ * Calories à l'affichage : arrondies à l'unité. Les calculs gardent la
+ * précision ; seul le résultat montré est arrondi.
+ */
+export function formatKcal(value: number): string {
+  return Math.round(value).toLocaleString("fr-FR");
+}
+
 export function formatNutrition(value: number): string {
   return Number(value.toFixed(1)).toLocaleString("fr-FR", {
     maximumFractionDigits: 1,
@@ -120,14 +128,14 @@ export function dailyBudgetPresentation(
   const note = !hasEntries
     ? "Aucune entrée consignée aujourd’hui."
     : overTolerance
-      ? `${formatNutrition(total - budget)} kcal au-dessus de la cible : dépassement.`
+      ? `${formatKcal(total - budget)} kcal au-dessus de la cible : dépassement.`
       : !inTargetZone
-        ? `${formatNutrition(zoneStart - total)} kcal avant la zone cible.`
+        ? `${formatKcal(zoneStart - total)} kcal avant la zone cible.`
         : total < budget
-          ? `Zone cible atteinte, ${formatNutrition(budget - total)} kcal sous la cible.`
+          ? `Zone cible atteinte, ${formatKcal(budget - total)} kcal sous la cible.`
           : total === budget
             ? "Cible calorique atteinte."
-            : `Zone cible atteinte, ${formatNutrition(total - budget)} kcal au-dessus de la cible.`;
+            : `Zone cible atteinte, ${formatKcal(total - budget)} kcal au-dessus de la cible.`;
   return {
     note,
     phase,
@@ -163,6 +171,23 @@ const HOUSEHOLD_UNITS: { pattern: RegExp; label: string; grams: number }[] = [
 
 const normalizePortion = (name: string) => name.normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").replace(/œ/g, "oe");
+
+/** Portion proposée par défaut : l'unité ménagère connue, sinon 100 g. */
+export function defaultPortion(food: ReferenceFood): number {
+  const value = normalizePortion(food.nom);
+  return HOUSEHOLD_UNITS.find((u) => u.pattern.test(value))?.grams ?? 100;
+}
+
+/**
+ * Repas proposé selon l'heure locale de la saisie. L'utilisateur peut
+ * toujours en choisir un autre : ce n'est qu'une présélection.
+ */
+export function suggestedMeal(hour: number): Exclude<MealCategory, "non-classe"> {
+  if (hour >= 5 && hour < 11) return "petit-dejeuner";
+  if (hour >= 11 && hour < 15) return "dejeuner";
+  if (hour >= 18 && hour < 23) return "diner";
+  return "collation";
+}
 
 /** Suggestions de portions pour eviter la saisie au gramme pres. */
 export function quickPortions(food: ReferenceFood): QuickPortion[] {

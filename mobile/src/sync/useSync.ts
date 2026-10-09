@@ -2,6 +2,7 @@ import { randomUUID } from "expo-crypto";
 import { create } from "zustand";
 import { ApiError } from "../auth/api";
 import type { FoodEntry, MealCategory, ReferenceFood } from "../nutrition/api";
+import { referenceFoodFromEntry } from "../nutrition/presentation";
 import { httpSyncApi, type SyncApi } from "./api";
 import { emptyServerState, type LocalOperation, type LocalView } from "./contracts";
 import { getLocalStore } from "./database";
@@ -44,6 +45,15 @@ type State = {
     categorieRepas?: Exclude<MealCategory, "non-classe">,
   ) => Promise<void>;
   retirerEntree: (entry: FoodEntry) => Promise<void>;
+  /**
+   * Nouvelle quantité ou nouveau repas pour une entrée : retrait puis ajout,
+   * sans nouvelle règle côté serveur (seuls ajout et retrait existent).
+   */
+  modifierEntree: (
+    entry: FoodEntry,
+    quantiteGrammes: number,
+    categorieRepas?: Exclude<MealCategory, "non-classe">,
+  ) => Promise<void>;
   saisirPoids: (poidsKg: number) => Promise<void>;
   basculerFavori: (food: ReferenceFood, favori: boolean) => Promise<void>;
   noterRecent: (food: ReferenceFood) => Promise<void>;
@@ -169,6 +179,11 @@ export const useSync = create<State>((set, get) => {
         return;
       }
       await enfiler({ id: deps.uuid(), type: "retrait-aliment", entreeId: entry.id });
+    },
+
+    modifierEntree: async (entry, quantiteGrammes, categorieRepas) => {
+      await get().retirerEntree(entry);
+      await get().ajouterAliment(referenceFoodFromEntry(entry), quantiteGrammes, categorieRepas);
     },
 
     saisirPoids: async (poidsKg) => {

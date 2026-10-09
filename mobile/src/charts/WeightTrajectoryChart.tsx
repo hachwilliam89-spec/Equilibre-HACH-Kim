@@ -24,9 +24,12 @@ const ranges: { value: WeightChartRange; label: string }[] = [
 export function WeightTrajectoryChart({
   plan,
   measurements,
+  showLast = true,
 }: {
   plan: WeightPlan;
   measurements: Measurement[];
+  /** Masquer la dernière pesée quand l'écran l'affiche déjà en grand. */
+  showLast?: boolean;
 }) {
   const [range, setRange] = useState<WeightChartRange>(7);
   const points = validWeightPoints(plan, measurements);
@@ -129,9 +132,9 @@ export function WeightTrajectoryChart({
         <Text style={s.historyMeta}>{formatUtcDay(window.endUtc)}</Text>
       </View>
       <Text style={s.historyMeta}>
-        Vert et points : pesées valides · gris pointillé : objectif · vert pointillé : jours sans pesée
+        ● vos pesées · ┄ gris : trajectoire du plan · ┄ vert : jours sans pesée
       </Text>
-      {last && (
+      {showLast && last && (
         <Text style={s.label}>
           Dernière pesée valide : {formatWeight(last.weightKg)} le {formatUtcDay(last.dayUtc)}
         </Text>

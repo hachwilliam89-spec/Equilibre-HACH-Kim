@@ -10,6 +10,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "dev.wkhach.equilibre",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -26,6 +27,19 @@
       "expo-secure-store",
       "@react-native-community/datetimepicker"
     ],
-    "scheme": "equilibre"
+    "scheme": "equilibre",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "25f723c4-9d71-4684-a4ad-d748ae1fb6d3"
+      }
+    },
+    "owner": "william1989",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/25f723c4-9d71-4684-a4ad-d748ae1fb6d3"
+    }
   }
 }

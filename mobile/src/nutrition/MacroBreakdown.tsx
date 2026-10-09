@@ -60,6 +60,39 @@ export function MacroBreakdown({
     );
   }
 
+  // Avec des cibles : une barre par macro, consommé face à la cible du jour.
+  if (targets) {
+    return (
+      <View
+        accessibilityLabel={MACROS.map(
+          (m) => `${m.label} ${formatNutrition(values[m.key])} grammes sur ${formatNutrition(targets[m.key])}`,
+        ).join(", ")}
+        style={{ gap: 10 }}
+      >
+        {MACROS.map((m) => {
+          const target = targets[m.key];
+          const ratio = target > 0 ? values[m.key] / target : 0;
+          return (
+            <View key={m.key} style={{ gap: 4 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: m.color }} />
+                  <Text style={{ fontSize: 14, color: "#173b33", fontWeight: "600" }}>{m.label}</Text>
+                </View>
+                <Text style={{ fontSize: 13, color: "#536861" }}>
+                  <Text style={{ fontWeight: "800", color: "#173b33" }}>{formatNutrition(values[m.key])}</Text> / {formatNutrition(target)} g
+                </Text>
+              </View>
+              <View style={{ height: 8, borderRadius: 4, backgroundColor: m.track, overflow: "hidden" }}>
+                <View style={{ width: `${Math.min(ratio, 1) * 100}%`, height: "100%", borderRadius: 4, backgroundColor: m.color }} />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
   return (
     <View
       accessibilityLabel={MACROS.map(

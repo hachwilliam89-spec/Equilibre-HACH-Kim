@@ -173,12 +173,13 @@ le numéro du ticket Jira. Intégration par merge request vers `develop`, puis
 vers `main` pour les fonctionnalités terminées et vérifiées. Conserver les
 commits de fusion pour rendre le regroupement des changements visible.
 
-**Commits** — format conventional commits, vérifié automatiquement par
-commitlint au moment du commit.
+**Commits** — format conventional commits avec scope et sujet en français,
+vérifié automatiquement par commitlint au moment du commit. Ajouter la clé Jira
+dans le sujet quand le changement relève d’un ticket.
 
 ```
-feat(auth): ajoute le rafraichissement de jeton
-fix(docker): corrige le chemin du Dockerfile
+feat(auth): ajoute le rafraichissement de jeton (FR403-140)
+fix(mobile): corrige les réponses serveur invalides (FR403-839)
 ```
 
 **Qualité** — Husky installe deux hooks à la racine :

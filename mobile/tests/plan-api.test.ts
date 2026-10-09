@@ -10,7 +10,7 @@ jest.mock("../src/auth/api", () => ({
 jest.mock("../src/auth/session", () => ({ useSession: { getState: jest.fn(), setState: jest.fn() } }));
 jest.mock("../src/auth/storage", () => ({ storage: { write: jest.fn(), clear: jest.fn() } }));
 const initial = { userId: "coach", role: "coach" as const, accessToken: "expired", refreshToken: "refresh" };
-const response = (status: number, data: unknown) => ({ status, ok: status < 400, json: async () => data }) as Response;
+const response = (status: number, data: unknown) => ({ status, ok: status < 400, json: async () => data, text: async () => JSON.stringify(data) }) as Response;
 let session: typeof initial | null;
 const previousFetch = global.fetch;
 beforeEach(() => {
@@ -43,8 +43,23 @@ test("une erreur metier conserve son message et ne relance pas le POST", async (
   expect(global.fetch).toHaveBeenCalledTimes(1); expect(refresh).not.toHaveBeenCalled();
 });
 test("une réponse 204 sans corps valide une modification de favori", async () => {
-  const json = jest.fn(() => { throw new Error("Aucun corps JSON"); });
-  (global.fetch as jest.Mock).mockResolvedValue({ status: 204, ok: true, json });
+  const text = jest.fn(async () => "");
+  (global.fetch as jest.Mock).mockResolvedValue({ status: 204, ok: true, text });
   await expect(requestApi("/foods/me/favorites/food-1", "PUT")).resolves.toBeNull();
-  expect(json).not.toHaveBeenCalled();
+  expect(text).toHaveBeenCalled();
+});
+test("une route absente n'affiche jamais le HTML du serveur", async () => {
+  const html = '<!DOCTYPE html><html><body><pre>Cannot GET /api/coach/clients</pre></body></html>';
+  (global.fetch as jest.Mock).mockResolvedValue({ status: 404, ok: false, text: async () => html });
+  await expect(requestApi("/coach/clients")).rejects.toMatchObject({
+    status: 404,
+    message: expect.stringContaining("mise à jour de l'API"),
+  });
+});
+test("une erreur HTML du serveur est présentée sans son contenu technique", async () => {
+  (global.fetch as jest.Mock).mockResolvedValue({ status: 502, ok: false, text: async () => "<html>Bad Gateway</html>" });
+  await expect(requestApi("/coach/clients")).rejects.toMatchObject({
+    status: 502,
+    message: "Le service est temporairement indisponible. Réessaie plus tard.",
+  });
 });

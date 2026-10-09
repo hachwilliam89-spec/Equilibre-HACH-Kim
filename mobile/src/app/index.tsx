@@ -1,7 +1,6 @@
 import { RegistrationForm } from "../auth/RegistrationForm";
-import * as Clipboard from "expo-clipboard";
 import { Brand } from "../ui/Brand";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,12 +15,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { credentialsSchema } from "../auth/contracts";
 import { useSession } from "../auth/session";
-import { useSync } from "../sync/useSync";
 import { styles as s } from "../ui/styles";
+import { colors } from "../ui/theme";
 
 export default function Connection() {
-  const { session, ready, busy, error, restore, signIn, signOut } =
-    useSession();
+  const { session, ready, busy, error, restore, signIn } = useSession();
   const { auth } = useLocalSearchParams<{ auth?: string }>();
   const registering = auth === "inscription";
   const [registrationBusy, setRegistrationBusy] = useState(false);
@@ -37,31 +35,8 @@ export default function Connection() {
   };
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [copyStatus, setCopyStatus] = useState("");
   const [visible, setVisible] = useState(false);
   const [validation, setValidation] = useState<string | null>(null);
-  const [pendingWarning, setPendingWarning] = useState<number | null>(null);
-  /**
-   * Déconnexion : dernière tentative d'envoi, puis effacement de la base
-   * embarquée. S'il reste des modifications non envoyées, on prévient avant
-   * de les perdre (second appui pour confirmer).
-   */
-  const leave = async () => {
-    const sync = useSync.getState();
-    if (session?.role === "utilisateur" && pendingWarning === null) {
-      await sync.synchroniser();
-      const pending = useSync.getState().vue.operationsEnAttente;
-      if (pending > 0) {
-        setPendingWarning(pending);
-        return;
-      }
-    }
-    await signOut();
-    if (!useSession.getState().session) {
-      setPendingWarning(null);
-      await sync.reinitialiser();
-    }
-  };
   useEffect(() => {
     void restore();
   }, [restore]);
@@ -79,14 +54,21 @@ export default function Connection() {
       setValidation(null);
     }
   };
+  // Session ouverte : chaque rôle a son espace avec ses onglets.
+  if (ready && session) {
+    return <Redirect href={session.role === "coach" ? "/coach" : "/user"} />;
+  }
   return (
     <SafeAreaView style={s.page}>
+      {/* Halos de la charte : fond moins uniforme sans gêner la lecture. */}
+      <View pointerEvents="none" style={{ position: "absolute", width: 320, height: 320, borderRadius: 160, top: -140, right: -120, backgroundColor: colors.mint }} />
+      <View pointerEvents="none" style={{ position: "absolute", width: 260, height: 260, borderRadius: 130, bottom: -120, left: -110, backgroundColor: colors.mint, opacity: 0.7 }} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
-          contentContainerStyle={s.content}
+          contentContainerStyle={[s.content, { justifyContent: "center", paddingVertical: 24 }]}
           keyboardShouldPersistTaps="handled"
         >
           <Brand />
@@ -95,7 +77,7 @@ export default function Connection() {
               <Text style={s.title}>Retrouvons votre espace</Text>
               {busy && (
                 <ActivityIndicator
-                  color="#087454"
+                  color={colors.brand}
                   accessibilityLabel="Restauration de la session"
                 />
               )}
@@ -113,63 +95,6 @@ export default function Connection() {
                   </Pressable>
                 </>
               )}
-            </View>
-          ) : session ? (
-            <View style={s.card}>
-              <Text style={s.eyebrow}>
-                {session.role === "coach"
-                  ? "ESPACE COACH"
-                  : "ESPACE UTILISATEUR"}
-              </Text>
-              <Text style={s.title}>Vous êtes connecté.</Text>
-              {session.role === "coach" && <Pressable accessibilityRole="button" style={s.button} disabled={busy} onPress={() => router.push("/coach")}><Text style={s.buttonText}>Mes utilisateurs</Text></Pressable>}
-              {session.role === "utilisateur" && <Pressable accessibilityRole="button" style={s.button} disabled={busy} onPress={() => router.push("/user")}><Text style={s.buttonText}>Voir mon suivi de poids</Text></Pressable>}
-              <Text style={s.text}>
-                {session.role === "coach" ? "Retrouvez vos utilisateurs et préparez leur plan." : "Consultez votre trajectoire et l’historique de vos mesures."}
-              </Text>
-              {session.role === "coach" && (
-                <View>
-                  <Text style={s.label}>Mon code coach</Text>
-                  {session.coachCode ? <>
-                    <Text selectable style={s.title}>{session.coachCode}</Text>
-                    <Pressable accessibilityRole="button" onPress={async () => {
-                      try {
-                        const copied = await Clipboard.setStringAsync(session.coachCode!);
-                        setCopyStatus(copied ? "Code copié." : "Copie impossible. Sélectionnez le code pour le copier.");
-                      } catch { setCopyStatus("Copie impossible. Sélectionnez le code pour le copier."); }
-                    }}><Text style={s.link}>Copier mon code</Text></Pressable>
-                    <Text style={s.text}>Transmettez ce code à votre utilisateur pour son inscription.</Text>
-                    {!!copyStatus && <Text accessibilityLiveRegion="polite" style={s.text}>{copyStatus}</Text>}
-                  </> : <Text style={s.text}>Déconnectez-vous puis reconnectez-vous pour obtenir votre code.</Text>}
-                </View>
-              )}
-              {error && (
-                <Text accessibilityRole="alert" style={s.error}>
-                  {error}
-                </Text>
-              )}
-              {pendingWarning !== null && (
-                <Text accessibilityRole="alert" style={s.error}>
-                  {pendingWarning === 1
-                    ? "1 modification n’a pas encore été envoyée et sera perdue."
-                    : `${pendingWarning} modifications n’ont pas encore été envoyées et seront perdues.`}{" "}
-                  Reconnecte-toi au réseau pour les synchroniser, ou confirme la déconnexion.
-                </Text>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                disabled={busy}
-                style={[s.button, busy && s.disabled]}
-                onPress={() => void leave()}
-              >
-                <Text style={s.buttonText}>
-                  {busy
-                    ? "Déconnexion…"
-                    : pendingWarning !== null
-                      ? "Se déconnecter quand même"
-                      : "Se déconnecter"}
-                </Text>
-              </Pressable>
             </View>
           ) : (
             <>
@@ -211,7 +136,7 @@ export default function Connection() {
                   autoComplete="email"
                   editable={!busy}
                   placeholder="vous@exemple.fr"
-                  placeholderTextColor="#74887f"
+                  placeholderTextColor={colors.subtle}
                 />
                 <Text style={s.label}>Mot de passe</Text>
                 <TextInput

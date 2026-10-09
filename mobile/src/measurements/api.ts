@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseApiData } from "../network/http";
 import { requestApi } from "../plans/api";
 
 export const measurementSchema = z.object({
@@ -51,17 +52,17 @@ export type WeightTracking = z.infer<typeof weightTrackingSchema>;
 export type ManualCorrection = z.infer<typeof manualCorrectionSchema>;
 
 export async function getWeightTracking(): Promise<WeightTracking> {
-  return weightTrackingSchema.parse(await requestApi("/measurements/me/suivi"));
+  return parseApiData(weightTrackingSchema, await requestApi("/measurements/me/suivi"));
 }
 
 export async function getMeasurementHistory(): Promise<Measurement[]> {
-  return z.array(measurementSchema).parse(await requestApi("/measurements/me"));
+  return parseApiData(z.array(measurementSchema), await requestApi("/measurements/me"));
 }
 
 export async function correctWeight(
   correction: ManualCorrection,
 ): Promise<Measurement> {
-  return measurementSchema.parse(
+  return parseApiData(measurementSchema,
     await requestApi(
       "/measurements/correction",
       "POST",
