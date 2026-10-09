@@ -1,66 +1,65 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { attentionLevel, clientsOverview, sortForCoach, type ClientOverview } from "../../../coaching/api";
-import { formatSignedWeight, formatUtcDay, formatWeight, trackingPresentation } from "../../../measurements/presentation";
-import { foodStatusPresentation } from "../../../nutrition/presentation";
+import { attentionLevel, clientsOverview, coachActionLabel, coachAlerts, sortForCoach, type ClientOverview } from "../../../coaching/api";
+import { formatWeight } from "../../../measurements/presentation";
 import { Button, Screen } from "../../../plans/ui";
-import { BowlIcon, ChevronRight, ScaleIcon } from "../../../ui/icons";
+import { ChevronRight } from "../../../ui/icons";
 import { styles as s } from "../../../ui/styles";
 import { colors } from "../../../ui/theme";
 
-function StatusPill({ icon, label, symbol, color, background }: { icon: React.ReactNode; label: string; symbol?: string; color: string; background: string }) {
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, backgroundColor: background }}>
-      {icon}
-      <Text style={{ color, fontSize: 12, fontWeight: "700" }}>{symbol ? `${symbol} ` : ""}{label}</Text>
-    </View>
-  );
-}
+const SECTIONS = [
+  { level: 2 as const, title: "À surveiller", hint: "Un écart ou des données manquantes : à regarder en premier." },
+  { level: 1 as const, title: "En attente", hint: "Pas encore de plan ou de première pesée." },
+  { level: 0 as const, title: "À jour", hint: "Poids et alimentation dans les objectifs." },
+];
 
 function UserCard({ client }: { client: ClientOverview }) {
   const poids = client.suiviPoids;
-  const alimentation = client.alimentation;
+  const alerts = coachAlerts(client);
   const level = attentionLevel(client);
-  const weight = poids ? trackingPresentation[poids.statut] : null;
-  const food = alimentation ? foodStatusPresentation[alimentation.statut] : null;
+  const action = alerts[0]?.action;
+  const accent = level === 2 ? colors.warning : level === 1 ? colors.muted : colors.brand;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Consulter le suivi de ${client.email}${weight ? `, poids : ${weight.label}` : ", aucun plan actif"}${food ? `, alimentation : ${food.label}` : ""}`}
+      accessibilityLabel={`Consulter le suivi de ${client.email}. ${alerts.length ? alerts.map((a) => a.raison).join(". ") : "Tout est dans les objectifs"}${action ? `. Action proposée : ${coachActionLabel[action]}` : ""}`}
       onPress={() => router.push({ pathname: "/coach/[userId]", params: { userId: client.id } })}
       style={({ pressed }) => [
         s.card,
-        { padding: 16, gap: 12 },
-        level === 2 && { borderColor: "#f1c58e", borderLeftWidth: 4 },
+        { padding: 16, gap: 10, borderLeftWidth: 4, borderLeftColor: accent },
         pressed && { backgroundColor: colors.mintSoft },
       ]}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: colors.brand, fontSize: 18, fontWeight: "800" }}>{client.email.charAt(0).toUpperCase()}</Text>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ color: colors.brand, fontSize: 17, fontWeight: "800" }}>{client.email.charAt(0).toUpperCase()}</Text>
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text numberOfLines={1} style={s.label}>{client.email}</Text>
           <Text style={s.historyMeta}>
             {poids?.derniereMesure
-              ? `${formatWeight(poids.derniereMesure.poidsKg)} le ${formatUtcDay(poids.derniereMesure.jourUtc)}${poids.ecartKg !== null ? ` · écart ${formatSignedWeight(poids.ecartKg)}` : ""}`
+              ? `${formatWeight(poids.derniereMesure.poidsKg)} · objectif ${formatWeight(poids.plan.poidsCible)}`
               : poids
-                ? `Objectif ${formatWeight(poids.plan.poidsCible)} · aucune pesée`
-                : "Aucun plan actif"}
+                ? `Objectif ${formatWeight(poids.plan.poidsCible)}`
+                : client.tailleCm ? `${client.tailleCm} cm` : "Profil incomplet"}
           </Text>
         </View>
         <ChevronRight color={colors.brand} />
       </View>
-      {(weight || food) && (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          {weight && (
-            <StatusPill icon={<ScaleIcon size={14} color={weight.color} />} label={weight.label} color={weight.color} background={weight.background} />
-          )}
-          {food && (
-            <StatusPill icon={<BowlIcon size={14} color={food.color} />} label={food.label} color={food.color} background={food.background} />
+      {alerts.length > 0 ? (
+        <View style={{ gap: 4 }}>
+          {alerts.map((alert) => (
+            <Text key={alert.raison} style={{ color: level === 2 ? colors.warning : colors.ink, fontSize: 14, fontWeight: "600" }}>
+              • {alert.raison}
+            </Text>
+          ))}
+          {action && (
+            <Text style={[s.pillText, { marginTop: 2 }]}>→ {coachActionLabel[action]}</Text>
           )}
         </View>
+      ) : (
+        <Text style={[s.historyMeta, { color: colors.brand, fontWeight: "600" }]}>✓ Dans les clous et dans le budget</Text>
       )}
     </Pressable>
   );
@@ -89,18 +88,13 @@ export default function MyUsers() {
     setReload((value) => value + 1);
   };
 
-  const aSurveiller = clients.filter((client) => attentionLevel(client) === 2).length;
+  const counts = SECTIONS.map((section) => clients.filter((client) => attentionLevel(client) === section.level).length);
 
   return (
     <Screen
       inTabs
       eyebrow="ESPACE COACH"
       title="Mes utilisateurs"
-      subtitle={
-        loading || error
-          ? undefined
-          : `${clients.length} suivi${clients.length > 1 ? "s" : ""}${aSurveiller ? ` · ${aSurveiller} à surveiller` : " · tout est à jour"}`
-      }
       refreshing={refreshing}
       onRefresh={refresh}
     >
@@ -121,7 +115,31 @@ export default function MyUsers() {
           </Text>
         </View>
       ) : (
-        clients.map((client) => <UserCard key={client.id} client={client} />)
+        <>
+        <View style={[s.card, { flexDirection: "row", paddingVertical: 14 }]} accessible accessibilityLabel={SECTIONS.map((section, i) => `${counts[i]} ${section.title.toLowerCase()}`).join(", ")}>
+          {SECTIONS.map((section, i) => (
+            <View key={section.level} style={{ flex: 1, alignItems: "center", gap: 2 }}>
+              <Text style={{ fontSize: 26, fontWeight: "800", color: section.level === 2 && counts[i] ? colors.warning : colors.ink }}>{counts[i]}</Text>
+              <Text style={s.historyMeta}>{section.title}</Text>
+            </View>
+          ))}
+        </View>
+        {SECTIONS.map((section) => {
+          const rows = clients.filter((client) => attentionLevel(client) === section.level);
+          if (rows.length === 0) return null;
+          return (
+            <View key={section.level} style={{ gap: 10 }}>
+              <View style={{ gap: 2, marginTop: section.level === 2 ? 0 : 6 }}>
+                <Text accessibilityRole="header" style={[s.metricLabel, { color: section.level === 2 ? colors.warning : colors.muted }]}>
+                  {section.title} · {rows.length}
+                </Text>
+                <Text style={s.historyMeta}>{section.hint}</Text>
+              </View>
+              {rows.map((client) => <UserCard key={client.id} client={client} />)}
+            </View>
+          );
+        })}
+        </>
       )}
     </Screen>
   );

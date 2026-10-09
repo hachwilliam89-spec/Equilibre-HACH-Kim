@@ -8,42 +8,47 @@ import {
   goalProgress,
   measurementSourceLabel,
   measurementStatusLabel,
-  trackingPresentation,
 } from "../measurements/presentation";
-import { foodStatusPresentation, formatNutrition } from "../nutrition/presentation";
 import { Collapsible } from "../ui/Collapsible";
-import { BowlIcon, ScaleIcon } from "../ui/icons";
 import { styles as s } from "../ui/styles";
 import { colors } from "../ui/theme";
-import type { ClientProgression } from "./api";
-
-function Pill({ icon, label, color, background }: { icon: React.ReactNode; label: string; color: string; background: string }) {
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: background }}>
-      {icon}
-      <Text style={{ color, fontSize: 13, fontWeight: "700" }}>{label}</Text>
-    </View>
-  );
-}
+import { coachActionLabel, coachAlerts, type ClientProgression } from "./api";
 
 /** Progression d'un utilisateur vue par son coach : résumé, courbes, pesées. */
 export function ClientProgress({ progression }: { progression: ClientProgression }) {
   const { suiviPoids, mesures, alimentation } = progression;
   if (!suiviPoids) return null;
-  const weight = trackingPresentation[suiviPoids.statut];
-  const food = alimentation ? foodStatusPresentation[alimentation.statut] : null;
   const derniere = suiviPoids.derniereMesure;
   const progress = derniere
     ? goalProgress(suiviPoids.plan.poidsDepart, suiviPoids.plan.poidsCible, derniere.poidsKg)
     : null;
 
+  const alerts = coachAlerts(progression);
+
   return (
     <>
+      <View
+        accessibilityRole="summary"
+        style={[s.card, alerts.length
+          ? { backgroundColor: "#fff6eb", borderColor: "#f1c58e" }
+          : { backgroundColor: colors.mintSoft, borderColor: colors.mint }]}
+      >
+        <Text style={[s.metricLabel, { color: alerts.length ? colors.warning : colors.brand }]}>
+          {alerts.length ? "À faire" : "Rien à signaler"}
+        </Text>
+        {alerts.length ? (
+          alerts.map((alert) => (
+            <View key={alert.raison} style={{ gap: 2 }}>
+              <Text style={[s.label, { color: colors.ink }]}>{alert.raison}</Text>
+              <Text style={s.pillText}>→ {coachActionLabel[alert.action]}</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={s.label}>Poids sur la trajectoire et calories dans le budget.</Text>
+        )}
+      </View>
+
       <View style={s.card}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          <Pill icon={<ScaleIcon size={15} color={weight.color} />} label={weight.label} color={weight.color} background={weight.background} />
-          {food && <Pill icon={<BowlIcon size={15} color={food.color} />} label={food.label} color={food.color} background={food.background} />}
-        </View>
         <View style={{ gap: 2 }}>
           <Text style={s.metricLabel}>Dernière pesée</Text>
           <Text style={{ fontSize: 34, fontWeight: "800", color: colors.ink }}>
@@ -75,17 +80,11 @@ export function ClientProgress({ progression }: { progression: ClientProgression
               {suiviPoids.ecartKg !== null ? formatSignedWeight(suiviPoids.ecartKg) : "—"}
             </Text>
           </View>
-          <View style={s.metric}>
-            <Text style={s.metricLabel}>Écart kcal</Text>
-            <Text style={[s.metricValue, { fontSize: 17, color: alimentation?.statut === "depassement" ? colors.warning : colors.ink }]}>
-              {alimentation?.ecartKcal != null ? `${alimentation.ecartKcal > 0 ? "+" : ""}${formatNutrition(alimentation.ecartKcal)}` : "—"}
-            </Text>
-          </View>
         </View>
       </View>
 
       <View style={s.card}>
-        <WeightTrajectoryChart plan={suiviPoids.plan} measurements={mesures} />
+        <WeightTrajectoryChart plan={suiviPoids.plan} measurements={mesures} showLast={false} />
       </View>
 
       {alimentation && (

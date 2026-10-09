@@ -69,3 +69,60 @@ export function sortForCoach<T extends ClientOverview>(clients: T[]): T[] {
     (a, b) => attentionLevel(b) - attentionLevel(a) || a.email.localeCompare(b.email, "fr"),
   );
 }
+
+export type CoachAction = "revoir-plan" | "relancer" | "creer-plan" | "attendre-pesee";
+
+export interface CoachAlert {
+  /** Pourquoi regarder cet utilisateur, en une phrase. */
+  raison: string;
+  /** Ce que le coach peut faire. */
+  action: CoachAction;
+}
+
+export const coachActionLabel: Record<CoachAction, string> = {
+  "revoir-plan": "Revoir le plan",
+  relancer: "Relancer l’utilisateur",
+  "creer-plan": "Créer un plan",
+  "attendre-pesee": "Attendre la première pesée",
+};
+
+const kg = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1).replace(".", ",")} kg`;
+const kcal = (value: number) => `${Math.round(value).toLocaleString("fr-FR")} kcal`;
+
+/**
+ * Raisons concrètes de regarder un utilisateur, les plus urgentes d'abord :
+ * écart réel (poids, calories) avant absence de données, puis attente.
+ * Liste vide = rien à faire.
+ */
+export function coachAlerts(client: Pick<ClientOverview, "suiviPoids" | "alimentation">): CoachAlert[] {
+  const poids = client.suiviPoids;
+  const alimentation = client.alimentation;
+  if (!poids) return [{ raison: "Aucun plan actif", action: "creer-plan" }];
+  const alerts: CoachAlert[] = [];
+  if (poids.statut === "ecart-detecte") {
+    alerts.push({
+      raison: poids.ecartKg !== null
+        ? `Poids à ${kg(poids.ecartKg)} de la trajectoire`
+        : "Poids hors de la trajectoire",
+      action: "revoir-plan",
+    });
+  }
+  if (alimentation?.statut === "depassement") {
+    alerts.push({
+      raison: alimentation.ecartKcal !== null
+        ? `Calories au-dessus du budget (+${kcal(alimentation.ecartKcal)})`
+        : "Calories au-dessus du budget",
+      action: "revoir-plan",
+    });
+  }
+  if (poids.statut === "pas-de-donnees-recentes") {
+    alerts.push({ raison: "Aucune pesée récente", action: "relancer" });
+  }
+  if (alimentation?.statut === "pas-de-donnees-recentes") {
+    alerts.push({ raison: "Aucun repas saisi depuis 2 jours", action: "relancer" });
+  }
+  if (poids.statut === "en-attente-premiere-mesure") {
+    alerts.push({ raison: "Plan démarré, première pesée attendue", action: "attendre-pesee" });
+  }
+  return alerts;
+}

@@ -1,4 +1,4 @@
-import { attentionLevel, sortForCoach, type ClientOverview } from "../src/coaching/api";
+import { attentionLevel, coachAlerts, sortForCoach, type ClientOverview } from "../src/coaching/api";
 
 const plan = {
   id: "p",
@@ -44,4 +44,19 @@ test("trie les utilisateurs à surveiller en premier puis par e-mail", () => {
     client("bob@x.fr", "dans-les-clous"),
   ]);
   expect(sorted.map((c) => c.email)).toEqual(["max@x.fr", "ana@x.fr", "bob@x.fr", "zoe@x.fr"]);
+});
+
+test("explique pourquoi regarder un utilisateur et quoi faire", () => {
+  const ecart = client("a", "ecart-detecte", "depassement");
+  ecart.suiviPoids!.ecartKg = 1.4;
+  ecart.alimentation!.ecartKcal = 312;
+  expect(coachAlerts(ecart)).toEqual([
+    { raison: "Poids à +1,4 kg de la trajectoire", action: "revoir-plan" },
+    { raison: "Calories au-dessus du budget (+312 kcal)", action: "revoir-plan" },
+  ]);
+  expect(coachAlerts(client("b", "pas-de-donnees-recentes", "pas-de-donnees-recentes")).map((a) => a.action))
+    .toEqual(["relancer", "relancer"]);
+  expect(coachAlerts(client("c", null, null))).toEqual([{ raison: "Aucun plan actif", action: "creer-plan" }]);
+  expect(coachAlerts(client("d", "en-attente-premiere-mesure"))[0].action).toBe("attendre-pesee");
+  expect(coachAlerts(client("e", "dans-les-clous"))).toEqual([]);
 });

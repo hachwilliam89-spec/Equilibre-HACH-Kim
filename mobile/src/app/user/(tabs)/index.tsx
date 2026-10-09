@@ -6,7 +6,6 @@ import { WeightTrajectoryChart } from "../../../charts/WeightTrajectoryChart";
 import { manualCorrectionSchema } from "../../../measurements/api";
 import {
   canSubmitManualCorrection,
-  formatSignedWeight,
   formatUtcDay,
   formatWeight,
   goalProgress,
@@ -28,15 +27,6 @@ import { colors } from "../../../ui/theme";
 
 /** Nombre de pesées visibles avant « Voir tout ». */
 const HISTORIQUE_COURT = 5;
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={s.metric}>
-      <Text style={s.metricLabel}>{label}</Text>
-      <Text style={[s.metricValue, { fontSize: 17 }]}>{value}</Text>
-    </View>
-  );
-}
 
 function HistoryItem({ measurement }: { measurement: LocalMeasurement }) {
   return (
@@ -215,15 +205,12 @@ export default function WeightTrackingScreen() {
               </View>
             )}
 
-            {(tracking.poidsAttendu !== null || tracking.ecartKg !== null) && (
-              <View style={s.metricsRow}>
-                {tracking.poidsAttendu !== null && (
-                  <Metric label="Attendu" value={formatWeight(tracking.poidsAttendu)} />
-                )}
-                {tracking.ecartKg !== null && (
-                  <Metric label="Écart" value={formatSignedWeight(tracking.ecartKg)} />
-                )}
-              </View>
+            {tracking.poidsAttendu !== null && tracking.ecartKg !== null && (
+              <Text style={[s.label, { color: presentation.color }]}>
+                {Math.abs(tracking.ecartKg) < 0.05
+                  ? `Pile sur la trajectoire (${formatWeight(tracking.poidsAttendu)} attendus)`
+                  : `${formatWeight(Math.abs(tracking.ecartKg))} ${tracking.ecartKg > 0 ? "au-dessus" : "en dessous"} de la trajectoire (${formatWeight(tracking.poidsAttendu)} attendus)`}
+              </Text>
             )}
             <Text style={s.historyMeta}>
               Plan du {formatUtcDay(tracking.plan.dateDebut)} au{" "}
@@ -235,7 +222,7 @@ export default function WeightTrackingScreen() {
           <SyncStatus />
 
           <View style={s.card}>
-            <WeightTrajectoryChart plan={tracking.plan} measurements={history} />
+            <WeightTrajectoryChart plan={tracking.plan} measurements={history} showLast={false} />
           </View>
           <DailyBudgetCard />
         </>
