@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import { useSync } from "../sync/useSync";
 import { useSession } from "./session";
@@ -30,9 +31,17 @@ export function useLogout() {
     }
   };
 
-  const leave = async () => {
+  /** Ferme la session ; renvoie un message si elle n'a pas pu l'être, null sinon. */
+  const leave = async (): Promise<string | null> => {
     await signOut();
-    if (!useSession.getState().session) await useSync.getState().reinitialiser();
+    const state = useSession.getState();
+    if (state.session) {
+      return state.error ?? "Déconnexion impossible. Vérifie ton réseau puis réessaie.";
+    }
+    await useSync.getState().reinitialiser();
+    // Retour explicite à l'accueil : ne dépend pas de la redirection du layout.
+    router.replace("/");
+    return null;
   };
 
   return { prepare, leave, busy: busy || preparing, error };
