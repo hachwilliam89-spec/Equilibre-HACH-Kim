@@ -1,6 +1,6 @@
 import { router, type Href } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import type { ReactNode, Ref } from "react";
+import { useContext, type ReactNode, type Ref } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AccountActionContext } from "../ui/accountAction";
 import { Brand } from "../ui/Brand";
 import { ChevronLeft } from "../ui/icons";
 import { styles as s } from "../ui/styles";
@@ -57,6 +58,9 @@ export function Screen({
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const hero = !!title && !back;
+  // Espaces connectés : la déconnexion reste visible en haut de chaque écran.
+  const provided = useContext(AccountActionContext);
+  const accountAction = brand ? null : provided;
   const goBack = () => {
     if (router.canGoBack()) router.back();
     else if (back) router.replace(back);
@@ -65,6 +69,12 @@ export function Screen({
     <View style={s.page}>
       <StatusBar style={hero ? "light" : "dark"} />
       <View style={{ height: insets.top, backgroundColor: hero ? colors.brandDeep : colors.page }} />
+      {hero && accountAction && (
+        <View style={s.accountBar}>
+          <Text style={s.accountBarBrand}>Equilibre</Text>
+          {accountAction("onBrand")}
+        </View>
+      )}
       {back && (
         <View style={s.topBar}>
           <Pressable
@@ -79,6 +89,7 @@ export function Screen({
           <Text accessibilityRole="header" numberOfLines={1} style={s.topBarTitle}>
             {title}
           </Text>
+          {accountAction?.("onPage")}
         </View>
       )}
       {fixed ? (

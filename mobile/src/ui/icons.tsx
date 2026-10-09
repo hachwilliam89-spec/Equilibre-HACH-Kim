@@ -152,3 +152,16 @@ export const LogoutIcon = (p: IconProps) => (
     )}
   </Icon>
 );
+
+/** Cible : onglet « Plan ». */
+export const TargetIcon = (p: IconProps) => (
+  <Icon {...p}>
+    {(st) => (
+      <>
+        <Circle cx={12} cy={12} r={8} {...st} />
+        <Circle cx={12} cy={12} r={4} {...st} />
+        <Circle cx={12} cy={12} r={0.8} {...st} />
+      </>
+    )}
+  </Icon>
+);

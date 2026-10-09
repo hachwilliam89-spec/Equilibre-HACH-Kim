@@ -1,8 +1,10 @@
 import { Redirect, Stack } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, AppState, Text } from "react-native";
+import { renderLogoutButton } from "../../auth/LogoutButton";
 import { useSession } from "../../auth/session";
 import { Button, Screen } from "../../plans/ui";
+import { AccountActionContext } from "../../ui/accountAction";
 import { useSync } from "../../sync/useSync";
 
 /** Synchronisation de fond tant que l'app est au premier plan. */
@@ -50,5 +52,9 @@ export default function UserLayout() {
 
   if (session?.role !== "utilisateur") return <Redirect href="/" />;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <AccountActionContext.Provider value={renderLogoutButton}>
+      <Stack screenOptions={{ headerShown: false }} />
+    </AccountActionContext.Provider>
+  );
 }
