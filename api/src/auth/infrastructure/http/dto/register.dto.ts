@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { nomSchema, prenomSchema } from './identity.schema';
 
 export const registerSchema = z
   .object({
@@ -21,6 +22,8 @@ export const registerSchema = z
       })
       .describe('Mot de passe (8 a 72 octets)'),
     role: z.enum(['coach', 'utilisateur']).describe('Role du compte'),
+    prenom: prenomSchema,
+    nom: nomSchema,
     coachCode: z
       .string()
       .trim()

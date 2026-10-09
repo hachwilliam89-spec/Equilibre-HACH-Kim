@@ -10,11 +10,14 @@ import {
 } from '../../../measurements/application/use-cases/get-weight-tracking-status.use-case';
 import { GetFoodBudgetStatusUseCase } from '../../../nutrition/application/use-cases/get-food-budget-status.use-case';
 import type { FoodBudgetResult } from '../../../nutrition/domain/services/food-budget-status';
+import { derniereActivite } from '../../domain/services/derniere-activite';
 
 export interface ClientOverview {
   utilisateur: User;
   suiviPoids: WeightTrackingStatus | null;
   alimentation: FoodBudgetResult | null;
+  /** Dernière pesée ou saisie alimentaire du plan actif ; null sans activité. */
+  derniereActivite: Date | null;
 }
 
 /** Vue d'ensemble : statuts poids et alimentation de chaque utilisateur rattaché. */
@@ -34,9 +37,14 @@ export class GetClientsOverviewUseCase {
           this.weightStatus.execute(utilisateur.id),
           this.foodStatus.execute(utilisateur.id),
         ]);
+        const entrees = alimentation?.journal?.toProps().entrees ?? [];
         return {
           utilisateur,
           suiviPoids,
+          derniereActivite: derniereActivite([
+            suiviPoids?.derniereMesure?.toProps().receivedAt,
+            ...entrees.map((entree) => entree.toProps().receivedAt),
+          ]),
           alimentation: alimentation
             ? { statut: alimentation.statut, ecartKcal: alimentation.ecartKcal }
             : null,

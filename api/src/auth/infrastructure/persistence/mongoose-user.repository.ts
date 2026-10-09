@@ -17,7 +17,7 @@ export class MongooseUserRepository implements UserRepositoryPort {
   async findByCoachId(coachId: string): Promise<User[]> {
     const docs = await this.userModel
       .find({ coachId, role: 'utilisateur' })
-      .sort({ email: 1 })
+      .sort({ nom: 1, prenom: 1, email: 1 })
       .exec();
     return docs.map((doc) => this.toDomain(doc));
   }
@@ -87,6 +87,8 @@ export class MongooseUserRepository implements UserRepositoryPort {
       email: props.email,
       passwordHash: props.passwordHash,
       role: props.role,
+      prenom: props.prenom,
+      nom: props.nom,
       profil: this.toProfile(props),
       coachId: props.coachId,
     });
@@ -109,6 +111,8 @@ export class MongooseUserRepository implements UserRepositoryPort {
           passwordHash: props.passwordHash,
           role: props.role,
           coachId: props.coachId,
+          prenom: props.prenom,
+          nom: props.nom,
           profil: this.toProfile(props),
         },
       },
@@ -131,6 +135,8 @@ export class MongooseUserRepository implements UserRepositoryPort {
       email: doc.email,
       passwordHash: doc.passwordHash,
       role: doc.role,
+      prenom: doc.prenom,
+      nom: doc.nom,
       tailleCm: doc.profil?.tailleCm,
       age: doc.profil?.age,
       sexe: doc.profil?.sexe,

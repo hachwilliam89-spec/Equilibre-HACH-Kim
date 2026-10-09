@@ -257,10 +257,23 @@ qu’une modification du profil après la proposition est prise en compte à la 
 
 À la connexion d’un coach, `POST /api/auth/login` renvoie aussi `coachCode`, par exemple `EQ-7A9B2C4D`. Le code est attribué à la première connexion, y compris pour les comptes existants, puis reste stable. MongoDB garantit son unicité par un index unique partiel ; une attribution concurrente conserve le même code.
 
-Pour inscrire un utilisateur, envoyer `email`, `password`, `role: "utilisateur"` et `coachCode` à `POST /api/auth/register`. Les espaces extérieurs et la casse du code sont normalisés. Le serveur recherche le coach puis conserve son UUID dans `coachId`. Un code inconnu ou mal formé est refusé (400) ; un e-mail déjà utilisé renvoie 409.
+Pour inscrire un utilisateur, envoyer `prenom`, `nom`, `email`, `password`, `role: "utilisateur"` et `coachCode` à `POST /api/auth/register`. Le prénom et le nom sont obligatoires pour les deux rôles (1 à 50 caractères, espaces extérieurs retirés). Les espaces extérieurs et la casse du code sont normalisés. Le serveur recherche le coach puis conserve son UUID dans `coachId`. Un code inconnu ou mal formé est refusé (400) ; un e-mail déjà utilisé renvoie 409.
 
 Le champ historique `coachId` reste accepté pour compatibilité avec les clients/tests existants, mais ne doit pas être fourni avec `coachCode`. Le formulaire mobile utilise uniquement `coachCode`. Le code sert au rattachement, pas à l’authentification.
 
+## Identité des comptes (FR403-841)
+
+Prénom et nom sont demandés à l’inscription et renvoyés à la place de l’e-mail dans les écrans. Les comptes créés avant leur introduction n’en ont pas : l’API les accepte (champs facultatifs en base) et l’application demande de les compléter à la connexion suivante.
+
+| Méthode | Route | Rôle | Description |
+| --- | --- | --- | --- |
+| GET | `/api/users/me` | utilisateur | Profil, avec `prenom`, `nom` et l’identité du coach (`coach.prenom`, `coach.nom`) |
+| PATCH | `/api/users/me/profile` | utilisateur | Accepte aussi `prenom` et `nom` |
+| GET | `/api/coach/me` | coach | `id`, `email`, `prenom`, `nom`, `coachCode` |
+| PATCH | `/api/coach/me` | coach | Modifie `prenom` et/ou `nom` (au moins un) ; 400 si vide ou > 50 caractères |
+
+`GET /api/coach/clients` ajoute `derniereActivite` : date de la dernière pesée ou saisie alimentaire du plan actif, `null` sans activité ou sans plan.
+
 ## Liste des utilisateurs du coach
 
-`GET /api/users/me/clients` nécessite un JWT et le rôle coach. Renvoie 200 et une liste (vide si aucun rattachement) avec uniquement `id`, `email`, `tailleCm`, `age`, `sexe`. Les champs de profil absents sont omis. Le filtre repose exclusivement sur l’identifiant du coach authentifié. Aucun hash de mot de passe ni jeton n’est retourné. Réponses 401 sans authentification valide, 403 pour un autre rôle.
+`GET /api/users/me/clients` nécessite un JWT et le rôle coach. Renvoie 200 et une liste (vide si aucun rattachement) avec uniquement `id`, `email`, `prenom`, `nom`, `tailleCm`, `age`, `sexe`. Les champs de profil absents sont omis. Le filtre repose exclusivement sur l’identifiant du coach authentifié. Aucun hash de mot de passe ni jeton n’est retourné. Réponses 401 sans authentification valide, 403 pour un autre rôle.

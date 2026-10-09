@@ -15,6 +15,9 @@ import { MongooseSuiviRepository } from '../src/suivis/infrastructure/persistenc
 interface OverviewRow {
   id: string;
   email: string;
+  prenom?: string;
+  nom?: string;
+  derniereActivite: string | null;
   suiviPoids: {
     statut: string;
     derniereMesure: { poidsKg: number } | null;
@@ -71,6 +74,8 @@ describe('Progression des utilisateurs côté coach (intégration)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: `${randomUUID()}@example.test`,
         password: 'password123',
         role,
@@ -168,6 +173,7 @@ describe('Progression des utilisateurs côté coach (intégration)', () => {
       .send({ foodId: REFERENCE_FOODS[0].id, quantiteGrammes: 200 })
       .expect(201);
 
+    const avantLecture = Date.now();
     const rows = (await overview(coach).expect(200)).body as OverviewRow[];
     expect(rows.map((row) => row.id).sort()).toEqual(
       [followed, withoutPlan].sort(),
@@ -179,8 +185,18 @@ describe('Progression des utilisateurs côté coach (intégration)', () => {
       statut: 'dans-le-budget',
       ecartKcal: -1540,
     });
+    // Derniere activite : la saisie alimentaire, posterieure a la pesee.
+    expect(suivi?.prenom).toBe('Test');
+    expect(suivi?.derniereActivite).not.toBeNull();
+    const activite = Date.parse(suivi?.derniereActivite ?? '');
+    expect(activite).toBeLessThanOrEqual(avantLecture);
+    expect(avantLecture - activite).toBeLessThan(60_000);
     const sansPlan = rows.find((row) => row.id === withoutPlan);
-    expect(sansPlan).toMatchObject({ suiviPoids: null, alimentation: null });
+    expect(sansPlan).toMatchObject({
+      suiviPoids: null,
+      alimentation: null,
+      derniereActivite: null,
+    });
   });
 
   it('donne la fiche d’un utilisateur rattaché : 7 jours de totaux, sans aliments', async () => {

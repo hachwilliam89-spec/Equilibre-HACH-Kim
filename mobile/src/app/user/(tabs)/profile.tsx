@@ -9,10 +9,15 @@ import {
 } from "../../../profile/api";
 import { Button, Field, InfoRow, Screen } from "../../../plans/ui";
 import { colors } from "../../../ui/theme";
+import { displayName } from "../../../identity/identity";
+import { IdentityFields } from "../../../identity/IdentityFields";
+import { useIdentity } from "../../../identity/store";
 import { styles as s } from "../../../ui/styles";
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [prenom, setPrenom] = useState("");
+  const [nom, setNom] = useState("");
   const [taille, setTaille] = useState("");
   const [age, setAge] = useState("");
   const [sexe, setSexe] = useState<"homme" | "femme" | undefined>();
@@ -24,6 +29,9 @@ export default function ProfileScreen() {
 
   const applyProfile = (next: Profile) => {
     setProfile(next);
+    useIdentity.setState({ me: next, coach: next.coach });
+    setPrenom(next.prenom ?? "");
+    setNom(next.nom ?? "");
     setTaille(next.tailleCm?.toString() ?? "");
     setAge(next.age?.toString() ?? "");
     setSexe(next.sexe);
@@ -69,6 +77,8 @@ export default function ProfileScreen() {
   const submit = async () => {
     if (pending.current) return;
     const parsed = profileUpdateSchema.safeParse({
+      prenom,
+      nom,
       tailleCm: Number(taille.trim().replace(",", ".")),
       age: age.trim() ? Number(age.trim()) : undefined,
       sexe,
@@ -116,11 +126,13 @@ export default function ProfileScreen() {
         <>
           <View style={s.card}>
             <Text style={s.cardTitle}>Mon compte</Text>
+            <InfoRow label="Nom" value={displayName(profile)} />
             <InfoRow label="E-mail" value={profile.email} />
-            <InfoRow label="Coach" value={profile.coach.email} />
+            <InfoRow label="Coach" value={displayName(profile.coach)} />
           </View>
           <View style={s.card}>
             <Text style={s.cardTitle}>Mes informations</Text>
+            <IdentityFields prenom={prenom} nom={nom} onPrenom={setPrenom} onNom={setNom} disabled={saving} />
             <Text style={s.historyMeta}>
               La taille permet à votre coach de créer votre plan. L’âge et le sexe servent au calcul du budget calorique.
             </Text>

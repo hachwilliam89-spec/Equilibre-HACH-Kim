@@ -25,6 +25,8 @@ describe('Utilisateurs rattaches au coach', () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: `${randomUUID()}@example.test`,
         password: 'password123',
         role,
@@ -58,6 +60,14 @@ describe('Utilisateurs rattaches au coach', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(ownUser);
     expect(rows[0].tailleCm).toBe(170);
-    expect(Object.keys(rows[0]).sort()).toEqual(['email', 'id', 'tailleCm']);
+    expect(rows[0].prenom).toBe('Test');
+    expect(rows[0].nom).toBe('Equilibre');
+    expect(Object.keys(rows[0]).sort()).toEqual([
+      'email',
+      'id',
+      'nom',
+      'prenom',
+      'tailleCm',
+    ]);
   });
 });

@@ -3,10 +3,20 @@ import { AppException } from '../../../common/errors/app-exception';
 import { USER_REPOSITORY } from '../../domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../domain/ports/user-repository.port';
 
+/** Identité publique d'un compte : ce qu'un autre rôle peut en voir. */
+export interface IdentitySummary {
+  id: string;
+  email: string;
+  prenom?: string;
+  nom?: string;
+}
+
 export interface OwnProfileResult {
   id: string;
   email: string;
-  coach: { id: string; email: string };
+  prenom?: string;
+  nom?: string;
+  coach: IdentitySummary;
   tailleCm?: number;
   age?: number;
   sexe?: 'homme' | 'femme';
@@ -39,7 +49,14 @@ export class GetOwnProfileUseCase {
     return {
       id: user.id,
       email: user.email,
-      coach: { id: coach.id, email: coach.email },
+      prenom: user.prenom,
+      nom: user.nom,
+      coach: {
+        id: coach.id,
+        email: coach.email,
+        prenom: coach.prenom,
+        nom: coach.nom,
+      },
       tailleCm: user.tailleCm,
       age: user.age,
       sexe: user.sexe,
