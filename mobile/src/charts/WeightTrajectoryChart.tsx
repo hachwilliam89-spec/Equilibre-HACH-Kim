@@ -143,10 +143,12 @@ export function WeightTrajectoryChart({
           <View style={{ width: 15, borderTopWidth: 2, borderStyle: "dashed", borderColor: CHART_COLORS.target }} />
           <Text style={s.historyMeta}>Objectif</Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-          <View style={{ width: 15, borderTopWidth: 2, borderStyle: "dashed", borderColor: CHART_COLORS.measured }} />
-          <Text style={s.historyMeta}>Jours sans pesée</Text>
-        </View>
+        {segments.some((segment) => segment.hasGap) && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View style={{ width: 15, borderTopWidth: 2, borderStyle: "dashed", borderColor: CHART_COLORS.measured }} />
+            <Text style={s.historyMeta}>Jours sans pesée</Text>
+          </View>
+        )}
       </View>
       {showLast && last && (
         <Text style={s.label}>
