@@ -158,7 +158,17 @@ export default function UserPlan() {
           <InfoRow label="IMC cible" value={plan.imcCible.toFixed(1)} />
           <InfoRow label="Budget" value={`${plan.budgetCalorique.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour`} />
           {plan.budgetPlafonneAuBmr && <Text style={s.historyMeta}>Le budget suggéré a été ramené au BMR.</Text>}
-          <Button title="Annuler le plan actif" variant="danger" disabled={busy} onPress={() => void cancel()} />
+          <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 10, paddingTop: 14 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Annuler le plan actif"
+              disabled={busy}
+              onPress={() => void cancel()}
+              style={({ pressed }) => ({ alignSelf: "flex-start", minHeight: 44, justifyContent: "center", opacity: busy ? 0.5 : pressed ? 0.7 : 1 })}
+            >
+              <Text style={{ color: colors.danger, fontSize: 14, fontWeight: "600" }}>Annuler ce plan</Text>
+            </Pressable>
+          </View>
         </> : <>
           <Text style={s.text}>Aucun plan actif.</Text>
           {!client.tailleCm && <Text style={s.error}>La taille du profil doit être renseignée avant la soumission.</Text>}

@@ -44,6 +44,7 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
           <Text style={[s.metricValue, { fontSize: 17, color: depassements ? colors.warning : colors.ink }]}>{depassements}</Text>
         </View>
       </View>
+      <Text style={s.historyMeta}>Moyenne calculée sur les jours renseignés.</Text>
       <View
         accessible
         accessibilityLabel={`Calories des ${jours.length} derniers jours. Budget ${formatKcal(budget)} kilocalories. ${jours

@@ -44,11 +44,14 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
     return (
       <>
         <View style={[s.card, { backgroundColor: food.background, borderColor: food.background }]}>
-          <Text style={[s.metricLabel, { color: food.color }]}>Statut alimentaire</Text>
-          <Text style={[s.cardTitle, { color: food.color }]}>{food.symbol} {food.label}</Text>
-          <Text style={s.historyMeta}>
-            {saisis.length} jour{saisis.length > 1 ? "s" : ""} saisi{saisis.length > 1 ? "s" : ""} sur 7.
-            {saisis.length > 0 ? " Statut du dernier jour saisi, avec une tolérance de ± 150 kcal." : " Aucun repas récent à évaluer."}
+          <Text style={s.metricLabel}>Suivi alimentaire · 7 derniers jours</Text>
+          <Text style={s.cardTitle}>
+            {saisis.length} jour{saisis.length > 1 ? "s" : ""} saisi{saisis.length > 1 ? "s" : ""} sur 7
+          </Text>
+          <Text style={[s.historyMeta, { color: food.color }]}>
+            {saisis.length > 0
+              ? `Dernier jour saisi : ${food.label.toLocaleLowerCase("fr-FR")} (± 150 kcal).`
+              : "Aucun repas récent à évaluer."}
           </Text>
         </View>
         <View style={s.card}>
