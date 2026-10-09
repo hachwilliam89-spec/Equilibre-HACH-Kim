@@ -1,10 +1,10 @@
 import { useLocalSearchParams } from "expo-router";
 import { parseApiData } from "../../network/http";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { clientProgression, type ClientProgression } from "../../coaching/api";
 import { ClientProgress, type ClientSection } from "../../coaching/ClientProgress";
-import { BowlIcon, ScaleIcon, TargetIcon } from "../../ui/icons";
+import { AlertIcon, BowlIcon, ScaleIcon, TargetIcon } from "../../ui/icons";
 import { SectionTabBar } from "../../ui/SectionTabBar";
 import { Client, Plan, Preview, currentPlan, planSchema, previewSchema, requestApi } from "../../plans/api";
 import { budgetSchema, goalsSchema, weeklyRate } from "../../plans/form";
@@ -16,6 +16,7 @@ import { DateField } from "../../ui/DateField";
 import { MeasurementField } from "../../ui/MeasurementField";
 import { displayDate, nextDate } from "../../ui/dates";
 import { displayName, hasIdentity, initials } from "../../identity/identity";
+import { confirmAction } from "../../ui/confirmStore";
 
 const activities = { sedentaire: "Sédentaire", actif: "Actif", sportif: "Sportif", athlete: "Athlète" } as const;
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -93,14 +94,22 @@ export default function UserPlan() {
     }));
     setPlan(result); setStep("detail"); setNotice("Le plan a été soumis et enregistré."); setPreview(null); setReload((v) => v + 1);
   });
-  const cancel = () => Alert.alert("Annuler le plan ?", "L’utilisateur n’aura plus de plan actif.", [
-    { text: "Conserver", style: "cancel" },
-    { text: "Annuler le plan", style: "destructive", onPress: () => void run(async () => {
+  const cancel = async () => {
+    const confirmed = await confirmAction({
+      title: "Annuler le plan ?",
+      message: "L’utilisateur n’aura plus de plan actif. Vous pourrez en créer un nouveau ensuite.",
+      confirmLabel: "Annuler le plan",
+      cancelLabel: "Conserver",
+      tone: "danger",
+      icon: AlertIcon,
+    });
+    if (!confirmed) return;
+    await run(async () => {
       if (!plan) return;
       await requestApi(`/plans/${encodeURIComponent(plan.id)}/cancel`, "POST");
       setPlan(null); setNotice("Le plan a été annulé."); setReload((v) => v + 1);
-    }) },
-  ]);
+    });
+  };
   const refresh = () => { setLoading(true); setError(""); setReload((v) => v + 1); };
   return <Screen
     back="/coach"
@@ -150,7 +159,7 @@ export default function UserPlan() {
           <InfoRow label="IMC cible" value={plan.imcCible.toFixed(1)} />
           <InfoRow label="Budget" value={`${plan.budgetCalorique.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour`} />
           {plan.budgetPlafonneAuBmr && <Text style={s.historyMeta}>Le budget suggéré a été ramené au BMR.</Text>}
-          <Button title="Annuler le plan actif" variant="danger" disabled={busy} onPress={cancel} />
+          <Button title="Annuler le plan actif" variant="danger" disabled={busy} onPress={() => void cancel()} />
         </> : <>
           <Text style={s.text}>Aucun plan actif.</Text>
           {!client.tailleCm && <Text style={s.error}>La taille du profil doit être renseignée avant la soumission.</Text>}
