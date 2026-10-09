@@ -113,7 +113,7 @@ export default function UserPlan() {
   const refresh = () => { setLoading(true); setError(""); setReload((v) => v + 1); };
   return <Screen
     back="/coach"
-    title={step === "detail" ? "Suivi d’un utilisateur" : step === "goals" ? "Objectifs · 1/2" : "Budget et validation · 2/2"}
+    title={step === "detail" ? (client ? displayName(client) : "Suivi client") : step === "goals" ? "Objectifs · 1/2" : "Budget et validation · 2/2"}
     refreshing={false}
     onRefresh={step === "detail" && !busy ? refresh : undefined}
     floating={client && !loading ? (
@@ -134,7 +134,6 @@ export default function UserPlan() {
         <Text style={{ color: colors.brand, fontSize: 16, fontWeight: "800" }}>{initials(client)}</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text numberOfLines={1} style={s.label}>{displayName(client)}</Text>
         {hasIdentity(client) && <Text numberOfLines={1} style={s.historyMeta}>{client.email}</Text>}
         <Text style={s.historyMeta}>{client.tailleCm ? `${client.tailleCm} cm` : "Taille non renseignée"}{client.age ? ` · ${client.age} ans` : ""}</Text>
       </View>
