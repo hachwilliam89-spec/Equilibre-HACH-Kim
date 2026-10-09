@@ -83,13 +83,13 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
           : { backgroundColor: colors.mintSoft, borderColor: colors.mint }]}
       >
         <Text style={[s.metricLabel, { color: alerts.length ? colors.warning : colors.brand }]}>
-          {alerts.length ? "À faire" : "Rien à signaler"}
+          {alerts.length ? "À examiner" : "Rien à signaler"}
         </Text>
         {alerts.length ? (
           alerts.map((alert) => (
             <View key={alert.raison} style={{ gap: 2 }}>
               <Text style={[s.label, { color: colors.ink }]}>{alert.raison}</Text>
-              <Text style={s.pillText}>→ {coachActionLabel[alert.action]}</Text>
+              <Text style={s.pillText}>Suite suggérée : {coachActionLabel[alert.action]}</Text>
             </View>
           ))
         ) : (
