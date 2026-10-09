@@ -13,7 +13,7 @@ import { colors } from "../../../ui/theme";
 const SECTIONS = [
   { level: 2 as const, title: "À surveiller" },
   { level: 1 as const, title: "En attente" },
-  { level: 0 as const, title: "À jour" },
+  { level: 0 as const, title: "Sans alerte" },
 ];
 type AttentionFilter = (typeof SECTIONS)[number]["level"] | null;
 
@@ -30,7 +30,7 @@ function UserCard({ client }: { client: ClientOverview }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Consulter le suivi de ${name}. ${activity ? `${activity}. ` : ""}${alerts.length ? alerts.map((a) => a.raison).join(". ") : "Tout est dans les objectifs"}${action ? `. Action proposée : ${coachActionLabel[action]}` : ""}`}
+      accessibilityLabel={`Consulter le suivi de ${name}. ${activity ? `${activity}. ` : ""}${alerts.length ? alerts.map((a) => a.raison).join(". ") : "Aucun écart récent signalé"}${action ? `. Action proposée : ${coachActionLabel[action]}` : ""}`}
       onPress={() => router.push({ pathname: "/coach/[userId]", params: { userId: client.id } })}
       style={({ pressed }) => [
         s.card,
@@ -69,7 +69,7 @@ function UserCard({ client }: { client: ClientOverview }) {
           )}
         </View>
       ) : (
-        <Text style={[s.historyMeta, { color: colors.brand, fontWeight: "600" }]}>✓ Dans les clous et dans le budget</Text>
+        <Text style={[s.historyMeta, { color: colors.brand, fontWeight: "600" }]}>Aucun écart récent signalé</Text>
       )}
     </Pressable>
   );

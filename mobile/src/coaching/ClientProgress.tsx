@@ -46,7 +46,10 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
         <View style={[s.card, { backgroundColor: food.background, borderColor: food.background }]}>
           <Text style={[s.metricLabel, { color: food.color }]}>Statut alimentaire</Text>
           <Text style={[s.cardTitle, { color: food.color }]}>{food.symbol} {food.label}</Text>
-          <Text style={s.historyMeta}>Calculé sur le dernier jour saisi, avec une tolérance de ± 150 kcal.</Text>
+          <Text style={s.historyMeta}>
+            {saisis.length} jour{saisis.length > 1 ? "s" : ""} saisi{saisis.length > 1 ? "s" : ""} sur 7.
+            {saisis.length > 0 ? " Statut du dernier jour saisi, avec une tolérance de ± 150 kcal." : " Aucun repas récent à évaluer."}
+          </Text>
         </View>
         <View style={s.card}>
           <Text style={s.cardTitle}>Calories · 7 derniers jours</Text>
@@ -93,7 +96,7 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
             </View>
           ))
         ) : (
-          <Text style={s.label}>Poids sur la trajectoire et calories dans le budget.</Text>
+          <Text style={s.label}>Aucun écart récent signalé dans les données disponibles.</Text>
         )}
       </View>
 
@@ -113,7 +116,7 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
               <View style={{ width: `${Math.max(progress.fraction * 100, 3)}%`, height: "100%", borderRadius: 5, backgroundColor: colors.brandBright }} />
             </View>
             <View style={s.summaryRow}>
-              <Text style={s.historyMeta}>{formatWeight(progress.parcouruKg)} sur {formatWeight(progress.totalKg)}</Text>
+              <Text style={s.historyMeta}>Progression : {formatWeight(progress.parcouruKg)} sur {formatWeight(progress.totalKg)}</Text>
               <Text style={[s.historyMeta, { fontWeight: "700", color: colors.ink }]}>Cible {formatWeight(suiviPoids.plan.poidsCible)}</Text>
             </View>
           </View>

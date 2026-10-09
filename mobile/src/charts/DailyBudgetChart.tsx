@@ -12,7 +12,7 @@ export function DailyBudgetChart({
   total: number;
   budget: number;
   hasEntries: boolean;
-  /** Masquer « consommé / budget » quand l'écran affiche déjà le reste en grand. */
+  /** Afficher seulement le budget quand l'écran montre déjà les calories consommées. */
   showTotal?: boolean;
 }) {
   const display = dailyBudgetPresentation(total, budget, hasEntries);
@@ -29,7 +29,7 @@ export function DailyBudgetChart({
         </Text>
       ) : (
         <Text style={s.historyMeta}>
-          {formatKcal(total)} kcal consommées sur {formatKcal(budget)}
+          Budget du jour : {formatKcal(budget)} kcal
         </Text>
       )}
       <View

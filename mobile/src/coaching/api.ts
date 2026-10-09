@@ -53,7 +53,7 @@ export const clientProgression = async (userId: string) =>
 /**
  * Niveau d'attention pour trier la liste du coach : 2 = à surveiller (écart,
  * dépassement, plus de données), 1 = en attente (pas de plan, première
- * mesure attendue), 0 = tout va bien.
+ * mesure attendue), 0 = aucune alerte détectée.
  */
 export function attentionLevel(client: Pick<ClientOverview, "suiviPoids" | "alimentation">): 0 | 1 | 2 {
   const poids = client.suiviPoids?.statut;
