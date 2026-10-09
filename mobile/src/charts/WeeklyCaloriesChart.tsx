@@ -7,7 +7,7 @@ import { colors } from "../ui/theme";
 import { CHART_COLORS } from "./colors";
 
 const TOLERANCE_KCAL = 150;
-const FRAME = { width: 320, height: 170, left: 8, right: 312, top: 14, bottom: 140 };
+const FRAME = { width: 320, height: 176, left: 8, right: 312, top: 14, bottom: 140 };
 const JOURS = ["D", "L", "M", "M", "J", "V", "S"];
 
 /**
@@ -78,8 +78,11 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
                   stroke={vide ? CHART_COLORS.axis : "none"}
                   strokeDasharray={vide ? "3 3" : undefined}
                 />
-                <SvgText x={cx} y={FRAME.bottom + 18} fontSize={12} fontWeight="700" fill={index === jours.length - 1 ? colors.ink : colors.muted} textAnchor="middle">
-                  {JOURS[weekday]}
+                <SvgText x={cx} y={FRAME.bottom + 15} fontSize={11} fontWeight="700" fill={index === jours.length - 1 ? colors.ink : colors.muted} textAnchor="middle">
+                  {index === jours.length - 1 ? "Auj." : JOURS[weekday]}
+                </SvgText>
+                <SvgText x={cx} y={FRAME.bottom + 28} fontSize={10} fill={colors.subtle} textAnchor="middle">
+                  {Number(jour.jourUtc.slice(8, 10))}
                 </SvgText>
               </G>
             );

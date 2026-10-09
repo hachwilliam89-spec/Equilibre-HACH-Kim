@@ -10,10 +10,13 @@ export function DailyBudgetChart({
   total,
   budget,
   hasEntries,
+  showTotal = true,
 }: {
   total: number;
   budget: number;
   hasEntries: boolean;
+  /** Masquer « consommé / budget » quand l'écran affiche déjà le reste en grand. */
+  showTotal?: boolean;
 }) {
   const display = dailyBudgetPresentation(total, budget, hasEntries);
   const progressColor = display.phase === "target"
@@ -23,9 +26,15 @@ export function DailyBudgetChart({
       : CHART_COLORS.nutrition;
   return (
     <View style={{ gap: 10 }}>
-      <Text style={s.metricValue}>
-        {formatNutrition(total)} / {formatNutrition(budget)} kcal
-      </Text>
+      {showTotal ? (
+        <Text style={s.metricValue}>
+          {formatNutrition(total)} / {formatNutrition(budget)} kcal
+        </Text>
+      ) : (
+        <Text style={s.historyMeta}>
+          {formatNutrition(total)} kcal consommées sur {formatNutrition(Math.round(budget))}
+        </Text>
+      )}
       <View
         accessible
         accessibilityLabel={`${formatNutrition(total)} kilocalories consignées aujourd’hui. Zone cible de ${formatNutrition(display.zoneStart)} à ${formatNutrition(display.zoneEnd)} kilocalories. ${display.note}`}
@@ -69,7 +78,7 @@ export function DailyBudgetChart({
         />
       </View>
       <Text style={s.historyMeta}>
-        Zone visée : {formatNutrition(display.zoneStart)}–{formatNutrition(display.zoneEnd)} kcal · trait : {formatNutrition(budget)} kcal
+        Objectif {formatNutrition(Math.round(budget))} kcal (trait) · zone verte : ± 150 kcal
       </Text>
       <Text style={display.phase === "target"
         ? { color: CHART_COLORS.measured, fontWeight: "600" }

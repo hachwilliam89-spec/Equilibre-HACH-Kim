@@ -11,7 +11,6 @@ import {
 import { FoodIcon } from "../../../nutrition/FoodIcon";
 import { foodIconKind } from "../../../nutrition/food-icon-kind";
 import { MacroBreakdown } from "../../../nutrition/MacroBreakdown";
-import { formatUtcDay } from "../../../measurements/presentation";
 import { Button, Screen } from "../../../plans/ui";
 import { todayLabel } from "../../../ui/dates";
 import { PlusIcon } from "../../../ui/icons";
@@ -166,7 +165,7 @@ export default function FoodJournalScreen() {
         <>
           <View style={s.card}>
             <View style={[s.summaryRow, { alignItems: "center" }]}>
-              <Text style={s.metricLabel}>Aujourd’hui · {formatUtcDay(todayUtc)} (UTC)</Text>
+              <Text style={s.metricLabel}>Aujourd’hui</Text>
               <View
                 accessible
                 accessibilityLabel={`Statut alimentaire : ${statusPresentation.label}`}
@@ -187,6 +186,7 @@ export default function FoodJournalScreen() {
               total={totalKcal}
               budget={budgetKcal}
               hasEntries={entries.length > 0}
+              showTotal={false}
             />
             <MacroBreakdown
               proteines={today?.totalProteinesG ?? 0}
@@ -206,7 +206,9 @@ export default function FoodJournalScreen() {
               Cibles indicatives selon ton budget et ton activité ; le suivi reste calorique.
               {" "}
               {status.statut.journal
-                ? `Statut calculé sur le ${formatUtcDay(status.statut.journal.jourUtc)} (UTC).`
+                ? status.statut.journal.jourUtc === todayUtc
+                  ? "Statut calculé sur aujourd’hui."
+                  : "Statut calculé sur hier : rien n’est encore saisi aujourd’hui."
                 : "Aucune entrée alimentaire aujourd’hui ni hier."}
             </Text>
           </View>
