@@ -47,6 +47,16 @@ export const styles = StyleSheet.create({
   heroTitle: { color: colors.onBrand, fontSize: 28, fontWeight: "800" },
   heroSubtitle: { color: colors.onBrandMuted, fontSize: 15, lineHeight: 21 },
   // Barre des écrans secondaires : flèche retour + titre.
+  // Barre fixe des écrans racine connectés : marque + déconnexion.
+  accountBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    backgroundColor: colors.brandDeep,
+  },
+  accountBarBrand: { color: colors.onBrandMuted, fontSize: 15, fontWeight: "800", letterSpacing: 0.4 },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
