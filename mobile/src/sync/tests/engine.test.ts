@@ -166,4 +166,30 @@ describe("toWire", () => {
       }),
     ).toEqual({ id: "op-1", type: "favori", foodId: pomme.id, favori: true });
   });
+
+  it("n'envoie pas les métadonnées de la file d'attente (creeLe, tentatives)", () => {
+    const queued = {
+      id: "op-2",
+      type: "ajout-aliment" as const,
+      entreeId: "e-2",
+      foodId: pomme.id,
+      quantiteGrammes: 150,
+      categorieRepas: "collation" as const,
+      consommeLe: "2026-10-09T06:00:00.000Z",
+      aliment: pomme,
+      creeLe: "2026-10-09T06:00:00.000Z",
+      tentatives: 2,
+    };
+    expect(toWire(queued)).toEqual({
+      id: "op-2",
+      type: "ajout-aliment",
+      entreeId: "e-2",
+      foodId: pomme.id,
+      quantiteGrammes: 150,
+      categorieRepas: "collation",
+      consommeLe: "2026-10-09T06:00:00.000Z",
+    });
+    const { categorieRepas: _c, ...sansRepas } = queued;
+    expect(toWire(sansRepas)).not.toHaveProperty("categorieRepas");
+  });
 });
