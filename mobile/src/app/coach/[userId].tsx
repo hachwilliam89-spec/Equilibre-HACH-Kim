@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
+import { parseApiData } from "../../network/http";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { clientProgression, type ClientProgression } from "../../coaching/api";
@@ -71,7 +72,7 @@ export default function UserPlan() {
       if (!parsed.success) throw new Error("Saisissez un budget calorique positif.");
       manual = parsed.data;
     }
-    const result = previewSchema.parse(await requestApi("/plans/preview", "POST", { ...goals.data, userId, niveauActivite: activity, ...(manual === undefined ? {} : { budgetCalorique: manual }) }));
+    const result = parseApiData(previewSchema, await requestApi("/plans/preview", "POST", { ...goals.data, userId, niveauActivite: activity, ...(manual === undefined ? {} : { budgetCalorique: manual }) }));
     setPreview(result); setSuggestedBudget(manual === undefined ? result.budgetCalorique : null);
     setBudget(String(result.budgetCalorique));
   });
@@ -79,7 +80,7 @@ export default function UserPlan() {
     if (!goals.success || !preview) throw new Error("Consultez la proposition avant de soumettre le plan.");
     const parsed = budgetSchema.safeParse(budget);
     if (!parsed.success) throw new Error("Saisissez un budget calorique positif.");
-    const result = planSchema.parse(await requestApi("/plans", "POST", {
+    const result = parseApiData(planSchema, await requestApi("/plans", "POST", {
       ...goals.data, userId, niveauActivite: activity,
       // Sans modification, laisser le serveur recalculer la suggestion et son avertissement.
       ...(suggestedBudget !== null && parsed.data === suggestedBudget ? {} : { budgetCalorique: parsed.data }),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseApiData } from "../network/http";
 import { requestApi } from "../plans/api";
 
 export const mealCategorySchema = z.enum([
@@ -75,7 +76,7 @@ export type ReferenceFood = z.infer<typeof referenceFoodSchema>;
 export type FoodCategory = ReferenceFood["categorie"];
 
 export async function getFoodBudgetStatus(): Promise<FoodBudgetStatus> {
-  return foodBudgetStatusSchema.parse(
+  return parseApiData(foodBudgetStatusSchema,
     await requestApi("/food-journals/me/status"),
   );
 }
@@ -83,13 +84,13 @@ export async function getFoodBudgetStatus(): Promise<FoodBudgetStatus> {
 export async function searchReferenceFoods(query: string, category?: FoodCategory, page = 1): Promise<ReferenceFood[]> {
   const params = `q=${encodeURIComponent(query.trim())}&size=50&page=${page}` +
     (category ? `&categorie=${encodeURIComponent(category)}` : "");
-  return z.array(referenceFoodSchema).parse(
+  return parseApiData(z.array(referenceFoodSchema),
     await requestApi(`/foods?${params}`),
   );
 }
 
 export async function getFavoriteFoods(): Promise<ReferenceFood[]> {
-  return z.array(referenceFoodSchema).parse(await requestApi("/foods/me/favorites"));
+  return parseApiData(z.array(referenceFoodSchema), await requestApi("/foods/me/favorites"));
 }
 
 export async function setFavoriteFood(foodId: string, favorite: boolean): Promise<void> {
@@ -101,7 +102,7 @@ export async function addFoodEntry(
   quantiteGrammes: number,
   categorieRepas?: MealCategory,
 ): Promise<FoodJournal> {
-  return foodJournalSchema.parse(
+  return parseApiData(foodJournalSchema,
     await requestApi("/food-journals/me/entries", "POST", {
       foodId,
       quantiteGrammes,
@@ -111,7 +112,7 @@ export async function addFoodEntry(
 }
 
 export async function removeFoodEntry(entryId: string): Promise<FoodJournal> {
-  return foodJournalSchema.parse(
+  return parseApiData(foodJournalSchema,
     await requestApi(`/food-journals/me/entries/${encodeURIComponent(entryId)}`, "DELETE"),
   );
 }

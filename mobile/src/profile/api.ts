@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseApiData } from "../network/http";
 import { requestApi } from "../plans/api";
 
 export const profileSchema = z.object({
@@ -26,11 +27,11 @@ export type Profile = z.infer<typeof profileSchema>;
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;
 
 export async function getProfile(): Promise<Profile> {
-  return profileSchema.parse(await requestApi("/users/me"));
+  return parseApiData(profileSchema, await requestApi("/users/me"));
 }
 
 export async function updateProfile(profile: ProfileUpdate): Promise<Profile> {
-  return profileSchema.parse(
+  return parseApiData(profileSchema,
     await requestApi("/users/me/profile", "PATCH", profileUpdateSchema.parse(profile)),
   );
 }
