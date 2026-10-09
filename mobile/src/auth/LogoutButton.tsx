@@ -1,6 +1,7 @@
-import { Alert, Platform, Pressable, Text } from "react-native";
+import { Pressable, Text } from "react-native";
+import { confirmAction } from "../ui/confirmStore";
 import type { AccountActionTone } from "../ui/accountAction";
-import { LogoutIcon } from "../ui/icons";
+import { AlertIcon, LogoutIcon } from "../ui/icons";
 import { colors } from "../ui/theme";
 import { logoutMessage, useLogout } from "./useLogout";
 
@@ -15,16 +16,25 @@ export function LogoutButton({ tone = "onBrand" }: { tone?: AccountActionTone })
 
   const press = async () => {
     const pending = await prepare();
-    const title = pending ? "Modifications non envoyées" : "Se déconnecter ?";
-    const message = logoutMessage(pending);
-    if (Platform.OS === "web") {
-      if (globalThis.confirm?.(`${title}\n\n${message}`)) await leave();
-      return;
+    const confirmed = await confirmAction({
+      title: pending ? "Modifications non envoyées" : "Se déconnecter ?",
+      message: logoutMessage(pending),
+      confirmLabel: pending ? "Se déconnecter quand même" : "Se déconnecter",
+      tone: pending ? "danger" : "brand",
+      icon: pending ? AlertIcon : LogoutIcon,
+    });
+    if (!confirmed) return;
+    const failure = await leave();
+    if (failure) {
+      await confirmAction({
+        title: "Déconnexion impossible",
+        message: failure,
+        confirmLabel: "Compris",
+        cancelLabel: null,
+        tone: "danger",
+        icon: AlertIcon,
+      });
     }
-    Alert.alert(title, message, [
-      { text: "Annuler", style: "cancel" },
-      { text: pending ? "Se déconnecter quand même" : "Se déconnecter", style: "destructive", onPress: () => void leave() },
-    ]);
   };
 
   return (

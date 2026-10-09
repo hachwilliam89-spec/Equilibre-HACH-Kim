@@ -142,6 +142,17 @@ export const ClockIcon = (p: IconProps) => (
 );
 
 /** Porte et flèche sortante : déconnexion. */
+export const AlertIcon = (p: IconProps) => (
+  <Icon {...p}>
+    {(st) => (
+      <>
+        <Path d="M12 4 2.8 19.5h18.4L12 4Z" {...st} {...line} />
+        <Path d="M12 10v4.5M12 17.2v.1" {...st} {...line} />
+      </>
+    )}
+  </Icon>
+);
+
 export const LogoutIcon = (p: IconProps) => (
   <Icon {...p}>
     {(st) => (
