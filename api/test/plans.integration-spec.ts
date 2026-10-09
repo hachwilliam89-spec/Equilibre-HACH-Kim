@@ -68,7 +68,13 @@ describe('Plans (integration)', () => {
     const password = 'password123';
     const registerResponse = await request(testApp.getHttpServer())
       .post('/api/auth/register')
-      .send({ email, password, role: 'coach' })
+      .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
+        email,
+        password,
+        role: 'coach',
+      })
       .expect(HttpStatus.CREATED);
 
     const coachId = (registerResponse.body as { userId: string }).userId;
@@ -90,6 +96,8 @@ describe('Plans (integration)', () => {
     const response = await request(testApp.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: uniqueEmail(),
         password: 'password123',
         role: 'utilisateur',
@@ -111,6 +119,8 @@ describe('Plans (integration)', () => {
     const registerResponse = await request(testApp.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: uniqueEmail(),
         password: 'password123',
         role: 'utilisateur',

@@ -2,9 +2,11 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { attentionLevel, clientsOverview, coachActionLabel, coachAlerts, sortForCoach, type ClientOverview } from "../../../coaching/api";
+import { displayName, initials, lastActivityLabel, matchesSearch } from "../../../identity/identity";
 import { formatWeight } from "../../../measurements/presentation";
 import { Button, Screen } from "../../../plans/ui";
 import { ChevronRight } from "../../../ui/icons";
+import { SearchField } from "../../../ui/SearchField";
 import { styles as s } from "../../../ui/styles";
 import { colors } from "../../../ui/theme";
 
@@ -20,10 +22,13 @@ function UserCard({ client }: { client: ClientOverview }) {
   const level = attentionLevel(client);
   const action = alerts[0]?.action;
   const accent = level === 2 ? colors.warning : level === 1 ? colors.muted : colors.brand;
+  const name = displayName(client);
+  const activity = poids ? lastActivityLabel(client.derniereActivite) : null;
+  const inactive = !!activity && !activity.startsWith("Actif");
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Consulter le suivi de ${client.email}. ${alerts.length ? alerts.map((a) => a.raison).join(". ") : "Tout est dans les objectifs"}${action ? `. Action proposée : ${coachActionLabel[action]}` : ""}`}
+      accessibilityLabel={`Consulter le suivi de ${name}. ${activity ? `${activity}. ` : ""}${alerts.length ? alerts.map((a) => a.raison).join(". ") : "Tout est dans les objectifs"}${action ? `. Action proposée : ${coachActionLabel[action]}` : ""}`}
       onPress={() => router.push({ pathname: "/coach/[userId]", params: { userId: client.id } })}
       style={({ pressed }) => [
         s.card,
@@ -33,10 +38,10 @@ function UserCard({ client }: { client: ClientOverview }) {
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
         <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: colors.brand, fontSize: 17, fontWeight: "800" }}>{client.email.charAt(0).toUpperCase()}</Text>
+          <Text style={{ color: colors.brand, fontSize: 15, fontWeight: "800" }}>{initials(client)}</Text>
         </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={1} style={s.label}>{client.email}</Text>
+          <Text numberOfLines={1} style={s.label}>{name}</Text>
           <Text style={s.historyMeta}>
             {poids?.derniereMesure
               ? `${formatWeight(poids.derniereMesure.poidsKg)} · objectif ${formatWeight(poids.plan.poidsCible)}`
@@ -44,6 +49,11 @@ function UserCard({ client }: { client: ClientOverview }) {
                 ? `Objectif ${formatWeight(poids.plan.poidsCible)}`
                 : client.tailleCm ? `${client.tailleCm} cm` : "Profil incomplet"}
           </Text>
+          {activity && (
+            <Text style={[s.historyMeta, { color: inactive ? colors.warning : colors.muted, fontWeight: inactive ? "600" : "400" }]}>
+              {activity}
+            </Text>
+          )}
         </View>
         <ChevronRight color={colors.brand} />
       </View>
@@ -71,6 +81,7 @@ export default function MyUsers() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [reload, setReload] = useState(0);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -89,6 +100,7 @@ export default function MyUsers() {
   };
 
   const counts = SECTIONS.map((section) => clients.filter((client) => attentionLevel(client) === section.level).length);
+  const visible = clients.filter((client) => matchesSearch(client, query));
 
   return (
     <Screen
@@ -124,8 +136,19 @@ export default function MyUsers() {
             </View>
           ))}
         </View>
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          placeholder="Rechercher par nom ou e-mail"
+          accessibilityLabel="Rechercher un utilisateur par nom ou e-mail"
+        />
+        {visible.length === 0 && (
+          <View style={s.card}>
+            <Text style={s.text}>Aucun utilisateur ne correspond à « {query.trim()} ».</Text>
+          </View>
+        )}
         {SECTIONS.map((section) => {
-          const rows = clients.filter((client) => attentionLevel(client) === section.level);
+          const rows = visible.filter((client) => attentionLevel(client) === section.level);
           if (rows.length === 0) return null;
           return (
             <View key={section.level} style={{ gap: 10 }}>

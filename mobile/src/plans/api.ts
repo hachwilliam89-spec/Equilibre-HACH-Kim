@@ -41,7 +41,7 @@ export async function requestApi(path: string, method = "GET", body?: unknown, r
   }
   return parseApiResponse(response);
 }
-export const clientSchema = z.object({ id: z.string(), email: z.string(), tailleCm: z.number().optional(), age: z.number().optional(), sexe: z.enum(["homme", "femme"]).optional() });
+export const clientSchema = z.object({ id: z.string(), email: z.string(), prenom: z.string().optional(), nom: z.string().optional(), tailleCm: z.number().optional(), age: z.number().optional(), sexe: z.enum(["homme", "femme"]).optional() });
 export type Client = z.infer<typeof clientSchema>;
 export const previewSchema = z.object({ userId: z.string(), poidsDepart: z.number(), poidsCible: z.number(), dateDebut: z.string(), dateCible: z.string(), imcCible: z.number(), niveauActivite: z.enum(["sedentaire", "actif", "sportif", "athlete"]), budgetCalorique: z.number(), budgetPlafonneAuBmr: z.boolean(), avertissement: z.string().nullable().optional() });
 export const planSchema = previewSchema.extend({ id: z.string(), statut: z.enum(["actif", "annule", "termine"]) });

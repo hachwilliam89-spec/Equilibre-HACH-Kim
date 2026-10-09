@@ -94,4 +94,72 @@ describe('User (entite domaine)', () => {
     expect(updated.age).toBe(31);
     expect(updated.sexe).toBe('femme');
   });
+
+  describe('identite (prenom, nom)', () => {
+    it('normalise le prenom et le nom (espaces retires et reduits)', () => {
+      const user = User.create({
+        ...baseProps,
+        role: 'coach',
+        prenom: '  Marie   Claire ',
+        nom: ' Dupont ',
+      });
+
+      expect(user.prenom).toBe('Marie Claire');
+      expect(user.nom).toBe('Dupont');
+      expect(user.hasIdentity()).toBe(true);
+    });
+
+    it('accepte un compte existant sans identite', () => {
+      const user = User.create({ ...baseProps, role: 'coach' });
+
+      expect(user.prenom).toBeUndefined();
+      expect(user.hasIdentity()).toBe(false);
+    });
+
+    it('refuse un prenom vide une fois les espaces retires', () => {
+      expect(() =>
+        User.create({
+          ...baseProps,
+          role: 'coach',
+          prenom: '   ',
+          nom: 'Dupont',
+        }),
+      ).toThrow('Prenom invalide');
+    });
+
+    it('refuse un nom de plus de 50 caracteres', () => {
+      expect(() =>
+        User.create({
+          ...baseProps,
+          role: 'coach',
+          prenom: 'Marie',
+          nom: 'x'.repeat(51),
+        }),
+      ).toThrow('Nom invalide');
+    });
+
+    it('accepte un nom de 50 caracteres pile', () => {
+      const user = User.create({
+        ...baseProps,
+        role: 'coach',
+        prenom: 'Marie',
+        nom: 'x'.repeat(50),
+      });
+
+      expect(user.nom).toHaveLength(50);
+    });
+
+    it('met a jour l identite via withProfile sans toucher au reste', () => {
+      const user = User.create({
+        ...baseProps,
+        role: 'utilisateur',
+        coachId: 'coach-id',
+        tailleCm: 170,
+      }).withProfile({ prenom: 'Paul', nom: 'Martin' });
+
+      expect(user.prenom).toBe('Paul');
+      expect(user.nom).toBe('Martin');
+      expect(user.tailleCm).toBe(170);
+    });
+  });
 });

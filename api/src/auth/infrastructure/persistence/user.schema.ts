@@ -19,6 +19,14 @@ export class UserDocumentClass {
   @Prop({ required: true, enum: ['coach', 'utilisateur'] })
   role: 'coach' | 'utilisateur';
 
+  // Identité affichée. Facultative en base : les comptes créés avant son
+  // introduction la renseignent à la connexion suivante.
+  @Prop({ type: String, trim: true })
+  prenom?: string;
+
+  @Prop({ type: String, trim: true })
+  nom?: string;
+
   @Prop({
     type: new MongooseSchema(
       {

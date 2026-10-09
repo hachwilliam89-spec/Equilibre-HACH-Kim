@@ -17,6 +17,8 @@ import { Roles } from '../../../common/auth/roles.decorator';
 class CoachUserDto {
   @ApiProperty() id: string;
   @ApiProperty() email: string;
+  @ApiProperty({ required: false }) prenom?: string;
+  @ApiProperty({ required: false }) nom?: string;
   @ApiProperty({ required: false }) tailleCm?: number;
   @ApiProperty({ required: false }) age?: number;
   @ApiProperty({ required: false, enum: ['homme', 'femme'] }) sexe?:
@@ -45,6 +47,8 @@ export class CoachUsersController {
     return users.map((user) => ({
       id: user.id,
       email: user.email,
+      prenom: user.prenom,
+      nom: user.nom,
       tailleCm: user.tailleCm,
       age: user.age,
       sexe: user.sexe,

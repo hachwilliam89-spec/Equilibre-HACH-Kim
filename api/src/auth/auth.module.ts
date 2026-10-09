@@ -1,3 +1,4 @@
+import { CoachAccountController } from './infrastructure/http/coach-account.controller';
 import { CoachUsersController } from './infrastructure/http/coach-users.controller';
 import { UserProfileController } from './infrastructure/http/user-profile.controller';
 import { Module } from '@nestjs/common';
@@ -13,6 +14,7 @@ import { RegisterUseCase } from './application/use-cases/register.use-case';
 import { LogoutUseCase } from './application/use-cases/logout.use-case';
 import { GetOwnProfileUseCase } from './application/use-cases/get-own-profile.use-case';
 import { UpdateOwnProfileUseCase } from './application/use-cases/update-own-profile.use-case';
+import { CoachAccountUseCase } from './application/use-cases/coach-account.use-case';
 import { AuthController } from './infrastructure/http/auth.controller';
 import { JwtStrategy } from './infrastructure/http/jwt.strategy';
 import { MongooseUserRepository } from './infrastructure/persistence/mongoose-user.repository';
@@ -44,7 +46,12 @@ import {
       }),
     }),
   ],
-  controllers: [AuthController, CoachUsersController, UserProfileController],
+  controllers: [
+    AuthController,
+    CoachUsersController,
+    CoachAccountController,
+    UserProfileController,
+  ],
   providers: [
     { provide: USER_REPOSITORY, useClass: MongooseUserRepository },
     {
@@ -57,6 +64,7 @@ import {
     LogoutUseCase,
     GetOwnProfileUseCase,
     UpdateOwnProfileUseCase,
+    CoachAccountUseCase,
     JwtStrategy,
   ],
   // PassportModule est exporte pour que tout module qui importe AuthModule

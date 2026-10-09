@@ -15,6 +15,7 @@ import { styles as s } from "../../ui/styles";
 import { DateField } from "../../ui/DateField";
 import { MeasurementField } from "../../ui/MeasurementField";
 import { displayDate, nextDate } from "../../ui/dates";
+import { displayName, hasIdentity, initials } from "../../identity/identity";
 
 const activities = { sedentaire: "Sédentaire", actif: "Actif", sportif: "Sportif", athlete: "Athlète" } as const;
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -121,10 +122,11 @@ export default function UserPlan() {
   >
     {client && <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
       <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ color: colors.brand, fontSize: 18, fontWeight: "800" }}>{client.email.charAt(0).toUpperCase()}</Text>
+        <Text style={{ color: colors.brand, fontSize: 16, fontWeight: "800" }}>{initials(client)}</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text numberOfLines={1} style={s.label}>{client.email}</Text>
+        <Text numberOfLines={1} style={s.label}>{displayName(client)}</Text>
+        {hasIdentity(client) && <Text numberOfLines={1} style={s.historyMeta}>{client.email}</Text>}
         <Text style={s.historyMeta}>{client.tailleCm ? `${client.tailleCm} cm` : "Taille non renseignée"}{client.age ? ` · ${client.age} ans` : ""}</Text>
       </View>
     </View>}

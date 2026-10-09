@@ -5,6 +5,7 @@ import { renderLogoutButton } from "../../auth/LogoutButton";
 import { useSession } from "../../auth/session";
 import { Button, Screen } from "../../plans/ui";
 import { AccountActionContext } from "../../ui/accountAction";
+import { IdentityGate } from "../../identity/IdentityGate";
 export default function CoachLayout() {
   const { ready, session, restore, error, busy } = useSession();
   useEffect(() => { if (!ready) void restore(); }, [ready, restore]);
@@ -12,7 +13,9 @@ export default function CoachLayout() {
   if (session?.role !== "coach") return <Redirect href="/" />;
   return (
     <AccountActionContext.Provider value={renderLogoutButton}>
-      <Stack screenOptions={{ headerShown: false }} />
+      <IdentityGate role="coach" userId={session.userId}>
+        <Stack screenOptions={{ headerShown: false }} />
+      </IdentityGate>
     </AccountActionContext.Provider>
   );
 }
