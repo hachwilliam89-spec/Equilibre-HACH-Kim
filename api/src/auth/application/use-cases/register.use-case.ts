@@ -12,6 +12,8 @@ export interface RegisterInput {
   email: string;
   password: string;
   role: 'coach' | 'utilisateur';
+  prenom: string;
+  nom: string;
   coachId?: string;
   coachCode?: string;
   tailleCm?: number;
@@ -79,6 +81,8 @@ export class RegisterUseCase {
       email: input.email,
       passwordHash,
       role: input.role,
+      prenom: input.prenom,
+      nom: input.nom,
       coachId,
       tailleCm: input.tailleCm,
       age: input.age,

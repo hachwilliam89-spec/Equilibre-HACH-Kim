@@ -12,11 +12,34 @@ export type Role = 'coach' | 'utilisateur';
 // domaine, pas la validation primaire).
 const EMAIL_SHAPE_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Longueur maximale d'un prénom ou d'un nom (après retrait des espaces). */
+export const IDENTITE_LONGUEUR_MAX = 50;
+
+/**
+ * Normalise un prénom ou un nom : espaces de début/fin retirés, espaces
+ * internes multiples réduits. Renvoie undefined pour une valeur absente.
+ */
+function normaliserIdentite(
+  valeur: string | undefined,
+  champ: 'prenom' | 'nom',
+): string | undefined {
+  if (valeur === undefined) return undefined;
+  const propre = valeur.trim().replace(/\s+/g, ' ');
+  if (propre.length === 0 || propre.length > IDENTITE_LONGUEUR_MAX) {
+    throw new Error(champ === 'prenom' ? 'Prenom invalide' : 'Nom invalide');
+  }
+  return propre;
+}
+
 export interface UserProps {
   id: string;
   email: string;
   passwordHash: string;
   role: Role;
+  // Identité affichée (coach et utilisateur). Facultative en base pour les
+  // comptes créés avant son introduction ; obligatoire à l'inscription.
+  prenom?: string;
+  nom?: string;
   // Champs nécessaires au calcul métabolique (US1) — pertinents pour role='utilisateur'
   tailleCm?: number;
   age?: number;
@@ -27,6 +50,8 @@ export interface UserProps {
 }
 
 export interface UserProfile {
+  prenom?: string;
+  nom?: string;
   tailleCm?: number;
   age?: number;
   sexe?: 'homme' | 'femme';
@@ -48,7 +73,12 @@ export class User {
       // la règle d'accès ("un coach ne voit que les utilisateurs qui lui sont rattachés")
       throw new Error('Un utilisateur doit être rattaché à un coach');
     }
-    return new User({ ...props, email });
+    return new User({
+      ...props,
+      email,
+      prenom: normaliserIdentite(props.prenom, 'prenom'),
+      nom: normaliserIdentite(props.nom, 'nom'),
+    });
   }
 
   get id(): string {
@@ -65,6 +95,19 @@ export class User {
 
   get role(): Role {
     return this.props.role;
+  }
+
+  get prenom(): string | undefined {
+    return this.props.prenom;
+  }
+
+  get nom(): string | undefined {
+    return this.props.nom;
+  }
+
+  /** Prénom et nom renseignés : le compte peut être présenté par son nom. */
+  hasIdentity(): boolean {
+    return !!(this.props.prenom && this.props.nom);
   }
 
   get coachId(): string | undefined {
@@ -88,10 +131,14 @@ export class User {
     return this.props.sexe;
   }
 
+  /** Applique les champs fournis ; un champ absent ou undefined est conservé. */
   withProfile(profile: UserProfile): User {
+    const fournis = Object.fromEntries(
+      Object.entries(profile).filter(([, value]) => value !== undefined),
+    ) as UserProfile;
     return User.create({
       ...this.props,
-      ...profile,
+      ...fournis,
     });
   }
 

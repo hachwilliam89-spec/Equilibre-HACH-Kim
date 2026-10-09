@@ -101,7 +101,7 @@ async function account(world, extra) {
   };
   const registration = await api(world)
     .post('/api/auth/register')
-    .send({ ...credentials, ...extra })
+    .send({ prenom: 'Test', nom: 'Cucumber', ...credentials, ...extra })
     .expect(201);
   world.accountIds.push(registration.body.userId);
   const login = await api(world)

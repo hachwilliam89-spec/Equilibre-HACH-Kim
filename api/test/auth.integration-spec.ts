@@ -66,7 +66,13 @@ describe('Auth (integration)', () => {
     const password = 'password123';
     await request(testApp.getHttpServer())
       .post('/api/auth/register')
-      .send({ email, password, role: 'coach' })
+      .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
+        email,
+        password,
+        role: 'coach',
+      })
       .expect(HttpStatus.CREATED);
 
     const response = await request(testApp.getHttpServer())
@@ -128,7 +134,13 @@ describe('Auth (integration)', () => {
       const password = 'password123';
       const response = await request(app.getHttpServer())
         .post('/api/auth/register')
-        .send({ email, password, role: 'coach' })
+        .send({
+          prenom: 'Test',
+          nom: 'Equilibre',
+          email,
+          password,
+          role: 'coach',
+        })
         .expect(HttpStatus.CREATED);
 
       const body = response.body as { userId: string };
@@ -149,10 +161,36 @@ describe('Auth (integration)', () => {
       expect(doc?.passwordHash).toMatch(/^\$2[aby]\$/);
     });
 
+    it('refuse une inscription sans prenom ni nom', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/auth/register')
+        .send({ email: uniqueEmail(), password: 'password123', role: 'coach' })
+        .expect(HttpStatus.BAD_REQUEST);
+
+      const body = response.body as { errors: Array<{ field: string }> };
+      const fields = body.errors.map((error) => error.field);
+      expect(fields).toEqual(expect.arrayContaining(['prenom', 'nom']));
+    });
+
+    it('refuse un nom de plus de 50 caracteres', async () => {
+      await request(app.getHttpServer())
+        .post('/api/auth/register')
+        .send({
+          prenom: 'Marie',
+          nom: 'x'.repeat(51),
+          email: uniqueEmail(),
+          password: 'password123',
+          role: 'coach',
+        })
+        .expect(HttpStatus.BAD_REQUEST);
+    });
+
     it('refuse un utilisateur sans code ni rattachement (validation du DTO)', async () => {
       const response = await request(app.getHttpServer())
         .post('/api/auth/register')
         .send({
+          prenom: 'Test',
+          nom: 'Equilibre',
           email: uniqueEmail(),
           password: 'password123',
           role: 'utilisateur',
@@ -171,12 +209,24 @@ describe('Auth (integration)', () => {
       const email = uniqueEmail();
       await request(app.getHttpServer())
         .post('/api/auth/register')
-        .send({ email, password: 'password123', role: 'coach' })
+        .send({
+          prenom: 'Test',
+          nom: 'Equilibre',
+          email,
+          password: 'password123',
+          role: 'coach',
+        })
         .expect(HttpStatus.CREATED);
 
       const response = await request(app.getHttpServer())
         .post('/api/auth/register')
-        .send({ email, password: 'password123', role: 'coach' })
+        .send({
+          prenom: 'Test',
+          nom: 'Equilibre',
+          email,
+          password: 'password123',
+          role: 'coach',
+        })
         .expect(HttpStatus.CONFLICT);
 
       const body = response.body as { type: string };
@@ -189,7 +239,13 @@ describe('Auth (integration)', () => {
       const email = uniqueEmail();
       await request(app.getHttpServer())
         .post('/api/auth/register')
-        .send({ email, password: 'password123', role: 'coach' })
+        .send({
+          prenom: 'Test',
+          nom: 'Equilibre',
+          email,
+          password: 'password123',
+          role: 'coach',
+        })
         .expect(HttpStatus.CREATED);
 
       const response = await request(app.getHttpServer())
@@ -206,7 +262,13 @@ describe('Auth (integration)', () => {
       const password = 'password123';
       await request(app.getHttpServer())
         .post('/api/auth/register')
-        .send({ email, password, role: 'coach' })
+        .send({
+          prenom: 'Test',
+          nom: 'Equilibre',
+          email,
+          password,
+          role: 'coach',
+        })
         .expect(HttpStatus.CREATED);
 
       const response = await request(app.getHttpServer())

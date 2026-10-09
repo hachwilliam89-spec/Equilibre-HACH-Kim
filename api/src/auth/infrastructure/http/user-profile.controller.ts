@@ -22,11 +22,15 @@ import { ZodValidationPipe } from './dto/zod-validation.pipe';
 class CoachSummaryDto {
   @ApiProperty() id: string;
   @ApiProperty() email: string;
+  @ApiProperty({ required: false }) prenom?: string;
+  @ApiProperty({ required: false }) nom?: string;
 }
 
 class OwnProfileDto {
   @ApiProperty() id: string;
   @ApiProperty() email: string;
+  @ApiProperty({ required: false }) prenom?: string;
+  @ApiProperty({ required: false }) nom?: string;
   @ApiProperty({ type: CoachSummaryDto }) coach: CoachSummaryDto;
   @ApiProperty({ required: false }) tailleCm?: number;
   @ApiProperty({ required: false }) age?: number;

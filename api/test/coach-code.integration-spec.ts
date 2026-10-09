@@ -34,7 +34,13 @@ describe('Code coach (integration Mongo)', () => {
     const password = 'password123';
     const coach = await request(app.getHttpServer())
       .post('/api/auth/register')
-      .send({ email, password, role: 'coach' })
+      .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
+        email,
+        password,
+        role: 'coach',
+      })
       .expect(201);
     const users = app
       .get<Connection>(getConnectionToken())
@@ -65,6 +71,8 @@ describe('Code coach (integration Mongo)', () => {
     const user = await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: `user-${randomUUID()}@example.test`,
         password,
         role: 'utilisateur',
@@ -82,6 +90,8 @@ describe('Code coach (integration Mongo)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: invalidEmail,
         password,
         role: 'utilisateur',
@@ -92,6 +102,8 @@ describe('Code coach (integration Mongo)', () => {
     await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: invalidEmail,
         password,
         role: 'utilisateur',

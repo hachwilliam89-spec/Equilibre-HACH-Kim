@@ -23,6 +23,8 @@ const STATUTS_ALIMENTAIRES = [
 export class ClientDto {
   @ApiProperty() id: string;
   @ApiProperty() email: string;
+  @ApiProperty({ required: false }) prenom?: string;
+  @ApiProperty({ required: false }) nom?: string;
   @ApiProperty({ required: false }) tailleCm?: number;
   @ApiProperty({ required: false }) age?: number;
   @ApiProperty({ required: false, enum: ['homme', 'femme'] }) sexe?:
@@ -48,6 +50,15 @@ export class ClientOverviewDto extends ClientDto {
     description: 'null sans plan actif',
   })
   alimentation: StatutAlimentaireDto | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      'Derniere pesee ou saisie alimentaire du plan actif ; null sans activite',
+  })
+  derniereActivite: string | null;
 }
 
 export class JourCaloriqueDto {
@@ -94,6 +105,8 @@ export function toClientDto(user: User): ClientDto {
   return {
     id: user.id,
     email: user.email,
+    prenom: user.prenom,
+    nom: user.nom,
     tailleCm: user.tailleCm,
     age: user.age,
     sexe: user.sexe,
@@ -112,6 +125,7 @@ export function toClientOverviewDto(
           ecartKcal: overview.alimentation.ecartKcal,
         }
       : null,
+    derniereActivite: overview.derniereActivite?.toISOString() ?? null,
   };
 }
 

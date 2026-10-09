@@ -54,6 +54,8 @@ describe('Suivi documentaire — API et MongoDB réel', () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/register')
       .send({
+        prenom: 'Test',
+        nom: 'Equilibre',
         email: `${randomUUID()}@example.test`,
         password: 'password123',
         role,
