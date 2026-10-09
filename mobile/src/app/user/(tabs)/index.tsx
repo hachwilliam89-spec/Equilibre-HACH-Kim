@@ -209,23 +209,27 @@ export default function WeightTrackingScreen() {
             )}
 
             {tracking.poidsAttendu !== null && tracking.ecartKg !== null && (
-              <Text style={[s.label, { color: presentation.color }]}>
-                {Math.abs(tracking.ecartKg) < 0.05
-                  ? `Pile sur la trajectoire (${formatWeight(tracking.poidsAttendu)} attendus)`
-                  : `${formatWeight(Math.abs(tracking.ecartKg))} ${tracking.ecartKg > 0 ? "au-dessus" : "en dessous"} de la trajectoire (${formatWeight(tracking.poidsAttendu)} attendus)`}
-              </Text>
+              <View style={{ gap: 2 }}>
+                <Text style={s.metricLabel}>Écart à la trajectoire</Text>
+                <Text style={[s.label, { color: presentation.color }]}>
+                  {Math.abs(tracking.ecartKg) < 0.05
+                    ? "Sur la trajectoire"
+                    : `${formatWeight(Math.abs(tracking.ecartKg))} ${tracking.ecartKg > 0 ? "au-dessus" : "en dessous"}`}
+                </Text>
+                <Text style={s.historyMeta}>Poids attendu aujourd’hui : {formatWeight(tracking.poidsAttendu)}</Text>
+              </View>
             )}
-            <Text style={s.historyMeta}>
-              Plan du {formatUtcDay(tracking.plan.dateDebut)} au{" "}
-              {formatUtcDay(tracking.plan.dateCible)} · départ{" "}
-              {formatWeight(tracking.plan.poidsDepart)}
-            </Text>
           </View>
 
           <SyncStatus />
 
           <View style={s.card}>
             <WeightTrajectoryChart plan={tracking.plan} measurements={history} showLast={false} />
+            <Text style={s.historyMeta}>
+              Plan du {formatUtcDay(tracking.plan.dateDebut)} au{" "}
+              {formatUtcDay(tracking.plan.dateCible)} · départ{" "}
+              {formatWeight(tracking.plan.poidsDepart)}
+            </Text>
           </View>
           <DailyBudgetCard />
         </>

@@ -11,16 +11,18 @@ import { styles as s } from "../../../ui/styles";
 import { colors } from "../../../ui/theme";
 
 const SECTIONS = [
-  { level: 2 as const, title: "À surveiller", hint: "Un écart ou des données manquantes : à regarder en premier." },
-  { level: 1 as const, title: "En attente", hint: "Pas encore de plan ou de première pesée." },
-  { level: 0 as const, title: "À jour", hint: "Poids et alimentation dans les objectifs." },
+  { level: 2 as const, title: "À surveiller" },
+  { level: 1 as const, title: "En attente" },
+  { level: 0 as const, title: "À jour" },
 ];
+type AttentionFilter = (typeof SECTIONS)[number]["level"] | null;
 
 function UserCard({ client }: { client: ClientOverview }) {
   const poids = client.suiviPoids;
   const alerts = coachAlerts(client);
   const level = attentionLevel(client);
-  const action = alerts[0]?.action;
+  const priorityAlert = alerts[0];
+  const action = priorityAlert?.action;
   const accent = level === 2 ? colors.warning : level === 1 ? colors.muted : colors.brand;
   const name = displayName(client);
   const activity = poids ? lastActivityLabel(client.derniereActivite) : null;
@@ -57,15 +59,13 @@ function UserCard({ client }: { client: ClientOverview }) {
         </View>
         <ChevronRight color={colors.brand} />
       </View>
-      {alerts.length > 0 ? (
+      {priorityAlert ? (
         <View style={{ gap: 4 }}>
-          {alerts.map((alert) => (
-            <Text key={alert.raison} style={{ color: level === 2 ? colors.warning : colors.ink, fontSize: 14, fontWeight: "600" }}>
-              • {alert.raison}
-            </Text>
-          ))}
+          <Text numberOfLines={2} style={{ color: level === 2 ? colors.warning : colors.ink, fontSize: 14, fontWeight: "600" }}>
+            {priorityAlert.raison}{alerts.length > 1 ? ` · +${alerts.length - 1} autre${alerts.length > 2 ? "s" : ""}` : ""}
+          </Text>
           {action && (
-            <Text style={[s.pillText, { marginTop: 2 }]}>Suite suggérée : {coachActionLabel[action]}</Text>
+            <Text style={[s.pillText, { marginTop: 2 }]}>{coachActionLabel[action]} →</Text>
           )}
         </View>
       ) : (
@@ -82,6 +82,7 @@ export default function MyUsers() {
   const [refreshing, setRefreshing] = useState(false);
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<AttentionFilter>(null);
 
   useEffect(() => {
     let active = true;
@@ -99,8 +100,9 @@ export default function MyUsers() {
     setReload((value) => value + 1);
   };
 
-  const counts = SECTIONS.map((section) => clients.filter((client) => attentionLevel(client) === section.level).length);
-  const visible = clients.filter((client) => matchesSearch(client, query));
+  const searched = clients.filter((client) => matchesSearch(client, query));
+  const counts = SECTIONS.map((section) => searched.filter((client) => attentionLevel(client) === section.level).length);
+  const visible = filter === null ? searched : searched.filter((client) => attentionLevel(client) === filter);
 
   return (
     <Screen
@@ -128,12 +130,28 @@ export default function MyUsers() {
         </View>
       ) : (
         <>
-        <View style={[s.card, { flexDirection: "row", paddingVertical: 14 }]} accessible accessibilityLabel={SECTIONS.map((section, i) => `${counts[i]} ${section.title.toLowerCase()}`).join(", ")}>
+        <View style={[s.card, { flexDirection: "row", padding: 6, gap: 4 }]}>
           {SECTIONS.map((section, i) => (
-            <View key={section.level} style={{ flex: 1, alignItems: "center", gap: 2 }}>
-              <Text style={{ fontSize: 26, fontWeight: "800", color: section.level === 2 && counts[i] ? colors.warning : colors.ink }}>{counts[i]}</Text>
-              <Text style={s.historyMeta}>{section.title}</Text>
-            </View>
+            <Pressable
+              key={section.level}
+              accessibilityRole="button"
+              accessibilityLabel={`${section.title}, ${counts[i]} utilisateur${counts[i] > 1 ? "s" : ""}`}
+              accessibilityHint={filter === section.level ? "Afficher tous les utilisateurs" : `Afficher les utilisateurs ${section.title.toLowerCase()}`}
+              accessibilityState={{ selected: filter === section.level }}
+              onPress={() => setFilter((current) => current === section.level ? null : section.level)}
+              style={({ pressed }) => ({
+                flex: 1,
+                minHeight: 68,
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 2,
+                borderRadius: 14,
+                backgroundColor: filter === section.level ? (section.level === 2 ? "#fff0db" : colors.mint) : pressed ? colors.mintSoft : colors.card,
+              })}
+            >
+              <Text style={{ fontSize: 25, fontWeight: "800", color: section.level === 2 && counts[i] ? colors.warning : colors.ink }}>{counts[i]}</Text>
+              <Text style={[s.historyMeta, { fontWeight: filter === section.level ? "700" : "500", color: filter === section.level ? colors.ink : colors.muted }]}>{section.title}</Text>
+            </Pressable>
           ))}
         </View>
         <SearchField
@@ -142,9 +160,16 @@ export default function MyUsers() {
           placeholder="Rechercher par nom ou e-mail"
           accessibilityLabel="Rechercher un utilisateur par nom ou e-mail"
         />
+        {filter !== null && (
+          <Pressable accessibilityRole="button" onPress={() => setFilter(null)} style={{ alignSelf: "flex-start" }}>
+            <Text style={s.link}>Afficher toutes les priorités</Text>
+          </Pressable>
+        )}
         {visible.length === 0 && (
           <View style={s.card}>
-            <Text style={s.text}>Aucun utilisateur ne correspond à « {query.trim()} ».</Text>
+            <Text style={s.text}>{query.trim()
+              ? `Aucun utilisateur ne correspond à « ${query.trim()} »${filter === null ? "." : " dans cette priorité."}`
+              : "Aucun utilisateur dans cette priorité."}</Text>
           </View>
         )}
         {SECTIONS.map((section) => {
@@ -152,12 +177,9 @@ export default function MyUsers() {
           if (rows.length === 0) return null;
           return (
             <View key={section.level} style={{ gap: 10 }}>
-              <View style={{ gap: 2, marginTop: section.level === 2 ? 0 : 6 }}>
-                <Text accessibilityRole="header" style={[s.metricLabel, { color: section.level === 2 ? colors.warning : colors.muted }]}>
-                  {section.title} · {rows.length}
-                </Text>
-                <Text style={s.historyMeta}>{section.hint}</Text>
-              </View>
+              {filter === null && <Text accessibilityRole="header" style={[s.metricLabel, { marginTop: section.level === 2 ? 0 : 6, color: section.level === 2 ? colors.warning : colors.muted }]}>
+                {section.title} · {rows.length}
+              </Text>}
               {rows.map((client) => <UserCard key={client.id} client={client} />)}
             </View>
           );
