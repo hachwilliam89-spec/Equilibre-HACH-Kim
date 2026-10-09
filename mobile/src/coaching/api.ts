@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseApiData } from "../network/http";
 import { measurementSchema, weightTrackingSchema } from "../measurements/api";
 import { macroTargetsSchema } from "../nutrition/api";
 import { clientSchema, requestApi } from "../plans/api";
@@ -41,10 +42,10 @@ export type ClientProgression = z.infer<typeof clientProgressionSchema>;
 export type JourCalorique = z.infer<typeof jourCaloriqueSchema>;
 
 export const clientsOverview = async () =>
-  z.array(clientOverviewSchema).parse(await requestApi("/coach/clients"));
+  parseApiData(z.array(clientOverviewSchema), await requestApi("/coach/clients"));
 
 export const clientProgression = async (userId: string) =>
-  clientProgressionSchema.parse(await requestApi(`/coach/clients/${encodeURIComponent(userId)}`));
+  parseApiData(clientProgressionSchema, await requestApi(`/coach/clients/${encodeURIComponent(userId)}`));
 
 /**
  * Niveau d'attention pour trier la liste du coach : 2 = à surveiller (écart,

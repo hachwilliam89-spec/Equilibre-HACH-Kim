@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError, refresh } from "../auth/api";
+import { fetchWithTimeout, parseApiData, parseApiResponse } from "../network/http";
 import { useSession } from "../auth/session";
 import { storage } from "../auth/storage";
 
@@ -29,35 +30,16 @@ export async function requestApi(path: string, method = "GET", body?: unknown, r
   if (!session) throw new ApiError("Reconnectez-vous.", 401);
   const base = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
   if (!base) throw new Error("Adresse du service non configurée.");
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
-  let response: Response;
-  try {
-    response = await fetch(`${base}${path}`, {
-      method, headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: controller.signal,
-    });
-  } catch {
-    throw new Error("Connexion interrompue. Vérifie ton réseau puis réessaie.");
-  } finally { clearTimeout(timeout); }
+  const response = await fetchWithTimeout(`${base}${path}`, {
+    method, headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
   if (response.status === 401 && retry) {
     // Une requête concurrente peut déjà avoir renouvelé le jeton.
     if (useSession.getState().session?.accessToken === session.accessToken) await renewSession();
     return requestApi(path, method, body, false);
   }
-  const text = await response.text();
-  if (response.status === 204 || !text) return null;
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Réponse serveur invalide (attendu JSON, reçu ${text.slice(0, 100)}...)`);
-  }
-  if (!response.ok) {
-    const problem = z.object({ detail: z.string().optional(), errors: z.array(z.object({ message: z.string() })).optional() }).safeParse(data);
-    throw new ApiError(problem.success ? problem.data.errors?.map((e) => e.message).join("\n") || problem.data.detail || "Opération refusée." : "Opération refusée.", response.status);
-  }
-  return data;
+  return parseApiResponse(response);
 }
 export const clientSchema = z.object({ id: z.string(), email: z.string(), tailleCm: z.number().optional(), age: z.number().optional(), sexe: z.enum(["homme", "femme"]).optional() });
 export type Client = z.infer<typeof clientSchema>;
@@ -65,5 +47,5 @@ export const previewSchema = z.object({ userId: z.string(), poidsDepart: z.numbe
 export const planSchema = previewSchema.extend({ id: z.string(), statut: z.enum(["actif", "annule", "termine"]) });
 export type Plan = z.infer<typeof planSchema>;
 export type Preview = z.infer<typeof previewSchema>;
-export const clients = async () => z.array(clientSchema).parse(await requestApi("/users/me/clients"));
-export const currentPlan = async (id: string) => planSchema.nullable().parse(await requestApi(`/plans/users/${encodeURIComponent(id)}`));
+export const clients = async () => parseApiData(z.array(clientSchema), await requestApi("/users/me/clients"));
+export const currentPlan = async (id: string) => parseApiData(planSchema.nullable(), await requestApi(`/plans/users/${encodeURIComponent(id)}`));

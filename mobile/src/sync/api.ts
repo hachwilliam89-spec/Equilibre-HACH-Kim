@@ -1,4 +1,5 @@
 import { requestApi } from "../plans/api";
+import { parseApiData } from "../network/http";
 import {
   pushResultSchema,
   snapshotSchema,
@@ -20,10 +21,10 @@ export const httpSyncApi: SyncApi = {
   async pull(curseur) {
     const query = curseur ? `?curseur=${encodeURIComponent(curseur)}` : "";
     const body = await requestApi(`/sync/me${query}`);
-    return body === null ? null : snapshotSchema.parse(body);
+    return body === null ? null : parseApiData(snapshotSchema, body);
   },
   async push(operations) {
-    return pushResultSchema.parse(
+    return parseApiData(pushResultSchema,
       await requestApi("/sync/me/operations", "POST", {
         operations: operations.map(toWire),
       }),

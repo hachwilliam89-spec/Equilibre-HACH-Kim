@@ -48,8 +48,18 @@ test("une réponse 204 sans corps valide une modification de favori", async () =
   await expect(requestApi("/foods/me/favorites/food-1", "PUT")).resolves.toBeNull();
   expect(text).toHaveBeenCalled();
 });
-test("une réponse HTML invalide déclenche une erreur claire", async () => {
-  const text = jest.fn(async () => "<!DOCTYPE html><html>Error</html>");
-  (global.fetch as jest.Mock).mockResolvedValue({ status: 500, ok: false, text });
-  await expect(requestApi("/api/test")).rejects.toThrow("Réponse serveur invalide");
+test("une route absente n'affiche jamais le HTML du serveur", async () => {
+  const html = '<!DOCTYPE html><html><body><pre>Cannot GET /api/coach/clients</pre></body></html>';
+  (global.fetch as jest.Mock).mockResolvedValue({ status: 404, ok: false, text: async () => html });
+  await expect(requestApi("/coach/clients")).rejects.toMatchObject({
+    status: 404,
+    message: expect.stringContaining("mise à jour de l'API"),
+  });
+});
+test("une erreur HTML du serveur est présentée sans son contenu technique", async () => {
+  (global.fetch as jest.Mock).mockResolvedValue({ status: 502, ok: false, text: async () => "<html>Bad Gateway</html>" });
+  await expect(requestApi("/coach/clients")).rejects.toMatchObject({
+    status: 502,
+    message: "Le service est temporairement indisponible. Réessaie plus tard.",
+  });
 });

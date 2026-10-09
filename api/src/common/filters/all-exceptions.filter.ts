@@ -34,6 +34,29 @@ const DEFAULT_TITLES: Record<number, string> = {
   500: 'Erreur interne',
 };
 
+const DEFAULT_NEST_MESSAGES: Record<number, string> = {
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Not Found',
+  409: 'Conflict',
+  429: 'Too Many Requests',
+  500: 'Internal Server Error',
+};
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function isFieldError(value: unknown): value is FieldError {
+  if (typeof value !== 'object' || value === null) return false;
+  const fieldError = value as Record<string, unknown>;
+  return (
+    typeof fieldError.field === 'string' &&
+    typeof fieldError.message === 'string'
+  );
+}
+
 /**
  * Filtre d'exception global, enregistre via APP_FILTER dans app.module.ts
  * (pas "new" dans main.ts) pour beneficier de l'injection de dependances,
@@ -70,10 +93,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
       detail = rawResponse;
     } else if (rawResponse && typeof rawResponse === 'object') {
       const body = rawResponse as Record<string, unknown>;
-      type = (body.type as string) ?? type;
-      title = (body.title as string) ?? DEFAULT_TITLES[status] ?? 'Erreur';
-      detail = (body.detail as string) ?? title;
-      errors = body.errors as FieldError[] | undefined;
+      type = nonEmptyString(body.type) ?? type;
+      title = nonEmptyString(body.title) ?? DEFAULT_TITLES[status] ?? 'Erreur';
+      const message = Array.isArray(body.message)
+        ? body.message
+            .filter((value): value is string => typeof value === 'string')
+            .join('\n')
+        : nonEmptyString(body.message);
+      const customMessage =
+        message === nonEmptyString(body.error) ||
+        message === DEFAULT_NEST_MESSAGES[status]
+          ? undefined
+          : message;
+      detail = nonEmptyString(body.detail) ?? customMessage ?? title;
+      if (Array.isArray(body.errors)) {
+        errors = (body.errors as unknown[]).filter(isFieldError);
+      }
     } else {
       title = 'Erreur interne';
       detail = 'Une erreur interne est survenue';

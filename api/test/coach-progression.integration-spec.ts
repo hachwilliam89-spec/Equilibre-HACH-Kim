@@ -118,10 +118,30 @@ describe('Progression des utilisateurs côté coach (intégration)', () => {
       .get(`/api/coach/clients/${userId}`)
       .auth(token(coachId, role), { type: 'bearer' });
 
+  it('formate aussi une route inconnue avec le filtre global', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/route-inexistante')
+      .expect(404);
+    expect(response.headers['content-type']).toMatch(
+      /application\/problem\+json/,
+    );
+    expect(response.body).toMatchObject({
+      status: 404,
+      detail: 'Route API introuvable',
+      instance: '/api/route-inexistante',
+    });
+  });
+
   it('réserve les routes au coach authentifié', async () => {
     const coach = await register('coach');
     const user = await register('utilisateur', coach);
-    await request(app.getHttpServer()).get('/api/coach/clients').expect(401);
+    const unauthorized = await request(app.getHttpServer())
+      .get('/api/coach/clients')
+      .expect(401);
+    expect(unauthorized.body).toMatchObject({
+      title: 'Non autorise',
+      detail: 'Non autorise',
+    });
     await request(app.getHttpServer())
       .get(`/api/coach/clients/${user}`)
       .expect(401);
