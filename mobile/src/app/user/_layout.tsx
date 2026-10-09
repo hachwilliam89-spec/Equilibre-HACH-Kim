@@ -5,6 +5,7 @@ import { renderLogoutButton } from "../../auth/LogoutButton";
 import { useSession } from "../../auth/session";
 import { Button, Screen } from "../../plans/ui";
 import { AccountActionContext } from "../../ui/accountAction";
+import { IdentityGate } from "../../identity/IdentityGate";
 import { useSync } from "../../sync/useSync";
 
 /** Synchronisation de fond tant que l'app est au premier plan. */
@@ -54,7 +55,9 @@ export default function UserLayout() {
 
   return (
     <AccountActionContext.Provider value={renderLogoutButton}>
-      <Stack screenOptions={{ headerShown: false }} />
+      <IdentityGate role="utilisateur" userId={session.userId}>
+        <Stack screenOptions={{ headerShown: false }} />
+      </IdentityGate>
     </AccountActionContext.Provider>
   );
 }

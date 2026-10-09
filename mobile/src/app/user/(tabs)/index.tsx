@@ -20,6 +20,7 @@ import { SyncStatus } from "../../../sync/SyncStatus";
 import { useSync } from "../../../sync/useSync";
 import { Collapsible } from "../../../ui/Collapsible";
 import { todayLabel } from "../../../ui/dates";
+import { useIdentity } from "../../../identity/store";
 import { ChevronRight } from "../../../ui/icons";
 import { MeasurementField } from "../../../ui/MeasurementField";
 import { styles as s } from "../../../ui/styles";
@@ -77,6 +78,7 @@ function DailyBudgetCard() {
 }
 
 export default function WeightTrackingScreen() {
+  const prenom = useIdentity((state) => state.me?.prenom);
   const { vue, enCours, horsLigne, erreur, saisirPoids, synchroniser } = useSync();
   const tracking = vue.suiviPoids;
   const history = vue.mesures;
@@ -130,6 +132,7 @@ export default function WeightTrackingScreen() {
       inTabs
       eyebrow={todayLabel()}
       title="Mon suivi"
+      subtitle={prenom ? `Bonjour ${prenom}` : undefined}
       refreshing={enCours && !loading}
       onRefresh={retry}
     >

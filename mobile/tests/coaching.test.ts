@@ -46,6 +46,17 @@ test("trie les utilisateurs à surveiller en premier puis par e-mail", () => {
   expect(sorted.map((c) => c.email)).toEqual(["max@x.fr", "ana@x.fr", "bob@x.fr", "zoe@x.fr"]);
 });
 
+test("trie par nom de famille, l'e-mail ne servant qu'aux anciens comptes", () => {
+  const named = (email: string, prenom: string, nom: string) => ({ ...client(email, "dans-les-clous"), prenom, nom });
+  const sorted = sortForCoach([
+    named("a@x.fr", "Zoé", "Martin"),
+    client("dora@x.fr", "dans-les-clous"),
+    named("b@x.fr", "Éloïse", "Durand"),
+    named("c@x.fr", "Paul", "Bernard"),
+  ]);
+  expect(sorted.map((c) => c.email)).toEqual(["c@x.fr", "dora@x.fr", "b@x.fr", "a@x.fr"]);
+});
+
 test("explique pourquoi regarder un utilisateur et quoi faire", () => {
   const ecart = client("a", "ecart-detecte", "depassement");
   ecart.suiviPoids!.ecartKg = 1.4;

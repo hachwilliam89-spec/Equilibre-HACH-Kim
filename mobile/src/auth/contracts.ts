@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { nomSchema, prenomSchema } from "../identity/identity";
 
 export const credentialsSchema = z.object({
   email: z.string().trim().email("Saisis une adresse e-mail valide."),
@@ -22,9 +23,11 @@ export const sessionSchema = tokensSchema.extend({
 export type Session = z.infer<typeof sessionSchema>;
 export type Credentials = z.infer<typeof credentialsSchema>;
 
+const registrationBase = credentialsSchema.extend({ prenom: prenomSchema, nom: nomSchema });
+
 export const registrationSchema = z.discriminatedUnion("role", [
-  credentialsSchema.extend({ role: z.literal("coach") }),
-  credentialsSchema.extend({
+  registrationBase.extend({ role: z.literal("coach") }),
+  registrationBase.extend({
     role: z.literal("utilisateur"),
     coachCode: z.string().trim().toUpperCase().regex(/^EQ-[A-F0-9]{8}$/, "Saisis le code du coach au format EQ-7A9B2C4D."),
     tailleCm: z.number({ error: "Saisis une taille valide en cm." }).positive("La taille doit être positive."),

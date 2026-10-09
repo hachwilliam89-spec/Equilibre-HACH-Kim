@@ -3,12 +3,15 @@ import { parseApiData } from "../network/http";
 import { measurementSchema, weightTrackingSchema } from "../measurements/api";
 import { macroTargetsSchema } from "../nutrition/api";
 import { clientSchema, requestApi } from "../plans/api";
+import { hasIdentity } from "../identity/identity";
 
 const foodStatusSchema = z.enum(["dans-le-budget", "depassement", "pas-de-donnees-recentes"]);
 
 export const clientOverviewSchema = clientSchema.extend({
   suiviPoids: weightTrackingSchema,
   alimentation: z.object({ statut: foodStatusSchema, ecartKcal: z.number().nullable() }).nullable(),
+  /** Dernière pesée ou saisie ; absent sur une API antérieure. */
+  derniereActivite: z.string().nullable().optional(),
 });
 
 export const jourCaloriqueSchema = z.object({
@@ -63,10 +66,11 @@ export function attentionLevel(client: Pick<ClientOverview, "suiviPoids" | "alim
   return 0;
 }
 
-/** Les utilisateurs à surveiller d'abord, puis par e-mail. */
+/** Les utilisateurs à surveiller d'abord, puis par nom (e-mail pour un ancien compte). */
 export function sortForCoach<T extends ClientOverview>(clients: T[]): T[] {
+  const key = (client: T) => (hasIdentity(client) ? `${client.nom} ${client.prenom}` : client.email);
   return [...clients].sort(
-    (a, b) => attentionLevel(b) - attentionLevel(a) || a.email.localeCompare(b.email, "fr"),
+    (a, b) => attentionLevel(b) - attentionLevel(a) || key(a).localeCompare(key(b), "fr", { sensitivity: "base" }),
   );
 }
 

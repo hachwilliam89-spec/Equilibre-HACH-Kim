@@ -10,6 +10,8 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
   onRegistered: (email: string) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const [prenom, setPrenom] = useState("");
+  const [nom, setNom] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"utilisateur" | "coach">("utilisateur");
@@ -24,7 +26,7 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
   const submit = async () => {
     if (pending.current) return;
     const parsed = registrationSchema.safeParse({
-      email, password, role, coachCode,
+      prenom, nom, email, password, role, coachCode,
       tailleCm: Number(taille.trim().replace(",", ".")),
       age: age.trim() ? Number(age.trim()) : undefined,
       sexe,
@@ -45,6 +47,16 @@ export function RegistrationForm({ onRegistered, onBusyChange }: {
   };
   return (
         <View style={s.card}>
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <View style={{ flex: 1, gap: 6 }}>
+              <Text style={s.label}>Prénom</Text>
+              <TextInput accessibilityLabel="Prénom" style={s.input} value={prenom} onChangeText={setPrenom} autoCapitalize="words" autoComplete="given-name" textContentType="givenName" maxLength={50} editable={!busy} />
+            </View>
+            <View style={{ flex: 1, gap: 6 }}>
+              <Text style={s.label}>Nom</Text>
+              <TextInput accessibilityLabel="Nom" style={s.input} value={nom} onChangeText={setNom} autoCapitalize="words" autoComplete="family-name" textContentType="familyName" maxLength={50} editable={!busy} />
+            </View>
+          </View>
           <Text style={s.label}>Adresse e-mail</Text>
           <TextInput accessibilityLabel="Adresse e-mail" style={s.input} value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="email" editable={!busy} />
           <Text style={s.label}>Mot de passe</Text>
