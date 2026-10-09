@@ -18,6 +18,13 @@ import {
 } from "./presentation";
 
 type Meal = Exclude<MealCategory, "non-classe">;
+
+/** Modification d'une entrée existante : quantité et repas de départ, enregistrement. */
+export interface SheetEdit {
+  quantiteGrammes: number;
+  caloriesKcal: number;
+  onSave: (quantiteGrammes: number, meal: Meal) => Promise<void>;
+}
 const PAS_GRAMMES = 10;
 
 const mealLabel = (value: Meal) =>
@@ -60,42 +67,47 @@ export function AddFoodSheet({
   onMealChange,
   onClose,
   onAdded,
+  edit,
 }: {
   food: ReferenceFood | null;
   meal: Meal;
   onMealChange: (meal: Meal) => void;
   onClose: () => void;
   onAdded: (food: ReferenceFood, meal: Meal) => void;
+  edit?: SheetEdit;
 }) {
   return (
     <Modal visible={food !== null} transparent animationType="slide" onRequestClose={onClose}>
       {food && (
-        <SheetContent key={food.id} food={food} meal={meal} onMealChange={onMealChange} onClose={onClose} onAdded={onAdded} />
+        <SheetContent key={food.id} food={food} meal={meal} onMealChange={onMealChange} onClose={onClose} onAdded={onAdded} edit={edit} />
       )}
     </Modal>
   );
 }
 
 function SheetContent({
-  food, meal, onMealChange, onClose, onAdded,
+  food, meal, onMealChange, onClose, onAdded, edit,
 }: {
   food: ReferenceFood;
   meal: Meal;
   onMealChange: (meal: Meal) => void;
   onClose: () => void;
   onAdded: (food: ReferenceFood, meal: Meal) => void;
+  edit?: SheetEdit;
 }) {
   const insets = useSafeAreaInsets();
   const ajouterAliment = useSync((state) => state.ajouterAliment);
   const alimentation = useSync((state) => state.vue.alimentation);
-  const [quantityText, setQuantityText] = useState(String(defaultPortion(food)));
+  const [quantityText, setQuantityText] = useState(String(edit ? edit.quantiteGrammes : defaultPortion(food)));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const quantity = parseFoodQuantity(quantityText);
   const preview = quantity !== null ? nutritionForQuantity(food, quantity) : null;
   const todayUtc = new Date().toISOString().slice(0, 10);
-  const consumed = alimentation?.journaux.find((j) => j.jourUtc === todayUtc)?.totalCaloriesKcal ?? 0;
+  // En modification, l'ancienne quantité est remplacée : elle ne compte plus.
+  const consumed = (alimentation?.journaux.find((j) => j.jourUtc === todayUtc)?.totalCaloriesKcal ?? 0)
+    - (edit?.caloriesKcal ?? 0);
   const remaining = alimentation && preview ? alimentation.budgetCalorique - consumed - preview.caloriesKcal : null;
 
   const step = (delta: number) => {
@@ -116,10 +128,13 @@ function SheetContent({
     setBusy(true);
     setError("");
     try {
-      await ajouterAliment(food, quantity, meal);
+      if (edit) await edit.onSave(quantity, meal);
+      else await ajouterAliment(food, quantity, meal);
       onAdded(food, meal);
     } catch {
-      setError("Ajout impossible sur l’appareil. Vérifiez votre journal avant de réessayer.");
+      setError(edit
+        ? "Modification impossible sur l’appareil. Vérifiez votre journal avant de réessayer."
+        : "Ajout impossible sur l’appareil. Vérifiez votre journal avant de réessayer.");
       setBusy(false);
     }
   };
@@ -227,7 +242,9 @@ function SheetContent({
         </ScrollView>
         <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: insets.bottom + 16, borderTopWidth: 1, borderTopColor: colors.border }}>
           <Button
-            title={busy ? "Ajout en cours…" : `Ajouter ${mealTarget[meal]}${preview ? ` · ${formatKcal(preview.caloriesKcal)} kcal` : ""}`}
+            title={busy
+              ? edit ? "Mise à jour…" : "Ajout en cours…"
+              : `${edit ? "Mettre à jour" : `Ajouter ${mealTarget[meal]}`}${preview ? ` · ${formatKcal(preview.caloriesKcal)} kcal` : ""}`}
             onPress={() => void submit()}
             disabled={busy}
           />
