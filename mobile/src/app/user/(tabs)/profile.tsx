@@ -7,7 +7,6 @@ import {
   updateProfile,
   type Profile,
 } from "../../../profile/api";
-import { LogoutButton } from "../../../auth/LogoutButton";
 import { Button, Field, InfoRow, Screen } from "../../../plans/ui";
 import { colors } from "../../../ui/theme";
 import { styles as s } from "../../../ui/styles";
@@ -99,7 +98,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <Screen inTabs eyebrow="ESPACE UTILISATEUR" title="Mon profil" heroAction={<LogoutButton />}>
+    <Screen inTabs eyebrow="ESPACE UTILISATEUR" title="Mon profil">
       {loading ? (
         <View style={s.card}>
           <ActivityIndicator

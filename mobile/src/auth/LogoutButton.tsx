@@ -1,14 +1,17 @@
 import { Alert, Platform, Pressable, Text } from "react-native";
+import type { AccountActionTone } from "../ui/accountAction";
 import { LogoutIcon } from "../ui/icons";
 import { colors } from "../ui/theme";
 import { logoutMessage, useLogout } from "./useLogout";
 
 /**
- * Bouton de déconnexion du bandeau : toujours visible en haut de l'écran,
+ * Bouton de déconnexion de la barre fixe : visible sur chaque écran connecté,
  * avec une confirmation qui prévient des modifications non envoyées.
  */
-export function LogoutButton() {
+export function LogoutButton({ tone = "onBrand" }: { tone?: AccountActionTone }) {
   const { prepare, leave, busy } = useLogout();
+  const onBrand = tone === "onBrand";
+  const foreground = onBrand ? colors.onBrand : colors.brand;
 
   const press = async () => {
     const pending = await prepare();
@@ -38,14 +41,21 @@ export function LogoutButton() {
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 999,
-        backgroundColor: pressed ? "#ffffff33" : "#ffffff1f",
+        backgroundColor: onBrand
+          ? pressed ? "#ffffff33" : "#ffffff1f"
+          : pressed ? colors.mint : colors.mintSoft,
         opacity: busy ? 0.6 : 1,
       })}
     >
-      <LogoutIcon size={18} color={colors.onBrand} />
-      <Text style={{ color: colors.onBrand, fontSize: 13, fontWeight: "700" }}>
+      <LogoutIcon size={18} color={foreground} />
+      <Text style={{ color: foreground, fontSize: 13, fontWeight: "700" }}>
         {busy ? "…" : "Déconnexion"}
       </Text>
     </Pressable>
   );
+}
+
+/** Rendu fourni aux écrans connectés via `AccountActionContext`. */
+export function renderLogoutButton(tone: AccountActionTone) {
+  return <LogoutButton tone={tone} />;
 }
