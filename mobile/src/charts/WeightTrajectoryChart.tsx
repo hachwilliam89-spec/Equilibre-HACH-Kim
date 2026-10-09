@@ -15,11 +15,14 @@ import {
 } from "./weight-series";
 
 const ranges: { value: WeightChartRange; label: string }[] = [
-  { value: 7, label: "7 jours" },
-  { value: 30, label: "30 jours" },
-  { value: 90, label: "90 jours" },
-  { value: "plan", label: "Plan entier" },
+  { value: 7, label: "7 j" },
+  { value: 30, label: "30 j" },
+  { value: 90, label: "90 j" },
+  { value: "plan", label: "Tout" },
 ];
+
+const rangeAccessibilityLabel = (range: WeightChartRange) =>
+  range === "plan" ? "Plan entier" : `${range} jours`;
 
 export function WeightTrajectoryChart({
   plan,
@@ -44,24 +47,24 @@ export function WeightTrajectoryChart({
   return (
     <View style={{ gap: 10 }}>
       <Text style={s.cardTitle}>Poids réel et trajectoire cible</Text>
-      <Text style={s.metricLabel}>Période affichée</Text>
-      <View style={s.choiceRow}>
+      <Text style={s.metricLabel}>Période</Text>
+      <View style={{ flexDirection: "row", gap: 6 }}>
         {ranges.map(({ value, label }) => {
           const selected = range === value;
           return (
             <Pressable
               key={value}
               accessibilityRole="radio"
-              accessibilityLabel={label}
+              accessibilityLabel={rangeAccessibilityLabel(value)}
               accessibilityState={{ checked: selected }}
               onPress={() => setRange(value)}
               style={[
                 s.choice,
-                { flexGrow: 1, minWidth: 92, alignItems: "center" },
+                { flex: 1, minWidth: 0, minHeight: 44, paddingHorizontal: 4, alignItems: "center", justifyContent: "center" },
                 selected && s.choiceSelected,
               ]}
             >
-              <Text style={s.label}>{label}</Text>
+              <Text style={[s.label, { fontSize: 13, color: selected ? CHART_COLORS.measured : CHART_COLORS.target }]}>{label}</Text>
             </Pressable>
           );
         })}
@@ -131,9 +134,20 @@ export function WeightTrajectoryChart({
         <Text style={s.historyMeta}>{formatUtcDay(window.startUtc)}</Text>
         <Text style={s.historyMeta}>{formatUtcDay(window.endUtc)}</Text>
       </View>
-      <Text style={s.historyMeta}>
-        ● vos pesées · ┄ gris : trajectoire du plan · ┄ vert : jours sans pesée
-      </Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+          <View style={{ width: 15, height: 3, borderRadius: 2, backgroundColor: CHART_COLORS.measured }} />
+          <Text style={s.historyMeta}>Pesées</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+          <View style={{ width: 15, borderTopWidth: 2, borderStyle: "dashed", borderColor: CHART_COLORS.target }} />
+          <Text style={s.historyMeta}>Objectif</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+          <View style={{ width: 15, borderTopWidth: 2, borderStyle: "dashed", borderColor: CHART_COLORS.measured }} />
+          <Text style={s.historyMeta}>Jours sans pesée</Text>
+        </View>
+      </View>
       {showLast && last && (
         <Text style={s.label}>
           Dernière pesée valide : {formatWeight(last.weightKg)} le {formatUtcDay(last.dayUtc)}
