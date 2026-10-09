@@ -81,7 +81,7 @@ export function WeeklyCaloriesChart({ jours, budget }: { jours: JourCalorique[];
                 <SvgText x={cx} y={FRAME.bottom + 15} fontSize={11} fontWeight="700" fill={index === jours.length - 1 ? colors.ink : colors.muted} textAnchor="middle">
                   {index === jours.length - 1 ? "Auj." : JOURS[weekday]}
                 </SvgText>
-                <SvgText x={cx} y={FRAME.bottom + 28} fontSize={10} fill={colors.subtle} textAnchor="middle">
+                <SvgText x={cx} y={FRAME.bottom + 28} fontSize={11} fill={colors.subtle} textAnchor="middle">
                   {Number(jour.jourUtc.slice(8, 10))}
                 </SvgText>
               </G>

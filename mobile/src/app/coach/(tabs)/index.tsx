@@ -65,7 +65,7 @@ function UserCard({ client }: { client: ClientOverview }) {
             </Text>
           ))}
           {action && (
-            <Text style={[s.pillText, { marginTop: 2 }]}>→ {coachActionLabel[action]}</Text>
+            <Text style={[s.pillText, { marginTop: 2 }]}>Suite suggérée : {coachActionLabel[action]}</Text>
           )}
         </View>
       ) : (

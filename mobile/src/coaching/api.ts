@@ -84,8 +84,8 @@ export interface CoachAlert {
 }
 
 export const coachActionLabel: Record<CoachAction, string> = {
-  "revoir-plan": "Revoir le plan",
-  relancer: "Relancer l’utilisateur",
+  "revoir-plan": "Examiner le suivi et le plan",
+  relancer: "Faire le point avec l’utilisateur",
   "creer-plan": "Créer un plan",
   "attendre-pesee": "Attendre la première pesée",
 };
