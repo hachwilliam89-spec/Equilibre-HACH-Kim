@@ -6,8 +6,9 @@ import {
   foodStatusPresentation,
   formatNutrition,
   groupEntriesByMeal,
-  referenceFoodFromEntry,
-} from "../../../nutrition/presentation";
+  referenceFoodFromEntry, formatKcal, suggestedMeal } from "../../../nutrition/presentation";
+import { AddFoodSheet } from "../../../nutrition/AddFoodSheet";
+import type { MealCategory } from "../../../nutrition/api";
 import { FoodIcon } from "../../../nutrition/FoodIcon";
 import { foodIconKind } from "../../../nutrition/food-icon-kind";
 import { MacroBreakdown } from "../../../nutrition/MacroBreakdown";
@@ -28,10 +29,12 @@ const localStyles = StyleSheet.create({
 function Entry({
   entry,
   onRemove,
+  onEdit,
   disabled,
 }: {
   entry: LocalFoodEntry;
   onRemove: () => void;
+  onEdit: () => void;
   disabled: boolean;
 }) {
   return (
@@ -39,7 +42,7 @@ function Entry({
       <View style={[s.historyMain, { alignItems: "center", gap: 10 }]}>
         <FoodIcon kind={foodIconKind(entry.nom)} size={34} />
         <Text style={[s.historyWeight, { flex: 1 }]}>{entry.nom}</Text>
-        <Text style={s.label}>{formatNutrition(entry.caloriesKcal)} kcal</Text>
+        <Text style={s.label}>{formatKcal(entry.caloriesKcal)} kcal</Text>
       </View>
       <Text style={s.historyMeta}>
         {formatNutrition(entry.quantiteGrammes)} g
@@ -51,22 +54,39 @@ function Entry({
         glucides={entry.glucidesG}
         lipides={entry.lipidesG}
       />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Retirer ${entry.nom} du journal`}
-        disabled={disabled}
-        onPress={onRemove}
-        style={{ alignSelf: "flex-start" }}
-      >
-        <Text style={[s.link, disabled && s.disabled]}>Retirer</Text>
-      </Pressable>
+      <View style={{ flexDirection: "row", gap: 20 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Modifier la quantité de ${entry.nom}`}
+          disabled={disabled}
+          onPress={onEdit}
+          hitSlop={6}
+        >
+          <Text style={[s.link, disabled && s.disabled]}>Modifier</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Retirer ${entry.nom} du journal`}
+          disabled={disabled}
+          onPress={onRemove}
+          hitSlop={6}
+        >
+          <Text style={[s.link, { color: colors.muted }, disabled && s.disabled]}>Retirer</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 export default function FoodJournalScreen() {
-  const { vue, enCours, horsLigne, erreur, retirerEntree, ajouterAliment, synchroniser } =
+  const { vue, enCours, horsLigne, erreur, retirerEntree, ajouterAliment, modifierEntree, synchroniser } =
     useSync();
+  const [editing, setEditing] = useState<LocalFoodEntry | null>(null);
+  const [editMeal, setEditMeal] = useState<Exclude<MealCategory, "non-classe">>("collation");
+  const startEdit = (entry: LocalFoodEntry) => {
+    setEditMeal(entry.categorieRepas === "non-classe" ? suggestedMeal(new Date().getHours()) : entry.categorieRepas);
+    setEditing(entry);
+  };
   const status = vue.alimentation;
   const { loading, error } = etatChargement({ ...vue, enCours, horsLigne, erreur });
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -177,10 +197,10 @@ export default function FoodJournalScreen() {
             </View>
             <Text style={{ fontSize: 30, fontWeight: "800", color: colors.ink }}>
               {budgetKcal <= 0
-                ? `${formatNutrition(totalKcal)} kcal consommées`
+                ? `${formatKcal(totalKcal)} kcal consommées`
                 : totalKcal <= budgetKcal
-                  ? `${formatNutrition(budgetKcal - totalKcal)} kcal restantes`
-                  : `${formatNutrition(totalKcal - budgetKcal)} kcal au-dessus de la cible`}
+                  ? `${formatKcal(budgetKcal - totalKcal)} kcal restantes`
+                  : `${formatKcal(totalKcal - budgetKcal)} kcal au-dessus de la cible`}
             </Text>
             <DailyBudgetChart
               total={totalKcal}
@@ -228,7 +248,7 @@ export default function FoodJournalScreen() {
                   <View style={[s.historyMain, { marginTop: 4 }]}>
                     <Text accessibilityRole="header" style={[s.metricLabel, { color: colors.brand }]}>{group.label}</Text>
                     <Text style={s.historyMeta}>
-                      {formatNutrition(group.caloriesKcal)} kcal
+                      {formatKcal(group.caloriesKcal)} kcal
                     </Text>
                   </View>
                   {group.entries.map((entry) => (
@@ -236,6 +256,7 @@ export default function FoodJournalScreen() {
                       key={entry.id}
                       entry={entry}
                       onRemove={() => void confirmRemove(entry)}
+                      onEdit={() => startEdit(entry)}
                       disabled={removingId !== null}
                     />
                   ))}
@@ -256,6 +277,18 @@ export default function FoodJournalScreen() {
       )}
 
       {(loading || error || status === null) && <SyncStatus />}
+      <AddFoodSheet
+        food={editing ? referenceFoodFromEntry(editing) : null}
+        meal={editMeal}
+        onMealChange={setEditMeal}
+        onClose={() => setEditing(null)}
+        onAdded={() => setEditing(null)}
+        edit={editing ? {
+          quantiteGrammes: editing.quantiteGrammes,
+          caloriesKcal: editing.caloriesKcal,
+          onSave: (quantite, meal) => modifierEntree(editing, quantite, meal),
+        } : undefined}
+      />
     </Screen>
   );
 }

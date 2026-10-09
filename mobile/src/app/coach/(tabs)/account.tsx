@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { LogoutCard } from "../../../auth/LogoutCard";
+import { LogoutButton } from "../../../auth/LogoutButton";
 import { useSession } from "../../../auth/session";
 import { Button, Screen } from "../../../plans/ui";
 import { styles as s } from "../../../ui/styles";
@@ -23,7 +23,7 @@ export default function CoachAccount() {
   };
 
   return (
-    <Screen inTabs eyebrow="ESPACE COACH" title="Mon compte">
+    <Screen inTabs eyebrow="ESPACE COACH" title="Mon compte" heroAction={<LogoutButton />}>
       <View style={[s.card, { backgroundColor: colors.mintSoft, borderColor: colors.mint }]}>
         <Text style={s.metricLabel}>Mon code coach</Text>
         {coachCode ? (
@@ -39,7 +39,6 @@ export default function CoachAccount() {
           <Text style={s.text}>Déconnectez-vous puis reconnectez-vous pour obtenir votre code.</Text>
         )}
       </View>
-      <LogoutCard />
     </Screen>
   );
 }
