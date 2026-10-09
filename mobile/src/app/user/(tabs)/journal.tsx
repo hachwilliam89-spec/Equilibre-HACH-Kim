@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { DailyBudgetChart } from "../../../charts/DailyBudgetChart";
 import {
-  foodStatusPresentation,
+  dailyJournalStatusPresentation,
   formatNutrition,
   groupEntriesByMeal,
   referenceFoodFromEntry, formatKcal, suggestedMeal } from "../../../nutrition/presentation";
@@ -137,7 +137,9 @@ export default function FoodJournalScreen() {
   };
 
   const addFood = () => router.push("/user/add-food");
-  const statusPresentation = status ? foodStatusPresentation[status.statut.statut] : null;
+  const statusPresentation = status
+    ? dailyJournalStatusPresentation(totalKcal, budgetKcal, entries.length > 0)
+    : null;
 
   return (
     <Screen
@@ -196,11 +198,7 @@ export default function FoodJournalScreen() {
               </View>
             </View>
             <Text style={{ fontSize: 30, fontWeight: "800", color: colors.ink }}>
-              {budgetKcal <= 0
-                ? `${formatKcal(totalKcal)} kcal consommées`
-                : totalKcal <= budgetKcal
-                  ? `${formatKcal(budgetKcal - totalKcal)} kcal restantes`
-                  : `${formatKcal(totalKcal - budgetKcal)} kcal au-dessus de la cible`}
+              {formatKcal(totalKcal)} kcal consommées
             </Text>
             <DailyBudgetChart
               total={totalKcal}
@@ -224,12 +222,6 @@ export default function FoodJournalScreen() {
             />
             <Text style={localStyles.note}>
               Cibles indicatives selon ton budget et ton activité ; le suivi reste calorique.
-              {" "}
-              {status.statut.journal
-                ? status.statut.journal.jourUtc === todayUtc
-                  ? "Statut calculé sur aujourd’hui."
-                  : "Statut calculé sur hier : rien n’est encore saisi aujourd’hui."
-                : "Aucune entrée alimentaire aujourd’hui ni hier."}
             </Text>
           </View>
 
