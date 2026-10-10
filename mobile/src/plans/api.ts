@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ApiError, refresh } from "../auth/api";
 import { fetchWithTimeout, parseApiData, parseApiResponse } from "../network/http";
 import { useSession } from "../auth/session";
+import { SESSION_EXPIRED_MESSAGE } from "../auth/contracts";
 import { storage } from "../auth/storage";
 
 let refreshing: Promise<void> | null = null;
@@ -17,7 +18,7 @@ async function renewSession() {
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         await storage.clear();
-        useSession.setState({ session: null, error: "Session expirée. Reconnectez-vous." });
+        useSession.setState({ session: null, error: SESSION_EXPIRED_MESSAGE });
       }
       throw error;
     }

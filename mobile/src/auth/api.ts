@@ -1,4 +1,5 @@
 import {
+  SESSION_EXPIRED_MESSAGE,
   registrationSchema,
   type Registration,
   credentialsSchema,
@@ -27,7 +28,7 @@ export async function authRequest(
     status === 401
       ? path === "login"
         ? "E-mail ou mot de passe incorrect."
-        : "Ta session a expiré. Reconnecte-toi."
+        : SESSION_EXPIRED_MESSAGE
       : status === 409 && path === "register"
         ? "Cette adresse e-mail est déjà utilisée."
         : status === 429

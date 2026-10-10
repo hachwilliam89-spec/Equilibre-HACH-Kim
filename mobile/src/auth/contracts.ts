@@ -21,6 +21,13 @@ export const sessionSchema = tokensSchema.extend({
   userId: z.string().uuid(),
 });
 export type Session = z.infer<typeof sessionSchema>;
+
+/**
+ * Session expirée (refresh token refusé). Les données de l'appareil sont
+ * conservées : elles repartent après une reconnexion avec le même compte.
+ */
+export const SESSION_EXPIRED_MESSAGE =
+  "Votre session a expiré. Reconnectez-vous : vos saisies enregistrées sur ce téléphone sont conservées et seront envoyées.";
 export type Credentials = z.infer<typeof credentialsSchema>;
 
 const registrationBase = credentialsSchema.extend({ prenom: prenomSchema, nom: nomSchema });
