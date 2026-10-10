@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
@@ -10,7 +10,12 @@ import { RefreshTokenRecord } from '../../domain/entities/refresh-token-record.e
 import { AppException } from '../../../common/errors/app-exception';
 import { hashToken } from '../../../common/security/hash-token';
 import type { EnvConfig } from '../../../config/env.schema';
-import { REFRESH_TOKEN_TTL_MS } from '../auth.constants';
+import {
+  REFRESH_REUSE_GRACE_MS,
+  REFRESH_TOKEN_TTL_MS,
+  REFRESH_TOKEN_TTL_SECONDS,
+} from '../auth.constants';
+import { estReutilisationSuspecte } from '../../domain/services/refresh-token-reuse';
 
 export interface RefreshResult {
   accessToken: string;
@@ -19,6 +24,8 @@ export interface RefreshResult {
 
 @Injectable()
 export class RefreshTokenUseCase {
+  private readonly logger = new Logger(RefreshTokenUseCase.name);
+
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepositoryPort,
@@ -54,6 +61,22 @@ export class RefreshTokenUseCase {
     const wasRevoked =
       await this.refreshTokenRepository.revokeByTokenHash(oldTokenHash);
     if (!wasRevoked) {
+      // Jeton deja echange : au-dela du delai de grace, c'est probablement
+      // une copie volee. On coupe toutes les sessions du compte ; le
+      // proprietaire legitime devra se reconnecter.
+      const record =
+        await this.refreshTokenRepository.findByTokenHash(oldTokenHash);
+      if (
+        record &&
+        estReutilisationSuspecte(record, new Date(), REFRESH_REUSE_GRACE_MS)
+      ) {
+        const revoquees = await this.refreshTokenRepository.revokeAllForUser(
+          record.userId,
+        );
+        this.logger.warn(
+          `Reutilisation d'un refresh token revoque : ${revoquees} session(s) revoquee(s) pour ${record.userId}`,
+        );
+      }
       throw new AppException(
         'invalid-refresh-token',
         'Refresh token invalide ou expire',
@@ -85,7 +108,7 @@ export class RefreshTokenUseCase {
     const newRefreshToken = this.jwtService.sign(
       { ...newPayload, jti: newRefreshTokenId },
       {
-        expiresIn: '7d',
+        expiresIn: REFRESH_TOKEN_TTL_SECONDS,
         secret: refreshSecret,
       },
     );

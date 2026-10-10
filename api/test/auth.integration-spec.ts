@@ -114,6 +114,8 @@ describe('Auth (integration)', () => {
     userId: string;
     tokenHash: string;
     revoked: boolean;
+    revokedAt?: Date;
+    expiresAt: Date;
   }
 
   const usersCollection = (
@@ -371,6 +373,69 @@ describe('Auth (integration)', () => {
         .find({ userId: oldRecord?.userId, revoked: false })
         .toArray();
       expect(activeRecords).toHaveLength(1);
+    });
+
+    describe('session glissante et reutilisation (FR403-856)', () => {
+      // Instance dediee : chaque test se connecte, et POST /auth/login est
+      // limite a 5 tentatives par minute et par IP.
+      let reuseApp: INestApplication<App>;
+
+      beforeAll(async () => {
+        reuseApp = await createIsolatedApp();
+      });
+
+      afterAll(async () => {
+        if (reuseApp) await reuseApp.close();
+      });
+
+      it('revoque toutes les sessions quand un refresh token deja echange revient apres le delai de grace (vol)', async () => {
+        const { refreshToken } = await registerAndLogin(reuseApp);
+        const rotation = await request(reuseApp.getHttpServer())
+          .post('/api/auth/refresh')
+          .send({ refreshToken })
+          .expect(HttpStatus.OK);
+        const latest = (rotation.body as { refreshToken: string }).refreshToken;
+
+        // Simule un rejeu tardif : l'ancien jeton a ete echange il y a une minute.
+        await refreshTokensCollection(reuseApp).updateOne(
+          { tokenHash: hashToken(refreshToken) },
+          { $set: { revokedAt: new Date(Date.now() - 60_000) } },
+        );
+
+        await request(reuseApp.getHttpServer())
+          .post('/api/auth/refresh')
+          .send({ refreshToken })
+          .expect(HttpStatus.UNAUTHORIZED);
+
+        // Le jeton le plus recent, celui du proprietaire legitime, est revoque
+        // lui aussi : toutes les sessions du compte sont coupees.
+        const latestRecord = await refreshTokensCollection(reuseApp).findOne({
+          tokenHash: hashToken(latest),
+        });
+        expect(latestRecord?.revoked).toBe(true);
+        await request(reuseApp.getHttpServer())
+          .post('/api/auth/refresh')
+          .send({ refreshToken: latest })
+          .expect(HttpStatus.UNAUTHORIZED);
+      });
+
+      it('emet un refresh token valable 30 jours a chaque renouvellement (session glissante)', async () => {
+        const { refreshToken } = await registerAndLogin(reuseApp);
+        const response = await request(reuseApp.getHttpServer())
+          .post('/api/auth/refresh')
+          .send({ refreshToken })
+          .expect(HttpStatus.OK);
+
+        const record = await refreshTokensCollection(reuseApp).findOne({
+          tokenHash: hashToken(
+            (response.body as { refreshToken: string }).refreshToken,
+          ),
+        });
+        const jours =
+          ((record?.expiresAt.getTime() ?? 0) - Date.now()) / 86_400_000;
+        expect(jours).toBeGreaterThan(29.9);
+        expect(jours).toBeLessThanOrEqual(30);
+      });
     });
 
     it('un seul de deux renouvellements simultanes avec le meme refresh token reussit (concurrence)', async () => {
