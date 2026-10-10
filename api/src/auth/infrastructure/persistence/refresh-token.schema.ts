@@ -22,6 +22,11 @@ export class RefreshTokenDocumentClass {
   @Prop({ default: false })
   revoked: boolean;
 
+  // Conservee jusqu'a expiration (index TTL) : permet de distinguer une
+  // course entre requetes d'une reutilisation suspecte du jeton.
+  @Prop({ type: Date })
+  revokedAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,3 +39,4 @@ export const RefreshTokenSchema = SchemaFactory.createForClass(
 // expiresAt atteint -- pas besoin d'un job de nettoyage separe pour purger
 // les vieux tokens expires.
 RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+RefreshTokenSchema.index({ userId: 1, revoked: 1 });

@@ -4,6 +4,8 @@ export interface RefreshTokenRecordProps {
   tokenHash: string;
   expiresAt: Date;
   revoked: boolean;
+  /** Date de révocation (rotation ou déconnexion) ; absente si non révoqué. */
+  revokedAt?: Date;
   createdAt: Date;
 }
 
@@ -32,6 +34,10 @@ export class RefreshTokenRecord {
 
   get revoked(): boolean {
     return this.props.revoked;
+  }
+
+  get revokedAt(): Date | undefined {
+    return this.props.revokedAt;
   }
 
   isValid(): boolean {

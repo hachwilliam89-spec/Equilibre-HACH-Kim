@@ -38,9 +38,17 @@ export class MongooseRefreshTokenRepository implements RefreshTokenRepositoryPor
     // le document, l'autre voit modifiedCount === 0.
     const result = await this.model.updateOne(
       { tokenHash, revoked: false, expiresAt: { $gt: new Date() } },
-      { $set: { revoked: true } },
+      { $set: { revoked: true, revokedAt: new Date() } },
     );
     return result.modifiedCount === 1;
+  }
+
+  async revokeAllForUser(userId: string): Promise<number> {
+    const result = await this.model.updateMany(
+      { userId, revoked: false },
+      { $set: { revoked: true, revokedAt: new Date() } },
+    );
+    return result.modifiedCount;
   }
 
   private toDomain(doc: RefreshTokenDocument): RefreshTokenRecord {
@@ -50,6 +58,7 @@ export class MongooseRefreshTokenRepository implements RefreshTokenRepositoryPor
       tokenHash: doc.tokenHash,
       expiresAt: doc.expiresAt,
       revoked: doc.revoked,
+      revokedAt: doc.revokedAt,
       createdAt: doc.createdAt,
     });
   }

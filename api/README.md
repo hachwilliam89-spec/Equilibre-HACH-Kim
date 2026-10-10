@@ -166,6 +166,8 @@ Relancer uniquement Jest ne réinitialise pas automatiquement MongoDB.
 - Mots de passe hachés avec bcrypt ; limite de 72 octets UTF-8 à l’inscription
   et à la connexion.
 - Rotation des refresh tokens et révocation lors de la déconnexion.
+- Session glissante : access token de 15 min, refresh token de 30 jours renouvelé à chaque utilisation.
+- Détection de réutilisation : un refresh token déjà échangé qui revient plus de 30 s après sa révocation est traité comme volé, et toutes les sessions du compte sont révoquées. Dans les 30 s, le rejet reste simple (requêtes concurrentes d’un même appareil).
 - Limitation des requêtes : 100 par minute et par IP au niveau global,
   5 par minute pour la connexion.
 - Contrôle JWT et rôles sur les routes de plans.

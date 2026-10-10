@@ -47,10 +47,10 @@ export const foodStatusPresentation: Record<
   { label: string; symbol: string; background: string; color: string }
 > = {
   "dans-le-budget": {
-    label: "Dans le budget",
-    symbol: "✓",
-    background: "#e1f5eb",
-    color: "#087454",
+    label: "Budget non dépassé",
+    symbol: "·",
+    background: "#edf1f0",
+    color: "#536861",
   },
   depassement: {
     label: "Dépassement",
@@ -146,6 +146,27 @@ export function dailyBudgetPresentation(
     zoneEndPercent: Math.max(0, Math.min((zoneEnd / scale) * 100, 100)),
     consumedPercent: Math.max(0, Math.min((total / scale) * 100, 100)),
     targetPercent: Math.max(0, Math.min((budget / scale) * 100, 100)),
+  };
+}
+
+/** Statut du jour affiché à l'utilisateur, distinct du dernier jour saisi côté API. */
+export function dailyJournalStatusPresentation(
+  total: number,
+  budget: number,
+  hasEntries: boolean,
+) {
+  const phase = dailyBudgetPresentation(total, budget, hasEntries).phase;
+  if (phase === "empty") return {
+    label: "Aucune saisie", symbol: "○", background: "#edf1f0", color: "#536861",
+  };
+  if (phase === "progress") return {
+    label: "Journal en cours", symbol: "·", background: "#edf1f0", color: "#536861",
+  };
+  if (phase === "target") return {
+    label: "Zone cible atteinte", symbol: "✓", background: "#e1f5eb", color: "#087454",
+  };
+  return {
+    label: "Dépassement", symbol: "!", background: "#fff0dc", color: "#9a4d00",
   };
 }
 

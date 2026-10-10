@@ -1,5 +1,7 @@
 import {
   dailyBudgetPresentation,
+  dailyJournalStatusPresentation,
+  foodStatusPresentation,
   groupEntriesByMeal,
   journalForDay,
   nutritionForQuantity,
@@ -61,6 +63,14 @@ it("ne présente pas un jour vide comme une consommation confirmée", () => {
   expect(display.note).toBe("Aucune entrée consignée aujourd’hui.");
   expect(display.phase).toBe("empty");
   expect(display.consumedPercent).toBe(0);
+});
+
+it("ne confond pas budget non dépassé et zone cible atteinte", () => {
+  expect(foodStatusPresentation["dans-le-budget"].label).toBe("Budget non dépassé");
+  expect(dailyJournalStatusPresentation(0, 2238, false).label).toBe("Aucune saisie");
+  expect(dailyJournalStatusPresentation(53, 2238, true).label).toBe("Journal en cours");
+  expect(dailyJournalStatusPresentation(2088, 2238, true).label).toBe("Zone cible atteinte");
+  expect(dailyJournalStatusPresentation(2389, 2238, true).label).toBe("Dépassement");
 });
 
 it("accepte une quantité française et estime calories et macros pour 200 g", () => {

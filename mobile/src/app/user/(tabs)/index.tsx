@@ -184,7 +184,7 @@ export default function WeightTrackingScreen() {
             {progress && (
               <View
                 accessible
-                accessibilityLabel={`Objectif : ${formatWeight(progress.parcouruKg)} sur ${formatWeight(progress.totalKg)}, cible ${formatWeight(tracking.plan.poidsCible)}`}
+                accessibilityLabel={`Progression : ${formatWeight(progress.parcouruKg)} sur ${formatWeight(progress.totalKg)}, cible ${formatWeight(tracking.plan.poidsCible)}`}
                 style={{ gap: 6 }}
               >
                 <View style={{ height: 10, borderRadius: 5, backgroundColor: colors.mint, overflow: "hidden" }}>
@@ -199,7 +199,7 @@ export default function WeightTrackingScreen() {
                 </View>
                 <View style={s.summaryRow}>
                   <Text style={s.historyMeta}>
-                    {formatWeight(progress.parcouruKg)} sur {formatWeight(progress.totalKg)}
+                    Progression : {formatWeight(progress.parcouruKg)} sur {formatWeight(progress.totalKg)}
                   </Text>
                   <Text style={[s.historyMeta, { fontWeight: "700", color: colors.ink }]}>
                     Cible {formatWeight(tracking.plan.poidsCible)}

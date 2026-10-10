@@ -10,7 +10,10 @@ import type { RefreshTokenRepositoryPort } from '../../domain/ports/refresh-toke
 import { RefreshTokenRecord } from '../../domain/entities/refresh-token-record.entity';
 import { AppException } from '../../../common/errors/app-exception';
 import { hashToken } from '../../../common/security/hash-token';
-import { REFRESH_TOKEN_TTL_MS } from '../auth.constants';
+import {
+  REFRESH_TOKEN_TTL_MS,
+  REFRESH_TOKEN_TTL_SECONDS,
+} from '../auth.constants';
 import type { EnvConfig } from '../../../config/env.schema';
 
 export interface LoginResult {
@@ -69,7 +72,7 @@ export class LoginUseCase {
     const refreshToken = this.jwtService.sign(
       { ...payload, jti: refreshTokenId },
       {
-        expiresIn: '7d',
+        expiresIn: REFRESH_TOKEN_TTL_SECONDS,
         secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
       },
     );
