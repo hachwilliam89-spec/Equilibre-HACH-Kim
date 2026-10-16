@@ -116,3 +116,10 @@ export async function removeFoodEntry(entryId: string): Promise<FoodJournal> {
     await requestApi(`/food-journals/me/entries/${encodeURIComponent(entryId)}`, "DELETE"),
   );
 }
+
+/** Journal d'un jour passé, en lecture seule (null si aucun journal ce jour-là). */
+export async function getFoodJournalForDay(jourUtc: string): Promise<FoodJournal | null> {
+  return parseApiData(foodJournalSchema.nullable(),
+    await requestApi(`/food-journals/me/days/${encodeURIComponent(jourUtc)}`),
+  );
+}
