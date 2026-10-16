@@ -1,0 +1,121 @@
+digraph BDD {
+  graph [rankdir=LR, fontname="Helvetica", bgcolor="white", pad=0.4, nodesep=0.5, ranksep=0.9, dpi=180,
+         label="Base MongoDB Équilibre — 4 collections (MongoDB 7.0)\nblocs vert clair : imbriqués dans le document suivis · surlignage jaune : champs ajoutés en octobre 2026", labelloc=t, fontsize=20];
+  node  [shape=plain, fontname="Helvetica", fontsize=12];
+  edge  [fontname="Helvetica", fontsize=11, color="#5b6b66"];
+
+  users [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5" COLOR="#2f6f5e">
+   <TR><TD BGCOLOR="#2f6f5e" ALIGN="CENTER"><FONT COLOR="white"><B>users</B></FONT></TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="id">_id : UUID</TD></TR>
+   <TR><TD ALIGN="LEFT">email (unique, minuscules)</TD></TR>
+   <TR><TD ALIGN="LEFT">passwordHash</TD></TR>
+   <TR><TD ALIGN="LEFT">role : coach | utilisateur</TD></TR>
+   <TR><TD ALIGN="LEFT" BGCOLOR="#fff4d6">prenom, nom (identité)</TD></TR>
+   <TR><TD ALIGN="LEFT">profil { tailleCm, age, sexe }</TD></TR>
+   <TR><TD ALIGN="LEFT">coachCode (coach)</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="coach">coachId (utilisateur)</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="fav">favoriteFoodIds [ ]</TD></TR>
+   <TR><TD ALIGN="LEFT">createdAt, updatedAt</TD></TR>
+  </TABLE>>];
+
+  tokens [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5" COLOR="#2f6f5e">
+   <TR><TD BGCOLOR="#2f6f5e"><FONT COLOR="white"><B>refresh_tokens</B></FONT></TD></TR>
+   <TR><TD ALIGN="LEFT">_id : UUID</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="user">userId</TD></TR>
+   <TR><TD ALIGN="LEFT">tokenHash (unique)</TD></TR>
+   <TR><TD ALIGN="LEFT">expiresAt (index TTL)</TD></TR>
+   <TR><TD ALIGN="LEFT">revoked</TD></TR>
+   <TR><TD ALIGN="LEFT" BGCOLOR="#fff4d6">revokedAt (détection de réutilisation)</TD></TR>
+   <TR><TD ALIGN="LEFT">createdAt, updatedAt</TD></TR>
+  </TABLE>>];
+
+  suivis [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5" COLOR="#2f6f5e">
+   <TR><TD BGCOLOR="#2f6f5e"><FONT COLOR="white"><B>suivis</B> (racine de l’agrégat)</FONT></TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="id">_id = UUID de l’utilisateur</TD></TR>
+   <TR><TD ALIGN="LEFT">version (verrouillage optimiste)</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="plan">planActif, plans [ ]</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="mes">mesures [ ] (≤ 1 000), derniereMesureValide</TD></TR>
+   <TR><TD ALIGN="LEFT">blocageJournalier { jourUtc, mesureId }</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="jour" BGCOLOR="#fff4d6">journauxAlimentaires [ ]</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="ret" BGCOLOR="#fff4d6">entreesRetirees [ ] (traces d’idempotence)</TD></TR>
+   <TR><TD ALIGN="LEFT">createdAt, updatedAt</TD></TR>
+  </TABLE>>];
+
+  plan [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#5fa58c" BGCOLOR="#eef7f3">
+   <TR><TD BGCOLOR="#5fa58c"><FONT COLOR="white"><B>plan</B> (imbriqué)</FONT></TD></TR>
+   <TR><TD ALIGN="LEFT">id, userId, coachId</TD></TR>
+   <TR><TD ALIGN="LEFT">poidsDepart, poidsCible, imcCible</TD></TR>
+   <TR><TD ALIGN="LEFT">dateDebut, dateCible</TD></TR>
+   <TR><TD ALIGN="LEFT">niveauActivite, budgetCalorique</TD></TR>
+   <TR><TD ALIGN="LEFT">budgetPlafonneAuBmr</TD></TR>
+   <TR><TD ALIGN="LEFT">statut : actif | termine | annule</TD></TR>
+  </TABLE>>];
+
+  mesure [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#5fa58c" BGCOLOR="#eef7f3">
+   <TR><TD BGCOLOR="#5fa58c"><FONT COLOR="white"><B>mesure</B> (imbriquée)</FONT></TD></TR>
+   <TR><TD ALIGN="LEFT">id, planId, poidsKg</TD></TR>
+   <TR><TD ALIGN="LEFT">receivedAt, jourUtc</TD></TR>
+   <TR><TD ALIGN="LEFT">source : automatique | manuelle</TD></TR>
+   <TR><TD ALIGN="LEFT">statut : valide | suspecte | hors-plan</TD></TR>
+  </TABLE>>];
+
+  journal [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#5fa58c" BGCOLOR="#eef7f3">
+   <TR><TD BGCOLOR="#5fa58c"><FONT COLOR="white"><B>journal alimentaire</B> (un par plan et par jour UTC)</FONT></TD></TR>
+   <TR><TD ALIGN="LEFT">planId, jourUtc</TD></TR>
+   <TR><TD ALIGN="LEFT">budgetCalorique (copié à la création)</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="ent">entrees [ ]</TD></TR>
+   <TR><TD ALIGN="LEFT">totalCaloriesKcal, totalProteinesG,</TD></TR>
+   <TR><TD ALIGN="LEFT">totalGlucidesG, totalLipidesG</TD></TR>
+  </TABLE>>];
+
+  entree [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#5fa58c" BGCOLOR="#eef7f3">
+   <TR><TD BGCOLOR="#5fa58c"><FONT COLOR="white"><B>entrée</B> (imbriquée)</FONT></TD></TR>
+   <TR><TD ALIGN="LEFT">id (généré par l’appareil)</TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="snap">aliment : instantané nutritionnel</TD></TR>
+   <TR><TD ALIGN="LEFT">quantiteGrammes, categorieRepas</TD></TR>
+   <TR><TD ALIGN="LEFT">caloriesKcal, proteinesG, glucidesG, lipidesG</TD></TR>
+   <TR><TD ALIGN="LEFT">receivedAt</TD></TR>
+  </TABLE>>];
+
+  snap [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#5fa58c" BGCOLOR="#eef7f3">
+   <TR><TD BGCOLOR="#5fa58c"><FONT COLOR="white"><B>instantané aliment</B></FONT></TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="id">id, nom</TD></TR>
+   <TR><TD ALIGN="LEFT">caloriesKcalPour100g, proteinesGPour100g,</TD></TR>
+   <TR><TD ALIGN="LEFT">glucidesGPour100g, lipidesGPour100g</TD></TR>
+  </TABLE>>];
+
+  retiree [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4" COLOR="#5fa58c" BGCOLOR="#eef7f3">
+   <TR><TD BGCOLOR="#5fa58c"><FONT COLOR="white"><B>entrée retirée</B> (≤ 500, 8 jours)</FONT></TD></TR>
+   <TR><TD ALIGN="LEFT">id, consommeLe, retireeLe</TD></TR>
+  </TABLE>>];
+
+  aliments [label=<
+  <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5" COLOR="#2f6f5e">
+   <TR><TD BGCOLOR="#2f6f5e"><FONT COLOR="white"><B>aliments</B> (lecture seule, ~80)</FONT></TD></TR>
+   <TR><TD ALIGN="LEFT" PORT="id">_id : UUID</TD></TR>
+   <TR><TD ALIGN="LEFT">nom, nomNormalise, categorie</TD></TR>
+   <TR><TD ALIGN="LEFT">caloriesKcalPour100g, proteinesGPour100g,</TD></TR>
+   <TR><TD ALIGN="LEFT">glucidesGPour100g, lipidesGPour100g</TD></TR>
+  </TABLE>>];
+
+  users:coach -> users:id [label="coach", style=dashed, constraint=false];
+  tokens:user -> users:id [label="session de", style=dashed];
+  suivis:id -> users:id [label="1 suivi par utilisateur", style=dashed];
+  users:fav -> aliments:id [label="favoris", style=dashed];
+  suivis:plan -> plan [dir=back, arrowtail=diamond];
+  suivis:mes -> mesure [dir=back, arrowtail=diamond];
+  suivis:jour -> journal [dir=back, arrowtail=diamond];
+  suivis:ret -> retiree [dir=back, arrowtail=diamond];
+  journal:ent -> entree [dir=back, arrowtail=diamond];
+  entree:snap -> snap [dir=back, arrowtail=diamond];
+  snap:id -> aliments:id [label="copie à l’ajout", style=dotted];
+}
