@@ -135,6 +135,7 @@ describe('Suivi — agrégat documentaire', () => {
       derniereMesureValide: null,
       blocageJournalier: null,
       journauxAlimentaires: [],
+      entreesRetirees: [],
     });
     suivi.purgerHistorique(new Date('2026-05-31T12:00:00Z'));
     expect(suivi.toProps().mesures).toHaveLength(1);
@@ -162,6 +163,7 @@ describe('Suivi — agrégat documentaire', () => {
       derniereMesureValide: null,
       blocageJournalier: null,
       journauxAlimentaires: [],
+      entreesRetirees: [],
     });
     expect(() =>
       suivi.ajouterMesure(

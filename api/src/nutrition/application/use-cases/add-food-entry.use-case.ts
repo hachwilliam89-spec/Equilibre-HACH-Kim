@@ -38,8 +38,9 @@ export interface EntreeDifferee {
 }
 
 export interface ResultatAjout {
-  journal: DailyFoodJournal;
-  /** true si l'entrée existait déjà (opération déjà rejouée). */
+  /** null quand l'entrée a été ajoutée puis retirée depuis (rejeu ignoré). */
+  journal: DailyFoodJournal | null;
+  /** true si l'entrée existe déjà ou a déjà été retirée (opération déjà traitée). */
   dejaAppliquee: boolean;
 }
 
@@ -60,6 +61,7 @@ export class AddFoodEntryUseCase {
   ): Promise<DailyFoodJournal> {
     const receivedAt = new Date();
     const { journal } = await this.ajouter(userId, {
+      // Identifiant neuf : jamais connu, l'entrée est donc toujours créée.
       entreeId: randomUUID(),
       foodId,
       quantiteGrammes,
@@ -67,6 +69,7 @@ export class AddFoodEntryUseCase {
       receivedAt,
       maintenant: receivedAt,
     });
+    if (!journal) throw this.noActivePlan();
     return journal;
   }
 
@@ -156,6 +159,11 @@ export class AddFoodEntryUseCase {
       }
       const existant = suivi.trouverJournalParEntreeAlimentaire(input.entreeId);
       if (existant) return { journal: existant, dejaAppliquee: true };
+      // Ajout déjà traité puis retiré (ici ou depuis un autre appareil) :
+      // la trace, écrite avec le retrait, empêche de recréer l'entrée.
+      if (suivi.entreeAlimentaireRetiree(input.entreeId)) {
+        return { journal: null, dejaAppliquee: true };
+      }
 
       const version = suivi.toProps().version;
       let journal = suivi.trouverJournalAlimentaire(plan.id, jourUtc);

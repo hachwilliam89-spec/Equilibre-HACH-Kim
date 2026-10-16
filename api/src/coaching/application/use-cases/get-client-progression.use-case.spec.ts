@@ -94,6 +94,7 @@ function build(found: User | null) {
       journal('2026-10-08', 1500),
       journal('2026-10-08', 100, 'ancien-plan'),
     ],
+    entreesRetirees: [],
   });
   const suivis = {
     charger: jest.fn().mockResolvedValue(suivi),

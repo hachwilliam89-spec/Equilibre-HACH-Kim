@@ -153,6 +153,23 @@ export class SuiviDocumentClass {
     totalGlucidesG: number;
     totalLipidesG: number;
   }[];
+
+  // Traces des entrées retirées, écrites avec la suppression : rendent le
+  // rejeu d'un ajout idempotent (voir Suivi.retirerEntreeAlimentaire).
+  @Prop({
+    type: [
+      new MongooseSchema(
+        {
+          id: { type: String, required: true },
+          consommeLe: { type: Date, required: true },
+          retireeLe: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+    ],
+    default: [],
+  })
+  entreesRetirees: { id: string; consommeLe: Date; retireeLe: Date }[];
 }
 
 export type SuiviDocument = HydratedDocument<SuiviDocumentClass>;
