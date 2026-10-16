@@ -27,6 +27,8 @@ import { RolesGuard } from '../../../common/auth/roles.guard';
 import { AddFoodEntryUseCase } from '../../application/use-cases/add-food-entry.use-case';
 import { RemoveFoodEntryUseCase } from '../../application/use-cases/remove-food-entry.use-case';
 import { GetFoodBudgetStatusUseCase } from '../../application/use-cases/get-food-budget-status.use-case';
+import { GetFoodJournalForDayUseCase } from '../../application/use-cases/get-food-journal-for-day.use-case';
+import { jourUtcSchema } from './food-journal-day.dto';
 import { AddFoodEntryDto, addFoodEntrySchema } from './add-food-entry.dto';
 import { FoodJournalDto, toFoodJournalDto } from './food-journal.dto';
 import { FoodBudgetStatusDto } from './food-budget-status.dto';
@@ -40,6 +42,7 @@ export class FoodJournalsController {
     private readonly addFoodEntry: AddFoodEntryUseCase,
     private readonly removeFoodEntry: RemoveFoodEntryUseCase,
     private readonly getFoodBudgetStatus: GetFoodBudgetStatusUseCase,
+    private readonly getFoodJournalForDay: GetFoodJournalForDayUseCase,
   ) {}
 
   @Post('me/entries')
@@ -104,6 +107,40 @@ export class FoodJournalsController {
       entryId,
     );
     return toFoodJournalDto(journal);
+  }
+
+  @Get('me/days/:jourUtc')
+  @Roles('utilisateur')
+  @ApiOperation({
+    summary: "Journal alimentaire d'un jour UTC (consultation de l'historique)",
+    description:
+      'Lecture seule : entrées et totaux du jour demandé, pour consulter une journée antérieure encore conservée (3 mois). Réponse null si aucun journal ce jour-là. Une journée future est refusée.',
+  })
+  @ApiParam({ name: 'jourUtc', format: 'date', example: '2026-10-14' })
+  @ApiResponse({
+    status: 200,
+    type: FoodJournalDto,
+    description: 'Journal du jour, ou null sans journal ce jour-là',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Date invalide (AAAA-MM-JJ) ou journée future',
+  })
+  @ApiResponse({ status: 401, description: 'Authentification requise' })
+  @ApiResponse({ status: 403, description: 'Réservé au rôle utilisateur' })
+  @ApiResponse({ status: 429, description: 'Trop de requêtes' })
+  async day(
+    @Req() request: Request & { user: JwtPayload },
+    @Param('jourUtc', new ZodValidationPipe(jourUtcSchema)) jourUtc: string,
+    @Res() response: Response,
+  ): Promise<Response> {
+    const journal = await this.getFoodJournalForDay.execute(
+      request.user.sub,
+      jourUtc,
+    );
+    return response
+      .status(200)
+      .json(journal ? toFoodJournalDto(journal) : null);
   }
 
   @Get('me/status')
