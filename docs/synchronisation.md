@@ -257,7 +257,7 @@ API -> UC : executeDepuisSynchro
 UC -> MongoDB : mesure valide déjà présente ce jour
 UC --> API : 409 measurement-day-conflict
 API --> Sync : { statut: rejetee, code: measurement-day-conflict }
-Sync -> DB : DELETE opération ; remplacer tables serveur
+Sync -> DB : une transaction : DELETE opération rejetée,\nremplacer tables serveur
 Sync --> Utilisateur : « Ton poids saisi (79,4 kg) n’a pas été retenu :\nune mesure valide existait déjà ce jour-là. »
 @enduml
 ```
@@ -338,7 +338,9 @@ La colonne « Observé » se remplit pendant la recette (date, OK ou KO, remarqu
 ## 9. Limites connues
 
 - **Abandon après 5 tentatives** : une opération qui reçoit 5 fois `a-reessayer` est retirée de la file et l’utilisateur en est informé ; elle n’est pas rejouée ensuite.
-- **Historique alimentaire** : seuls les journaux d’aujourd’hui et d’hier sont consultables hors ligne.
+- **Historique alimentaire** : seuls les journaux d’aujourd’hui et d’hier sont
+  consultables hors ligne ; les journées de J-2 à J-6 se consultent en ligne, en
+  lecture seule (`GET /api/food-journals/me/days/:jourUtc`, FR403-754).
 - **Recherche d’aliments** : impossible hors ligne (le référentiel n’est pas embarqué) ; l’ajout hors ligne passe par les favoris et les aliments récents.
 - **Poids hors ligne** : accepté seulement s’il arrive le jour même (UTC) et qu’aucune mesure valide n’existe déjà ce jour-là.
 - **Instantané complet** : adapté au petit périmètre d’un utilisateur ; un volume plus grand demanderait des changements paginés par curseur.

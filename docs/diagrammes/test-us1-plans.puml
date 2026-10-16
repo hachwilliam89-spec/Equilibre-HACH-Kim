@@ -1,0 +1,35 @@
+@startuml
+skinparam dpi 140
+skinparam defaultFontName Helvetica
+title Tests d'intégration US1 — création et consultation de plan (plans.integration-spec.ts)
+participant "Test Jest\n(supertest)" as T
+participant "API NestJS\n/api/plans" as API
+participant "CreatePlanUseCase\nGetCurrentPlanUseCase" as UC
+database "MongoDB réel\n(users, suivis)" as DB
+
+== Arrange : données initiales ==
+T -> API : POST /api/auth/register (coach, utilisateur rattaché, profil)
+API -> DB : insert users
+T -> T : jeton JWT émis par le JwtService de l'app
+
+== Act + Assert : scénarios ==
+alt Nominal : 80 → 75 kg, J → J+35 (1 kg/semaine, limite acceptée)
+  T -> API : POST /api/plans (coach)
+  API -> UC : valider dates, rythme, IMC, profil
+  UC -> DB : updateOne suivis.planActif
+  API --> T : 201 (statut actif, budget suggéré)
+else Limite : rythme trop rapide, IMC < 18,5, dates invalides
+  T -> API : POST /api/plans
+  API --> T : 400 + message explicite
+else Alternatif : plan actif déjà présent
+  T -> API : POST /api/plans
+  API --> T : 409
+else Rôle / rattachement
+  T -> API : POST ou GET par un coach non rattaché, ou /me par un coach
+  API --> T : 403
+end
+
+== Assert : état de la base en fin de test ==
+T -> DB : findOne suivis { _id: userId }
+DB --> T : planActif conforme (budget, trajectoire)\nou inchangé après un refus
+@enduml

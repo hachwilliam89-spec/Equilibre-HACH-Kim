@@ -1,0 +1,44 @@
+@startuml
+skinparam dpi 140
+skinparam defaultFontName Helvetica
+title Tests d'intégration — synchronisation (sync.integration-spec.ts)
+participant "Test Jest\n(supertest)" as T
+participant "API NestJS\n/api/sync" as API
+participant "ApplySyncOperations\nGetSyncSnapshot" as UC
+database "MongoDB réel\n(suivis)" as DB
+
+== Arrange : données initiales ==
+T -> API : utilisateur + plan actif + mesure
+T -> T : opérations hors ligne avec UUID générés côté client
+
+== Act + Assert : scénarios ==
+alt Pull
+  T -> API : GET /api/sync/me
+  API --> T : 200 instantané + curseur
+  T -> API : GET /api/sync/me?curseur=…
+  API --> T : 204 (rien n'a changé)
+else Push nominal
+  T -> API : POST /api/sync/me/operations [ajout, favori, poids]
+  API -> UC : rejouer chaque opération via le use case métier
+  UC -> DB : écritures
+  API --> T : 200 résultats « appliquee » + instantané
+else Rejeu du même lot (réponse perdue)
+  T -> API : POST le même lot
+  API --> T : 200 « deja-appliquee », aucun doublon
+else Ajout rejoué après le retrait de son entrée
+  T -> API : DELETE /api/food-journals/me/entries/{entreeId}
+  API -> DB : retrait + trace entreesRetirees (même version)
+  T -> API : POST le même ajout
+  API --> T : 200 « deja-appliquee », entrée non recréée
+else Opération hors règles (futur, > 7 jours, 2e poids)
+  T -> API : POST lot mixte
+  API --> T : 200 « rejetee » + code, le reste du lot est appliqué
+else Lot invalide / anonyme / coach
+  T -> API : POST
+  API --> T : 400 / 401 / 403
+end
+
+== Assert : état de la base en fin de test ==
+T -> DB : findOne suivis { _id: userId }
+DB --> T : une seule entrée par entreeId, totaux exacts,\ntrace présente pour chaque entrée retirée
+@enduml
