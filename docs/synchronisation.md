@@ -309,8 +309,8 @@ pnpm --dir mobile test          # mobile
 ### Recette sur iPhone
 
 **Jeu de données fictif** : un compte utilisateur de démonstration avec un plan
-actif créé par le coach (80 → 75 kg sur 30 jours, budget 1 800 kcal), au moins
-une mesure envoyée par le simulateur de balance, et l’aliment « Riz blanc cuit »
+actif créé par le coach (80 → 75 kg sur 35 jours, soit 1 kg/semaine, budget
+1 800 kcal), au moins une mesure envoyée par le simulateur de balance, et l’aliment « Riz blanc cuit »
 (130 kcal pour 100 g) en favori. Aucune donnée personnelle réelle.
 
 **Modification côté serveur** : depuis Swagger (`/api/docs`), connecté avec le
