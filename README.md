@@ -16,7 +16,7 @@ Documentation détaillée du backend : [README de l’API](api/README.md).
 | Composant | Technologie |
 |---|---|
 | API | NestJS (Node.js / TypeScript), architecture hexagonale par module |
-| Base de données | MongoDB 8.0 via Mongoose |
+| Base de données | MongoDB 7.0 via Mongoose |
 | Mobile | React Native (Expo) — connexion et session initialisées |
 | Authentification | JWT + refresh token |
 | Conteneurisation | Docker / Docker Compose |
