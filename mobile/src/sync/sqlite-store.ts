@@ -5,6 +5,7 @@ import {
   type LocalOperation,
   type QueuedOperation,
   type ServerState,
+  type Snapshot,
 } from "./contracts";
 import type { LocalStore } from "./local-store";
 import { MAX_RECENTS } from "./projection";
@@ -217,6 +218,79 @@ const setMeta = (tx: SqlExecutor, cle: string, valeur: string | null) =>
     [cle, valeur],
   );
 
+/** Remplace la copie serveur (tables serveur, favoris, curseur) dans la transaction fournie. */
+async function ecrireEtatServeur(tx: SqlExecutor, snapshot: Snapshot, recuLe: string): Promise<void> {
+  await tx.execAsync(TABLES_SERVEUR.map((t) => `DELETE FROM ${t};`).join("\n"));
+  const suivi = snapshot.suiviPoids;
+  if (suivi) {
+    const cibles = snapshot.alimentation?.ciblesMacros;
+    await tx.runAsync(
+      `INSERT INTO plan_actif VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        suivi.plan.id,
+        suivi.plan.poidsDepart,
+        suivi.plan.poidsCible,
+        suivi.plan.dateDebut,
+        suivi.plan.dateCible,
+        suivi.plan.imcCible,
+        suivi.plan.niveauActivite,
+        snapshot.alimentation?.budgetCalorique ?? suivi.plan.budgetCalorique,
+        suivi.plan.budgetPlafonneAuBmr ? 1 : 0,
+        suivi.plan.statut,
+        suivi.statut,
+        suivi.derniereMesure ? JSON.stringify(suivi.derniereMesure) : null,
+        suivi.poidsAttendu,
+        suivi.ecartKg,
+        cibles?.proteinesG ?? null,
+        cibles?.glucidesG ?? null,
+        cibles?.lipidesG ?? null,
+      ],
+    );
+  }
+  for (const m of snapshot.mesures) {
+    await tx.runAsync("INSERT INTO mesures VALUES (?, ?, ?, ?, ?, ?, ?)", [
+      m.id,
+      m.planId,
+      m.poidsKg,
+      m.receivedAt,
+      m.jourUtc,
+      m.source,
+      m.statut,
+    ]);
+  }
+  for (const journal of snapshot.alimentation?.journaux ?? []) {
+    await tx.runAsync("INSERT INTO journaux VALUES (?, ?, ?)", [
+      journal.planId,
+      journal.jourUtc,
+      journal.budgetCalorique,
+    ]);
+    for (const e of journal.entrees) {
+      await tx.runAsync(
+        "INSERT INTO entrees_alimentaires VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          e.id,
+          journal.planId,
+          journal.jourUtc,
+          e.foodId,
+          e.nom,
+          e.quantiteGrammes,
+          e.caloriesKcal,
+          e.proteinesG,
+          e.glucidesG,
+          e.lipidesG,
+          e.categorieRepas,
+          e.receivedAt,
+        ],
+      );
+    }
+  }
+  await tx.runAsync("UPDATE aliments SET favori = 0", []);
+  for (const food of snapshot.favoris) await upsertAliment(tx, food, 1, null);
+  await tx.runAsync("DELETE FROM aliments WHERE favori = 0 AND utilise_le IS NULL", []);
+  await setMeta(tx, "curseur", snapshot.curseur);
+  await setMeta(tx, "synchronise_le", recuLe);
+}
+
 export function createSqliteStore(db: SqlDatabase): LocalStore {
   const getMeta = async (cle: string) =>
     (await db.getFirstAsync<{ valeur: string | null }>(
@@ -352,76 +426,26 @@ export function createSqliteStore(db: SqlDatabase): LocalStore {
     },
 
     async remplacerEtatServeur(snapshot, recuLe) {
+      await db.withExclusiveTransactionAsync((tx) => ecrireEtatServeur(tx, snapshot, recuLe));
+    },
+
+    async appliquerReponse(terminees, aReessayer, snapshot, recuLe) {
       await db.withExclusiveTransactionAsync(async (tx) => {
-        await tx.execAsync(TABLES_SERVEUR.map((t) => `DELETE FROM ${t};`).join("\n"));
-        const suivi = snapshot.suiviPoids;
-        if (suivi) {
-          const cibles = snapshot.alimentation?.ciblesMacros;
+        if (terminees.length > 0) {
           await tx.runAsync(
-            `INSERT INTO plan_actif VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              suivi.plan.id,
-              suivi.plan.poidsDepart,
-              suivi.plan.poidsCible,
-              suivi.plan.dateDebut,
-              suivi.plan.dateCible,
-              suivi.plan.imcCible,
-              suivi.plan.niveauActivite,
-              snapshot.alimentation?.budgetCalorique ?? suivi.plan.budgetCalorique,
-              suivi.plan.budgetPlafonneAuBmr ? 1 : 0,
-              suivi.plan.statut,
-              suivi.statut,
-              suivi.derniereMesure ? JSON.stringify(suivi.derniereMesure) : null,
-              suivi.poidsAttendu,
-              suivi.ecartKg,
-              cibles?.proteinesG ?? null,
-              cibles?.glucidesG ?? null,
-              cibles?.lipidesG ?? null,
-            ],
+            `DELETE FROM operations_en_attente WHERE id IN (${terminees.map(() => "?").join(", ")})`,
+            terminees,
           );
         }
-        for (const m of snapshot.mesures) {
-          await tx.runAsync("INSERT INTO mesures VALUES (?, ?, ?, ?, ?, ?, ?)", [
-            m.id,
-            m.planId,
-            m.poidsKg,
-            m.receivedAt,
-            m.jourUtc,
-            m.source,
-            m.statut,
-          ]);
+        if (aReessayer.length > 0) {
+          await tx.runAsync(
+            `UPDATE operations_en_attente SET tentatives = tentatives + 1 WHERE id IN (${aReessayer
+              .map(() => "?")
+              .join(", ")})`,
+            aReessayer,
+          );
         }
-        for (const journal of snapshot.alimentation?.journaux ?? []) {
-          await tx.runAsync("INSERT INTO journaux VALUES (?, ?, ?)", [
-            journal.planId,
-            journal.jourUtc,
-            journal.budgetCalorique,
-          ]);
-          for (const e of journal.entrees) {
-            await tx.runAsync(
-              "INSERT INTO entrees_alimentaires VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              [
-                e.id,
-                journal.planId,
-                journal.jourUtc,
-                e.foodId,
-                e.nom,
-                e.quantiteGrammes,
-                e.caloriesKcal,
-                e.proteinesG,
-                e.glucidesG,
-                e.lipidesG,
-                e.categorieRepas,
-                e.receivedAt,
-              ],
-            );
-          }
-        }
-        await tx.runAsync("UPDATE aliments SET favori = 0", []);
-        for (const food of snapshot.favoris) await upsertAliment(tx, food, 1, null);
-        await tx.runAsync("DELETE FROM aliments WHERE favori = 0 AND utilise_le IS NULL", []);
-        await setMeta(tx, "curseur", snapshot.curseur);
-        await setMeta(tx, "synchronise_le", recuLe);
+        await ecrireEtatServeur(tx, snapshot, recuLe);
       });
     },
 

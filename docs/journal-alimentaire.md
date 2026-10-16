@@ -57,6 +57,22 @@ Quand la dernière entrée est retirée, le journal peut rester présent avec de
 totaux à zéro. Il ne représente alors aucune consommation et devra être traité
 comme une journée sans données par le calcul du statut alimentaire.
 
+Le retrait est aussi tracé (`entreesRetirees` du suivi, dans la même écriture) :
+un ajout rejoué plus tard par la synchronisation ne recrée pas l'entrée.
+
+## Consulter une journée antérieure (FR403-754)
+
+`GET /api/food-journals/me/days/{jourUtc}` (format `AAAA-MM-JJ`) renvoie en
+lecture seule le journal de ce jour UTC : entrées, totaux et budget copié à la
+création du journal. La réponse vaut `null` si aucun journal n'existe ce jour-là.
+Une journée future, une date mal formée ou inexistante renvoie `400`. Seul
+l'historique conservé (3 mois) est consultable.
+
+Dans l'application, l'écran « Mon journal » propose les 7 derniers jours :
+aujourd'hui et hier viennent de la base embarquée (disponibles hors ligne),
+les jours plus anciens sont chargés à la demande par cette route. Seul le jour
+même est modifiable ; les journées passées s'affichent en lecture seule.
+
 ## Statut par rapport au budget (FR403-753)
 
 `GET /api/food-journals/me/status` renvoie `null` sans plan actif. Sinon, il

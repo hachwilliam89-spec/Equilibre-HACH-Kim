@@ -1,7 +1,25 @@
 # Equilibre — application mobile
 
-Premier incrément FR403-140 : connexion et inscription coach/utilisateur à l’API existante.
-React Native + Expo SDK 57, TypeScript, Expo Router et Zustand.
+Application coach et utilisateur du fil rouge Equilibre : inscription,
+plans de perte de poids, suivi du poids, journal alimentaire hors ligne et
+suivi des utilisateurs par leur coach.
+React Native + Expo SDK 57, TypeScript, Expo Router, Zustand et `expo-sqlite`.
+
+## Fonctionnalités
+
+| Espace | Écran | Ce qu’il permet |
+| --- | --- | --- |
+| Accès | Connexion / Inscription | Onglets sur la même page ; inscription coach, ou utilisateur avec le code de son coach (`EQ-7A9B2C4D`) ; prénom et nom demandés |
+| Utilisateur | Suivi | Courbe du poids (trajectoire cible et pesées valides), budget du jour, saisie de poids de secours |
+| Utilisateur | Journal | Entrées, total calorique et macros d’une journée ; sélection des 7 derniers jours ; ajout depuis la bibliothèque, récents ou favoris |
+| Utilisateur | Profil | Prénom, nom, taille, âge, sexe ; coach rattaché affiché par son nom |
+| Coach | Utilisateurs | Liste des utilisateurs rattachés, affichés par prénom et nom |
+| Coach | Fiche utilisateur | Onglets Plan, Suivi (courbe, alertes, dernières pesées) et Alimentation (barres des derniers jours) ; création et annulation de plan |
+| Coach | Mon compte | Identité du coach, code coach et bouton « Copier mon code » |
+
+La déconnexion est visible dans la barre haute de chaque écran connecté ; les
+actions destructives (retrait, annulation de plan, déconnexion) passent par
+une boîte de confirmation aux couleurs de l’application.
 
 ## Démarrer
 
@@ -24,36 +42,99 @@ L’URL inclut `/api`. Elle est publique et ne doit contenir aucun secret.
 | Émulateur Android standard | `http://10.0.2.2:3000/api` |
 | Téléphone réel sur le même réseau | `http://IP_LOCALE_DU_MAC:3000/api` |
 
-Pour l’environnement de test, démarrer `pnpm docker:test` à la racine et utiliser le port API configuré (3001 dans le guide). Ne pas confondre le port Expo et le port API. Après modification de l’URL, redémarrer Expo. Utiliser HTTPS pour le déploiement réel.
+Sur téléphone, `localhost` désigne le téléphone, pas le Mac : vérifier
+`/api/health` depuis le navigateur du téléphone en cas d’erreur réseau. Pour
+l’environnement de test, démarrer `pnpm docker:test` à la racine et utiliser le
+port API 3001. Après modification de l’URL, redémarrer Expo.
 
-### Recette principale : iPhone physique
-
-1. Installer Expo Go sur l’iPhone (version compatible SDK 57).
-2. Connecter le Mac et l’iPhone au même réseau Wi-Fi.
-3. Relever l’adresse IP du Mac dans Réglages Système → Wi-Fi → Détails → TCP/IP.
-4. Dans `mobile/.env`, mettre `EXPO_PUBLIC_API_URL=http://IP_DU_MAC:3000/api` (ou le port API choisi).
-5. Vérifier `http://IP_DU_MAC:3000/api/health` dans Safari sur l’iPhone : réponse JSON saine attendue.
-6. Lancer `pnpm start` depuis `mobile/`, puis scanner le QR code avec l’appareil photo de l’iPhone et ouvrir Expo Go. Autoriser l’accès au réseau local si iOS le demande.
-7. Se connecter avec un compte de démonstration existant dans cet environnement.
-8. Fermer complètement Expo Go, rouvrir le projet et vérifier la restauration de session ; tester ensuite la déconnexion.
-
-Sur iPhone physique, ne pas utiliser localhost : il désigne l’iPhone. Le tunnel Metro éventuel ne rend pas automatiquement l’API du Mac accessible. Aucun simulateur Android n’est nécessaire. Si Expo Go ne prend pas en charge le SDK, utiliser un development build iOS compatible ; ne pas déclarer la recette native terminée avant ce test.
-
-Installer Expo Go compatible SDK 57 ou un development build adapté. Sur téléphone, `localhost` désigne le téléphone, pas le Mac. Vérifier `/api/health` depuis le navigateur du téléphone en cas d’erreur réseau.
-
-Un compte existant est nécessaire, inscrit via Swagger dans le même environnement. Aucune inscription ni réinitialisation de mot de passe n’est encore proposée par le mobile.
+Sur iPhone physique : installer Expo Go (SDK 57), mettre le Mac et l’iPhone sur
+le même Wi-Fi, renseigner `EXPO_PUBLIC_API_URL=http://IP_DU_MAC:3000/api`,
+lancer `pnpm start` puis scanner le QR code. `expo-sqlite`, `expo-crypto` et les
+sélecteurs natifs sont inclus dans Expo Go : aucun development build n’est
+nécessaire.
 
 ## Session
 
-- Login sur `/auth/login` ; rôle et identifiant fournis par le serveur.
-- Session conservée dans Expo SecureStore sur iOS/Android, jamais dans SQLite.
-- Hors ligne au démarrage : la session enregistrée est reprise pour ouvrir la base embarquée ; le jeton est renouvelé à la première requête réseau.
-- Mot de passe uniquement dans le formulaire, effacé après connexion réussie.
-- Au redémarrage : `/auth/refresh`, puis sauvegarde des nouveaux jetons après rotation.
-- Jeton révoqué/expiré : retour au formulaire ; panne réseau : possibilité de réessayer sans effacer la session.
-- Logout : révocation serveur, puis suppression locale. Si le réseau échoue, l’écran reste connecté et propose de réessayer.
-- L’aperçu web ne conserve la session qu’en mémoire. Il nécessite une configuration CORS adaptée côté API ; ce n’est pas le parcours de validation mobile.
-- Les appels métier du module plans renouvellent automatiquement une fois le jeton après un 401 ; les appels concurrents partagent ce renouvellement.
+- Connexion sur `/auth/login` ; rôle, identifiant et identité fournis par le serveur.
+- Jetons conservés dans Expo SecureStore sur iOS/Android, jamais dans SQLite ;
+  l’aperçu web les garde en mémoire uniquement.
+- Session glissante de 30 jours : chaque renouvellement (`/auth/refresh`)
+  remplace le refresh token et repousse l’échéance. Les requêtes concurrentes
+  partagent un seul renouvellement après un 401.
+- Hors ligne au démarrage, la session enregistrée ouvre la base embarquée ; le
+  jeton est renouvelé à la première requête réseau.
+- Jeton révoqué ou expiré : retour au formulaire avec « Session expirée » ;
+  panne réseau : la session est conservée et l’action peut être réessayée.
+- Déconnexion : révocation serveur puis suppression locale, et retour immédiat
+  à la page d’accès.
+
+## Synchronisation et mode hors ligne
+
+Les données de l’utilisateur sont copiées dans une base SQLite
+(`expo-sqlite`) et synchronisées dans les deux sens avec l’API (`/api/sync`).
+Ajouts et retraits d’aliments, saisie de poids de secours et favoris
+fonctionnent sans réseau : chaque modification est appliquée localement et
+placée dans une file d’attente. À la synchronisation (retour au premier plan,
+modification, toutes les 2 minutes, bouton « Actualiser »), le serveur renvoie
+le résultat de chaque opération et un instantané ; l’acquittement des
+opérations et le remplacement de l’état serveur sont écrits dans une seule
+transaction SQLite. Le serveur garde une trace des entrées retirées : un ajout
+rejoué après un retrait ne recrée pas l’entrée.
+
+Un bandeau indique l’état (« Synchronisé à… », « Hors ligne · 2 modifications
+en attente ») et explique les modifications refusées. La recherche dans la
+bibliothèque reste en ligne : hors ligne, utiliser « Récents » ou « Favoris ».
+Détails, schéma et diagrammes : [Page 9 — Synchronisation](../docs/synchronisation.md).
+
+## Journal alimentaire — US3
+
+L’écran Journal ouvre la journée UTC en cours : entrées, total calorique,
+macros et statut (même règle que l’API, recalculée sur l’appareil pour rester
+juste hors ligne). « Ajouter » interroge la bibliothèque, affiche les valeurs
+pour 100 g puis estime celles de la quantité saisie (de 1 à 10 000 g). Une
+entrée se modifie ou se retire, avec confirmation.
+
+Une rangée de pastilles permet de consulter les 7 derniers jours (FR403-754) :
+
+| Journée | Source | Modification |
+| --- | --- | --- |
+| Aujourd’hui | base embarquée, hors ligne compris | oui |
+| Hier | base embarquée, hors ligne compris | lecture seule |
+| J-2 à J-6 | `GET /api/food-journals/me/days/:jourUtc`, en ligne | lecture seule |
+
+Une journée passée est affichée avec le budget enregistré dans son journal.
+Hors ligne, une journée ancienne affiche un message et un bouton « Réessayer ».
+Sans plan actif, le journal affiche un message dédié. La
+[recette US3](../docs/recette-us3.md) détaille les scénarios à vérifier.
+
+## Parcours coach
+
+« Utilisateurs » liste les comptes rattachés au coach (`GET /api/users/me/clients`).
+La fiche d’un utilisateur (`GET /api/coach/clients/:userId`) présente trois
+onglets :
+
+- **Plan** : plan actif ou création en deux étapes — objectifs (poids, dates,
+  IMC et rythme indicatifs), puis activité, proposition de budget
+  (`POST /api/plans/preview`, sans enregistrement) et validation
+  (`POST /api/plans`, qui revalide les règles). Le plan peut être annulé après
+  confirmation.
+- **Suivi** : courbe du poids, alertes d’écart et dernières pesées sur 3 mois.
+- **Alimentation** : barres des calories des derniers jours face au budget.
+
+La taille est obligatoire ; sans âge ou sexe, le budget est saisi manuellement.
+
+Les graphiques (`src/charts`, `react-native-svg`) ne font aucune requête : ils
+reçoivent des données déjà chargées. Une ligne pointillée entre deux pesées
+signale des jours sans mesure, sans inventer de valeur ; la dernière valeur est
+aussi écrite en texte pour ne pas dépendre de la couleur.
+
+## Sélecteurs de dates, taille et poids
+
+Les dates se choisissent dans le calendrier natif (champ date sur le Web),
+affichées en JJ/MM/AAAA et transmises en AAAA-MM-JJ. Les poids se sélectionnent
+au dixième de kilogramme et la taille au centimètre ; « Saisir au clavier »
+permet une saisie directe et annuler un sélecteur conserve la valeur
+précédente.
 
 ## Vérification
 
@@ -64,111 +145,29 @@ pnpm test
 pnpm exec expo export --platform ios --platform android
 ```
 
-Les tests locaux valident les contrats du formulaire et des réponses, pas le rendu natif ou SecureStore. Les tests API continuent de tourner depuis la racine.
+Les tests Jest couvrent les formulaires, les contrats de réponse, le
+renouvellement de session, le moteur de synchronisation et la base locale :
+les mêmes tests de contrat tournent sur l’adaptateur mémoire et sur le vrai SQL
+(sql.js), y compris l’annulation d’une transaction et la persistance du
+fichier après fermeture. Ils ne remplacent pas la recette visuelle sur
+téléphone.
 
-### Recette sur téléphone (à exécuter)
+### Recette sur téléphone
 
 | Action | Résultat attendu |
 | --- | --- |
-| E-mail mal formé ou mot de passe de moins de 8 caractères | Message local ; aucun appel de connexion |
-| Identifiants valides de coach | Espace coach et bouton de déconnexion |
-| Identifiants valides d’utilisateur | Espace utilisateur |
-| Mot de passe incorrect | Message explicite ; formulaire conservé |
-| Quota login dépassé | Message invitant à patienter |
-| Couper le réseau puis tenter de se connecter | Erreur réseau ; bouton à nouveau utilisable |
-| Fermer puis rouvrir l’application après connexion | Restauration via rotation du refresh token |
-| Révoquer le refresh token puis rouvrir | Formulaire avec message de session expirée |
-| Se déconnecter puis relancer | Formulaire ; aucune restauration de l’ancienne session |
+| Inscrire un utilisateur avec le code d’un coach | Retour à Connexion, e-mail prérempli |
+| Code coach inconnu ou e-mail déjà utilisé | Message explicite, formulaire conservé |
+| Connexion coach puis utilisateur | Espace correspondant, nom affiché |
+| Mode avion : ajouter puis retirer un aliment | Journal à jour, bandeau « en attente » |
+| Réseau rétabli | Bandeau « Synchronisé à… », données identiques côté coach |
+| Pastille J-3 en ligne, puis hors ligne | Journal en lecture seule, puis message et « Réessayer » |
+| Fermer puis rouvrir l’application | Session restaurée sans saisie |
+| Se déconnecter | Retour immédiat à la page d’accès |
 
-## Parcours coach : FR403-128
-
-Depuis l’accueil connecté, « Mes utilisateurs » affiche les comptes réellement rattachés au coach via `GET /api/users/me/clients`. La sélection ouvre le plan actif ou un état vide.
-
-Le formulaire comporte deux étapes : objectifs (poids, dates au format AAAA-MM-JJ, IMC et rythme indicatifs), puis activité, proposition de budget et validation. La proposition appelle `POST /api/plans/preview` sans enregistrement. Le coach peut ajuster le budget avant `POST /api/plans`, qui revalide les règles métier. Le plan enregistré apparaît ensuite avec la possibilité de l’annuler après confirmation.
-
-La taille est obligatoire ; sans âge ou sexe, le budget doit être saisi manuellement. L’utilisateur peut compléter son profil depuis l’application. Le coach voit actuellement le plan et ses données de création, mais pas encore la courbe du poids ni les calories de ses utilisateurs : les endpoints de suivi sont pour l’instant réservés au propriétaire des données.
-
-## Suivi visuel de l’utilisateur
-
-« Mon suivi de poids » affiche la trajectoire cible en gris pointillé et les pesées valides en vert, avec des axes datés et gradués. Une ligne verte pointillée entre deux points indique des jours sans pesée : aucune valeur intermédiaire n’est inventée. Seules les mesures valides du plan, reçues pendant sa période, alimentent la courbe ; les autres restent dans l’historique. Si aucune mesure valide n’existe, la cible reste visible avec un message explicite. La dernière valeur est aussi écrite en texte, pour que la lecture ne dépende pas de la couleur ni du graphique.
-
-Le budget du jour montre la consommation en bleu, la cible par un trait gris et la tolérance de +150 kcal en texte. L’ocre n’apparaît que lorsque cette tolérance est dépassée. Une journée sans entrée est signalée comme telle, sans reprendre le total d’un ancien jour. Les composants de `src/charts` ne font aucune requête : ils reçoivent des données déjà chargées et séparent le calcul des coordonnées du dessin `react-native-svg` (compatible Expo Go). Ils pourront recevoir les données du cache SQLite sans changer de bibliothèque. Pour afficher une courbe au coach et des barres sur plusieurs jours comme dans les maquettes, il faudra d’abord des endpoints autorisés donnant l’historique du poids et des journaux alimentaires de l’utilisateur sélectionné ; l’API actuelle ne les expose pas au coach.
-
-Les écrans lisent la base embarquée : ils s’affichent immédiatement, hors ligne compris, et se mettent à jour après chaque synchronisation (retour au premier plan, modification, toutes les 2 minutes, bouton « Actualiser »). Le graphique ne simule pas un flux temps réel.
-
-## Synchronisation et mode hors ligne
-
-Les données visibles par l’utilisateur sont copiées dans une base SQLite
-(`expo-sqlite`) et synchronisées dans les deux sens avec l’API (`/api/sync`).
-Ajouts et retraits d’aliments, saisie de poids de secours et favoris
-fonctionnent sans réseau ; un bandeau indique l’état (« Synchronisé à… »,
-« Hors ligne · 2 modifications en attente ») et explique les modifications
-refusées par le serveur. La recherche dans la bibliothèque reste en ligne :
-hors ligne, utiliser « Récents » ou « Favoris ». L’aperçu web garde ces données
-en mémoire uniquement. Détails, schéma et diagrammes :
-[Page 9 — Synchronisation](../docs/synchronisation.md).
-
-`expo-sqlite` et `expo-crypto` sont inclus dans Expo Go SDK 57 : aucun
-development build supplémentaire n’est nécessaire.
-
-## Journal alimentaire — US3
-
-Depuis « Mon suivi de poids », ouvrir « Mon journal alimentaire ». L’écran
-montre uniquement les entrées du jour UTC, le total calorique, les macros et
-le statut (même règle que l’API, recalculé
-sur l’appareil pour rester juste hors ligne). « Ajouter un aliment » interroge la bibliothèque
-en lecture seule, affiche les valeurs pour 100 g, puis estime les valeurs de la
-quantité saisie. L’ajout est immédiat dans le journal local, puis confirmé par
-le serveur à la synchronisation. « Retirer » recalcule le journal et propose
-d’annuler pendant quelques secondes.
-La saisie d’une quantité nulle, négative ou supérieure à 10 000 g est refusée.
-Sans plan actif, le journal affiche un message dédié.
-
-La [recette US3](../docs/recette-us3.md) détaille les scénarios automatisés et
-les vérifications à faire sur iPhone avant de valider le déploiement.
-
-Les requêtes protégées renouvellent le jeton une seule fois en cas de 401. Un renouvellement refusé ramène à la connexion. Après une interruption réseau lors de la soumission, revenir au suivi et actualiser le plan avant de réessayer.
-
-### Recette iPhone
-
-1. Connecter un coach ; vérifier sa liste et l’absence des utilisateurs d’un autre coach.
-2. Ouvrir un utilisateur de taille 170 cm, âge 30 ans, sexe femme, sans plan actif.
-3. Saisir 80 kg → 78 kg du 2026-09-23 au 2026-10-21 ; continuer vers le budget.
-4. Choisir Sédentaire, calculer la proposition et vérifier qu’aucun plan n’est encore enregistré.
-5. Ajuster le budget, soumettre, puis actualiser : le plan doit rester visible.
-6. Vérifier le refus des dates identiques, du poids inchangé et d’un rythme excessif.
-7. Annuler : confirmer puis vérifier l’absence de plan actif.
-8. Avec un profil sans âge ou sexe mais avec taille, vérifier le parcours avec budget manuel.
-
-Les tests Jest mobiles couvrent les saisies, les décimales françaises, le renouvellement de session et les erreurs API. Ils ne remplacent pas cette recette visuelle sur iPhone.
-
-Sources : [installation Expo Router](https://docs.expo.dev/router/installation/), [SecureStore SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/securestore/).
-
-## Inscription et code coach
-
-La page d’accès conserve le logo Equilibre et son slogan, avec les onglets « Connexion » et « Inscription ». L’onglet « Inscription » propose les rôles coach et utilisateur. Pour un utilisateur, le code transmis par son coach est obligatoire (format `EQ-7A9B2C4D`). Après inscription, retour à l’onglet Connexion avec un message de confirmation et l’e-mail prérempli, sans connexion automatique. Les onglets sont désactivés pendant une requête.
-
-L’espace coach affiche son code et le bouton « Copier mon code ». Le code est renvoyé à la connexion et conservé avec la session. Pour une session antérieure à cette fonctionnalité, se déconnecter puis se reconnecter après mise à jour de l’API.
-
-Recette iPhone : connecter un coach, copier son code, se déconnecter, inscrire un utilisateur avec ce code, puis se connecter avec ce nouveau compte. Vérifier aussi le refus d’un code inconnu et d’un e-mail déjà utilisé.
-
-## Sélecteurs de dates, taille et poids
-
-Les dates se choisissent dans le calendrier natif sur mobile et dans un champ
-date sur le Web. Elles sont affichées en JJ/MM/AAAA et transmises à l’API en
-AAAA-MM-JJ. Si le début devient égal ou postérieur à la cible, celle-ci est
-effacée et une nouvelle sélection est demandée.
-
-Les poids se sélectionnent au dixième de kilogramme et la taille au centimètre.
-Le lien « Saisir au clavier » permet une saisie directe.
-Annuler un sélecteur conserve la valeur précédente.
-
-Les composants sont inclus dans Expo Go pour le SDK 57. Un binaire personnalisé
-existant doit être reconstruit pour intégrer les nouvelles dépendances natives.
-
-Recette confirmée par Hach Kim le 24/09/2026 sur iPhone 17 :
-sélection, annulation conservant la valeur, saisie au clavier et modification
-de la date de début au-delà de la cible. La recette Android reste à effectuer.
+Sources : [Expo Router](https://docs.expo.dev/router/installation/),
+[SecureStore SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/securestore/),
+[SQLite SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/sqlite/).
 
 ## Générer l’APK Android (EAS Build)
 

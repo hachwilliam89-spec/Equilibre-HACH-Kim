@@ -234,6 +234,27 @@ describe('Auth (integration)', () => {
       const body = response.body as { type: string };
       expect(body.type).toContain('email-already-used');
     });
+
+    it('repond 409 a la seconde de deux inscriptions simultanees avec le meme e-mail', async () => {
+      const email = uniqueEmail();
+      const inscrire = () =>
+        request(app.getHttpServer()).post('/api/auth/register').send({
+          prenom: 'Test',
+          nom: 'Equilibre',
+          email,
+          password: 'password123',
+          role: 'coach',
+        });
+
+      const reponses = await Promise.all([inscrire(), inscrire()]);
+      const statuts = reponses.map((reponse) => reponse.status).sort();
+      expect(statuts).toEqual([201, 409]);
+      const conflit = reponses.find((reponse) => reponse.status === 409);
+      expect((conflit?.body as { type: string }).type).toContain(
+        'email-already-used',
+      );
+      expect(await usersCollection(app).countDocuments({ email })).toBe(1);
+    });
   });
 
   describe('POST /api/auth/login', () => {

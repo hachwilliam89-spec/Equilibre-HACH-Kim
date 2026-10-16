@@ -9,7 +9,11 @@ import {
   Plan,
   type PlanProps,
 } from '../../../plans/domain/entities/plan.entity';
-import { Suivi, troisMoisAvantUtc } from '../../domain/entities/suivi.entity';
+import {
+  Suivi,
+  troisMoisAvantUtc,
+  type EntreeRetiree,
+} from '../../domain/entities/suivi.entity';
 import type { SuiviRepositoryPort } from '../../domain/ports/suivi-repository.port';
 import { SuiviDocumentClass } from './suivi.schema';
 import {
@@ -34,6 +38,7 @@ interface StoredSuivi {
   derniereMesureValide: MeasurementProps | null;
   blocageJournalier: { jourUtc: string; mesureId: string } | null;
   journauxAlimentaires: StoredFoodJournal[];
+  entreesRetirees?: EntreeRetiree[];
 }
 
 @Injectable()
@@ -188,6 +193,7 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
             derniereMesureValide: stored.derniereMesureValide,
             blocageJournalier: stored.blocageJournalier,
             journauxAlimentaires: stored.journauxAlimentaires,
+            entreesRetirees: stored.entreesRetirees,
           },
           $inc: { version: 1 },
         },
@@ -214,6 +220,7 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
           entrees: journalProps.entrees.map((entry) => entry.toProps()),
         };
       }),
+      entreesRetirees: props.entreesRetirees,
     };
   }
 
@@ -237,6 +244,11 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
             entrees: journal.entrees.map((entry) => FoodEntry.restore(entry)),
           }),
       ),
+      entreesRetirees: (document.entreesRetirees ?? []).map((trace) => ({
+        id: trace.id,
+        consommeLe: new Date(trace.consommeLe),
+        retireeLe: new Date(trace.retireeLe),
+      })),
     });
   }
 }

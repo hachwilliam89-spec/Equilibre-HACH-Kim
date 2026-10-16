@@ -3,8 +3,31 @@ import { AppException } from '../../../common/errors/app-exception';
 import { Measurement } from '../../../measurements/domain/entities/measurement.entity';
 import { Plan } from '../../../plans/domain/entities/plan.entity';
 import { DailyFoodJournal } from '../../../nutrition/domain/entities/daily-food-journal.entity';
+import { ANCIENNETE_MAX_JOURS } from '../../../nutrition/domain/services/saisie-differee';
 
 export const MAX_MESURES_SUIVI = 1000;
+
+/** Nombre maximal de traces d'entrées alimentaires retirées conservées. */
+export const MAX_ENTREES_RETIREES = 500;
+const JOUR_MS = 86_400_000;
+/**
+ * Durée de conservation d'une trace : tant qu'un ajout différé de cette
+ * entrée peut encore être rejoué (fenêtre de saisie différée), plus un jour
+ * de marge pour les fuseaux et l'horloge de l'appareil.
+ */
+const CONSERVATION_TRACE_MS = (ANCIENNETE_MAX_JOURS + 1) * JOUR_MS;
+
+/**
+ * Preuve qu'une entrée alimentaire a existé puis a été retirée. Enregistrée
+ * dans le même document que la suppression : un ajout rejoué après coup
+ * (réponse perdue, retrait depuis un autre appareil) ne la recrée pas.
+ */
+export interface EntreeRetiree {
+  id: string;
+  /** Horodatage retenu de l'entrée retirée : borne sa durée de conservation. */
+  consommeLe: Date;
+  retireeLe: Date;
+}
 
 export interface BlocageJournalier {
   jourUtc: string;
@@ -20,6 +43,7 @@ export interface SuiviProps {
   derniereMesureValide: Measurement | null;
   blocageJournalier: BlocageJournalier | null;
   journauxAlimentaires: DailyFoodJournal[];
+  entreesRetirees: EntreeRetiree[];
 }
 
 export class Suivi {
@@ -35,6 +59,7 @@ export class Suivi {
       derniereMesureValide: null,
       blocageJournalier: null,
       journauxAlimentaires: [],
+      entreesRetirees: [],
     });
   }
 
@@ -44,6 +69,8 @@ export class Suivi {
       plans: [...props.plans],
       mesures: [...props.mesures],
       journauxAlimentaires: [...props.journauxAlimentaires],
+      // Documents antérieurs aux traces de retrait : aucune trace.
+      entreesRetirees: [...(props.entreesRetirees ?? [])],
     });
   }
 
@@ -135,6 +162,38 @@ export class Suivi {
     );
   }
 
+  /**
+   * Retire une entrée et garde la trace de son retrait, purgée une fois que
+   * son ajout ne peut plus être rejoué. null si l'entrée est inconnue.
+   */
+  retirerEntreeAlimentaire(
+    entryId: string,
+    maintenant: Date,
+  ): DailyFoodJournal | null {
+    const journal = this.trouverJournalParEntreeAlimentaire(entryId);
+    if (!journal) return null;
+    const entree = journal
+      .toProps()
+      .entrees.find((item) => item.toProps().id === entryId);
+    journal.retirerEntree(entryId);
+    const limite = maintenant.getTime() - CONSERVATION_TRACE_MS;
+    const traces = this.props.entreesRetirees.filter(
+      (trace) => trace.consommeLe.getTime() >= limite,
+    );
+    traces.push({
+      id: entryId,
+      consommeLe: new Date(entree?.toProps().receivedAt ?? maintenant),
+      retireeLe: new Date(maintenant),
+    });
+    this.props.entreesRetirees = traces.slice(-MAX_ENTREES_RETIREES);
+    return journal;
+  }
+
+  /** true si cette entrée a déjà été ajoutée puis retirée (rejeu à ignorer). */
+  entreeAlimentaireRetiree(entryId: string): boolean {
+    return this.props.entreesRetirees.some((trace) => trace.id === entryId);
+  }
+
   retirerJournalAlimentaire(planId: string, jourUtc: string): void {
     this.props.journauxAlimentaires = this.props.journauxAlimentaires.filter(
       (journal) =>
@@ -204,6 +263,9 @@ export class Suivi {
       plans: [...this.props.plans],
       mesures: [...this.props.mesures],
       journauxAlimentaires: [...this.props.journauxAlimentaires],
+      entreesRetirees: this.props.entreesRetirees.map((trace) => ({
+        ...trace,
+      })),
     };
   }
 }

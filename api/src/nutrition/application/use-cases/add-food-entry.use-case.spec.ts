@@ -60,6 +60,15 @@ function setup(planActif = plan()) {
   return {
     useCase: new AddFoodEntryUseCase(plans, foods, suivis),
     journaux: () => stored.toProps().journauxAlimentaires,
+    /** Retrait par un autre appareil : même écriture que RemoveFoodEntryUseCase. */
+    retirer: (entryId: string) => {
+      const suivi = Suivi.restore(stored.toProps());
+      suivi.retirerEntreeAlimentaire(entryId, new Date());
+      stored = Suivi.restore({
+        ...suivi.toProps(),
+        version: stored.toProps().version + 1,
+      });
+    },
   };
 }
 
@@ -86,11 +95,11 @@ describe('AddFoodEntryUseCase.executeDepuisSynchro', () => {
     );
 
     expect(dejaAppliquee).toBe(false);
-    expect(journal.toProps().jourUtc).toBe(
+    expect(journal?.toProps().jourUtc).toBe(
       consommeLe.toISOString().slice(0, 10),
     );
     expect(journaux()).toHaveLength(1);
-    expect(journal.toProps().totalCaloriesKcal).toBe(78);
+    expect(journal?.toProps().totalCaloriesKcal).toBe(78);
   });
 
   it('est idempotent : rejouer la même entrée ne la duplique pas', async () => {
@@ -107,6 +116,25 @@ describe('AddFoodEntryUseCase.executeDepuisSynchro', () => {
 
     expect(rejeu.dejaAppliquee).toBe(true);
     expect(journaux()[0].toProps().entrees).toHaveLength(1);
+  });
+
+  it('ne recree pas une entree retiree quand son ajout est rejoue (reponse perdue)', async () => {
+    const { useCase, journaux, retirer } = setup();
+    const entree = {
+      entreeId: randomUUID(),
+      foodId: food.toProps().id,
+      quantiteGrammes: 100,
+      consommeLe: new Date(),
+    };
+
+    // Ajout accepte, mais la reponse n'arrive jamais a l'appareil.
+    await useCase.executeDepuisSynchro(userId, entree);
+    // L'entree est retiree ailleurs, puis l'appareil rejoue son ajout.
+    retirer(entree.entreeId);
+    const rejeu = await useCase.executeDepuisSynchro(userId, entree);
+
+    expect(rejeu).toEqual({ journal: null, dejaAppliquee: true });
+    expect(journaux()[0].toProps().entrees).toHaveLength(0);
   });
 
   it('refuse une entrée plus ancienne que la fenêtre de synchronisation', async () => {

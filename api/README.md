@@ -94,6 +94,11 @@ réponses documentées sont consultables dans Swagger.
 | GET | `/api/measurements/me` | Historique complet de l’utilisateur connecté ; rôle utilisateur uniquement |
 | GET | `/api/plans/users/:userId` | Plan actif d’un utilisateur rattaché au coach, ou `null` |
 | POST | `/api/plans/:id/cancel` | Annulation d’un plan ; coach concerné |
+| POST | `/api/food-journals/me/entries` | Ajout d’un aliment au journal du jour UTC ; rôle utilisateur |
+| DELETE | `/api/food-journals/me/entries/:entryId` | Retrait d’une entrée et recalcul du journal ; rôle utilisateur |
+| GET | `/api/food-journals/me/status` | Statut calorique du plan actif, ou `null` ; rôle utilisateur |
+| GET | `/api/food-journals/me/days/:jourUtc` | Journal d’un jour passé (lecture seule), ou `null` ; rôle utilisateur |
+| GET / POST | `/api/sync/me`, `/api/sync/me/operations` | Synchronisation de la base embarquée (voir `docs/synchronisation.md`) |
 
 Pour les routes protégées, transmettre `Authorization: Bearer <accessToken>`.
 Dans Swagger, utiliser le bouton **Authorize** avec le jeton d’accès obtenu

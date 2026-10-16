@@ -17,7 +17,7 @@ et [US3 — suivi de l’alimentation](https://uha4point0.atlassian.net/browse/F
 | Le serveur fait autorité | Toute modification locale est rejouée par l’API **avec les mêmes règles métier** que les routes en ligne. Ce que le serveur refuse est retiré de l’appareil et expliqué à l’utilisateur. |
 | Lecture locale d’abord | Les écrans lisent uniquement la base embarquée : affichage immédiat, hors ligne compris. |
 | Écriture locale d’abord | Une action écrit dans une file d’attente locale (*outbox*) puis déclenche une synchronisation. |
-| Idempotence | Les identifiants (opération, entrée alimentaire, mesure) sont générés sur l’appareil (UUID v4). Rejouer une opération déjà traitée ne crée pas de doublon. |
+| Idempotence | Les identifiants (opération, entrée alimentaire, mesure) sont générés sur l’appareil (UUID v4). Rejouer une opération déjà traitée ne crée pas de doublon, y compris quand l’entrée a été retirée entre-temps : le serveur garde une trace des entrées retirées, écrite dans la même mise à jour que le retrait (voir « Suppressions »). |
 | Échanges minimaux | 1 requête par cycle : `push` renvoie l’instantané à jour ; sans modification, `pull` renvoie **204 sans corps** si rien n’a changé (curseur). |
 
 Le rôle **coach** reste en ligne : il prépare des plans et ne saisit pas de suivi.
@@ -156,6 +156,7 @@ et doit confirmer.
 | Situation | Résolution |
 | --- | --- |
 | Même opération envoyée deux fois (réseau coupé avant la réponse) | Identifiants client → `deja-appliquee`, aucun doublon |
+| Ajout accepté, réponse perdue, entrée retirée ailleurs, puis ajout rejoué | Trace du retrait → `deja-appliquee`, l’entrée **n’est pas recréée** |
 | Aliment ajouté puis retiré hors ligne, avant envoi | Les deux opérations s’annulent sur l’appareil, rien n’est envoyé |
 | Favori basculé plusieurs fois hors ligne | Seul le dernier choix est envoyé |
 | Balance et saisie manuelle le même jour | Règle « une mesure valide par jour » : la saisie hors ligne est rejetée et l’utilisateur en est informé |
@@ -167,6 +168,7 @@ et doit confirmer.
 | Sens | Règle |
 | --- | --- |
 | Appareil → serveur | Retirer un aliment hors ligne crée une opération `retrait-aliment` dans la file. L’entrée disparaît de l’écran, mais l’opération reste jusqu’à la réponse du serveur. Si l’entrée n’avait pas encore été envoyée, l’ajout et le retrait s’annulent sur l’appareil. Retirer un favori envoie `favori` à `false`. Les mesures de poids ne se suppriment pas (historique conservé, règles de l’US2). |
+| Trace côté serveur | Chaque retrait d’entrée (route en ligne ou `retrait-aliment`) ajoute `{ id, consommeLe, retireeLe }` à `entreesRetirees` du document `suivis`, **dans la même mise à jour versionnée** que la suppression : la trace existe si et seulement si le retrait a été enregistré. Un `ajout-aliment` dont l’`entreeId` figure dans les traces répond `deja-appliquee` sans rien créer. Les traces sont conservées tant que l’ajout peut encore être rejoué (fenêtre de saisie différée de 7 jours, plus 1 jour de marge), et bornées à 500. Pas de nouvelle collection : la preuve vit avec les données qu’elle protège. |
 | Serveur → appareil | Pas de marqueur de suppression : chaque instantané contient **tout** le périmètre embarqué et remplace les tables serveur dans une transaction. Un élément absent de l’instantané disparaît de l’appareil : entrée retirée depuis un autre appareil, favori retiré, journal sorti de la fenêtre J/J-1, mesure de plus de 3 mois. Il n’y a donc aucun marqueur à nettoyer. |
 
 Coût de ce choix : un instantané reste petit (2 journaux, environ 90 mesures,
@@ -202,12 +204,12 @@ Sync -> DB : SELECT operations_en_attente
 Sync -> API : POST /sync/me/operations\n{ operations: [ajout-aliment] }
 API -> UC : executeDepuisSynchro(userId du JWT, entrée)
 UC -> UC : fenêtre (futur, 7 jours, période du plan)
-UC -> MongoDB : charger suivi ; entreeId déjà présente ?
+UC -> MongoDB : charger suivi ; entreeId déjà présente\nou déjà retirée (entreesRetirees) ?
 UC -> MongoDB : updateOne si version inchangée
 UC --> API : appliquée
 API -> MongoDB : lecture du strict nécessaire
 API --> Sync : 200 { resultats: [appliquee], instantane }
-Sync -> DB : DELETE opération ; remplacer tables serveur (transaction)
+Sync -> DB : une transaction : DELETE opération acquittée,\ntentatives + 1 des autres, remplacer tables serveur
 Sync --> UI : vue à jour
 UI --> Utilisateur : « Synchronisé à 14:32 »
 @enduml
@@ -255,7 +257,7 @@ API -> UC : executeDepuisSynchro
 UC -> MongoDB : mesure valide déjà présente ce jour
 UC --> API : 409 measurement-day-conflict
 API --> Sync : { statut: rejetee, code: measurement-day-conflict }
-Sync -> DB : DELETE opération ; remplacer tables serveur
+Sync -> DB : une transaction : DELETE opération rejetée,\nremplacer tables serveur
 Sync --> Utilisateur : « Ton poids saisi (79,4 kg) n’a pas été retenu :\nune mesure valide existait déjà ce jour-là. »
 @enduml
 ```
@@ -293,10 +295,10 @@ Aucune règle métier n’est dupliquée : `AddFoodEntryUseCase` et
 
 | Niveau | Fichier | Couvre |
 | --- | --- | --- |
-| Unitaires API | `saisie-differee*.spec.ts`, `add-food-entry.use-case.spec.ts`, `apply-sync-operations.use-case.spec.ts`, `sync.dto.spec.ts` | Fenêtres temporelles, idempotence, classification des résultats, curseur, validation |
+| Unitaires API | `saisie-differee*.spec.ts`, `add-food-entry.use-case.spec.ts`, `suivi.entrees-retirees.spec.ts`, `apply-sync-operations.use-case.spec.ts`, `sync.dto.spec.ts` | Fenêtres temporelles, idempotence (y compris rejeu après retrait), traces de retrait (purge, borne), classification des résultats, curseur, validation |
 | HTTP API | `sync.controller.spec.ts` | 401/403, 200 puis 204 avec curseur, conversion des dates, 400, Swagger |
-| Intégration API (MongoDB réel, sans mock) | `test/sync.integration-spec.ts` | Pull, push, rejeu sans doublon, refus métier, état final de la base |
-| Mobile | `src/sync/tests/*.test.ts` | Contrat identique des adaptateurs SQLite (vrai SQL via sql.js) et mémoire, projection, moteur, store |
+| Intégration API (MongoDB réel, sans mock) | `test/sync.integration-spec.ts` | Pull, push, rejeu sans doublon, rejeu d’un ajout après retrait de l’entrée, refus métier, état final de la base |
+| Mobile | `src/sync/tests/*.test.ts` | Contrat identique des adaptateurs SQLite (vrai SQL via sql.js) et mémoire, projection, moteur, store ; réponse d’un push appliquée en une transaction (rien n’est acquitté si l’écriture échoue) ; état et file retrouvés après fermeture puis réouverture du fichier SQLite |
 
 ```bash
 pnpm test                       # unitaires API
@@ -307,8 +309,8 @@ pnpm --dir mobile test          # mobile
 ### Recette sur iPhone
 
 **Jeu de données fictif** : un compte utilisateur de démonstration avec un plan
-actif créé par le coach (80 → 75 kg sur 30 jours, budget 1 800 kcal), au moins
-une mesure envoyée par le simulateur de balance, et l’aliment « Riz blanc cuit »
+actif créé par le coach (80 → 75 kg sur 35 jours, soit 1 kg/semaine, budget
+1 800 kcal), au moins une mesure envoyée par le simulateur de balance, et l’aliment « Riz blanc cuit »
 (130 kcal pour 100 g) en favori. Aucune donnée personnelle réelle.
 
 **Modification côté serveur** : depuis Swagger (`/api/docs`), connecté avec le
@@ -336,7 +338,9 @@ La colonne « Observé » se remplit pendant la recette (date, OK ou KO, remarqu
 ## 9. Limites connues
 
 - **Abandon après 5 tentatives** : une opération qui reçoit 5 fois `a-reessayer` est retirée de la file et l’utilisateur en est informé ; elle n’est pas rejouée ensuite.
-- **Historique alimentaire** : seuls les journaux d’aujourd’hui et d’hier sont consultables hors ligne.
+- **Historique alimentaire** : seuls les journaux d’aujourd’hui et d’hier sont
+  consultables hors ligne ; les journées de J-2 à J-6 se consultent en ligne, en
+  lecture seule (`GET /api/food-journals/me/days/:jourUtc`, FR403-754).
 - **Recherche d’aliments** : impossible hors ligne (le référentiel n’est pas embarqué) ; l’ajout hors ligne passe par les favoris et les aliments récents.
 - **Poids hors ligne** : accepté seulement s’il arrive le jour même (UTC) et qu’aucune mesure valide n’existe déjà ce jour-là.
 - **Instantané complet** : adapté au petit périmètre d’un utilisateur ; un volume plus grand demanderait des changements paginés par curseur.

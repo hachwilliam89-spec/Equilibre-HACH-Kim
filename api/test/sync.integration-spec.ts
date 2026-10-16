@@ -21,6 +21,7 @@ interface StoredSuivi {
     entrees: { id: string; categorieRepas?: string }[];
     totalCaloriesKcal: number;
   }[];
+  entreesRetirees?: { id: string }[];
 }
 
 interface UserRow {
@@ -335,6 +336,38 @@ describe('Synchronisation BDD embarquée <-> MongoDB (intégration)', () => {
     const today = row?.journauxAlimentaires.find((j) => j.jourUtc === jour(0));
     expect(today?.entrees.map((e) => e.id)).not.toContain(entreeId);
     expect(today?.totalCaloriesKcal).toBeLessThan(totalAvant ?? 0);
+  });
+
+  it('push : un ajout rejoue apres le retrait de son entree ne la recree pas (reponse perdue)', async () => {
+    const entreeId = randomUUID();
+    const ajout = {
+      id: randomUUID(),
+      type: 'ajout-aliment',
+      entreeId,
+      foodId: riz,
+      quantiteGrammes: 80,
+      consommeLe: new Date().toISOString(),
+    };
+    // 1. Ajout accepte cote serveur ; la reponse est perdue par l'appareil.
+    await push(userId, [ajout]).expect(200);
+    // 2. L'entree est retiree depuis un autre appareil (route en ligne).
+    await request(app.getHttpServer())
+      .delete(`/api/food-journals/me/entries/${entreeId}`)
+      .auth(token(userId), { type: 'bearer' })
+      .expect(200);
+    // 3. L'appareil rejoue le meme ajout.
+    const { body } = (await push(userId, [ajout]).expect(200)) as {
+      body: PushResult;
+    };
+
+    expect(body.resultats[0].statut).toBe('deja-appliquee');
+    const row = await suivis.findOne({ _id: userId });
+    const entrees = (row?.journauxAlimentaires ?? []).flatMap((j) =>
+      j.entrees.map((e) => e.id),
+    );
+    expect(entrees).not.toContain(entreeId);
+    // La trace du retrait est enregistree dans le meme document.
+    expect(row?.entreesRetirees?.map((t) => t.id)).toContain(entreeId);
   });
 
   it('refuse un lot invalide', async () => {

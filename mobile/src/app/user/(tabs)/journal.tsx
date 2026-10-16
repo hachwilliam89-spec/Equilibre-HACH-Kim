@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { DailyBudgetChart } from "../../../charts/DailyBudgetChart";
 import {
   dailyJournalStatusPresentation,
@@ -8,7 +8,8 @@ import {
   groupEntriesByMeal,
   referenceFoodFromEntry, formatKcal, suggestedMeal } from "../../../nutrition/presentation";
 import { AddFoodSheet } from "../../../nutrition/AddFoodSheet";
-import type { MealCategory } from "../../../nutrition/api";
+import { getFoodJournalForDay, type FoodJournal, type MealCategory } from "../../../nutrition/api";
+import { derniersJours, type JourJournal } from "../../../nutrition/journal-days";
 import { FoodIcon } from "../../../nutrition/FoodIcon";
 import { foodIconKind } from "../../../nutrition/food-icon-kind";
 import { MacroBreakdown } from "../../../nutrition/MacroBreakdown";
@@ -26,16 +27,60 @@ const localStyles = StyleSheet.create({
   note: { color: colors.muted, fontSize: 13, lineHeight: 19 },
 });
 
+/** Journal chargé depuis l'API pour une journée hors de la base embarquée. */
+type JournalDistant =
+  | { etat: "ok"; journal: FoodJournal | null }
+  | { etat: "erreur"; message: string };
+
+/** Pastilles des 7 derniers jours ; la journée choisie est mise en avant. */
+function DaySelector({ jours, choisi, onChange }: { jours: JourJournal[]; choisi: string; onChange: (jourUtc: string) => void }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      accessibilityRole="tablist"
+      contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
+    >
+      {jours.map((jour) => {
+        const selected = jour.jourUtc === choisi;
+        return (
+          <Pressable
+            key={jour.jourUtc}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`Journal : ${jour.long}`}
+            onPress={() => onChange(jour.jourUtc)}
+            style={({ pressed }) => ({
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: selected ? colors.brand : colors.borderStrong,
+              backgroundColor: selected ? colors.brand : pressed ? colors.mintSoft : colors.card,
+            })}
+          >
+            <Text style={{ fontSize: 14, fontWeight: "700", color: selected ? colors.onBrand : colors.ink }}>
+              {jour.court}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 function Entry({
   entry,
   onRemove,
   onEdit,
   disabled,
+  readOnly = false,
 }: {
   entry: LocalFoodEntry;
   onRemove: () => void;
   onEdit: () => void;
   disabled: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <View style={s.historyItem}>
@@ -54,7 +99,7 @@ function Entry({
         glucides={entry.glucidesG}
         lipides={entry.lipidesG}
       />
-      <View style={{ flexDirection: "row", gap: 20 }}>
+      {!readOnly && <View style={{ flexDirection: "row", gap: 20 }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Modifier la quantité de ${entry.nom}`}
@@ -73,7 +118,7 @@ function Entry({
         >
           <Text style={[s.link, { color: colors.muted }, disabled && s.disabled]}>Retirer</Text>
         </Pressable>
-      </View>
+      </View>}
     </View>
   );
 }
@@ -94,10 +139,48 @@ export default function FoodJournalScreen() {
   const [undoEntry, setUndoEntry] = useState<LocalFoodEntry | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const todayUtc = new Date().toISOString().slice(0, 10);
-  const today = status?.journaux.find((journal) => journal.jourUtc === todayUtc) ?? null;
+  const jours = derniersJours();
+  const [jourChoisi, setJourChoisi] = useState(jours[0].jourUtc);
+  const choix = jours.find((jour) => jour.jourUtc === jourChoisi) ?? jours[0];
+  const [distants, setDistants] = useState<Record<string, JournalDistant>>({});
+  const distant = choix.horsLigne ? undefined : distants[choix.jourUtc];
+
+  // Journées anciennes : chargées une fois depuis l'API, en lecture seule.
+  useEffect(() => {
+    if (choix.horsLigne || distants[choix.jourUtc]) return;
+    let actif = true;
+    const jour = choix.jourUtc;
+    getFoodJournalForDay(jour)
+      .then((journal) => {
+        if (actif) setDistants((prev) => ({ ...prev, [jour]: { etat: "ok", journal } }));
+      })
+      .catch((cause: unknown) => {
+        if (actif) {
+          setDistants((prev) => ({
+            ...prev,
+            [jour]: {
+              etat: "erreur",
+              message: cause instanceof Error ? cause.message : "Impossible de charger ce jour.",
+            },
+          }));
+        }
+      });
+    return () => {
+      actif = false;
+    };
+  }, [choix.horsLigne, choix.jourUtc, distants]);
+
+  const journalDistant = distant?.etat === "ok" && distant.journal
+    ? { ...distant.journal, entrees: distant.journal.entrees.map((entree) => ({ ...entree, enAttente: false })) }
+    : null;
+  const today = choix.horsLigne
+    ? status?.journaux.find((journal) => journal.jourUtc === choix.jourUtc) ?? null
+    : journalDistant;
+  const chargementJour = !choix.horsLigne && distant === undefined;
+  const erreurJour = distant?.etat === "erreur" ? distant.message : "";
   const totalKcal = today?.totalCaloriesKcal ?? 0;
-  const budgetKcal = status?.budgetCalorique ?? 0;
+  // Journée passée : budget copié dans son journal à sa création.
+  const budgetKcal = (choix.modifiable ? undefined : today?.budgetCalorique) ?? status?.budgetCalorique ?? 0;
   const entries = today?.entrees.slice().sort((a, b) =>
     b.receivedAt.localeCompare(a.receivedAt),
   ) ?? [];
@@ -149,7 +232,7 @@ export default function FoodJournalScreen() {
       refreshing={enCours && !loading}
       onRefresh={() => void synchroniser()}
       floating={
-        status && !loading && !error ? (
+        status && !loading && !error && choix.modifiable ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Ajouter un aliment"
@@ -185,9 +268,30 @@ export default function FoodJournalScreen() {
         </View>
       ) : (
         <>
+          <DaySelector jours={jours} choisi={choix.jourUtc} onChange={setJourChoisi} />
+          {chargementJour || erreurJour ? (
+            <View style={s.card}>
+              {chargementJour ? (
+                <>
+                  <ActivityIndicator color={colors.brand} accessibilityLabel={`Chargement du journal : ${choix.long}`} />
+                  <Text style={s.text}>Chargement du journal…</Text>
+                </>
+              ) : (
+                <>
+                  <Text accessibilityRole="alert" style={s.error}>{erreurJour}</Text>
+                  <Text style={localStyles.note}>Les journées avant hier se consultent en ligne.</Text>
+                  <Button
+                    title="Réessayer"
+                    onPress={() => setDistants(({ [choix.jourUtc]: _retire, ...reste }) => reste)}
+                  />
+                </>
+              )}
+            </View>
+          ) : (
+          <>
           <View style={s.card}>
             <View style={[s.summaryRow, { alignItems: "center" }]}>
-              <Text style={s.metricLabel}>Aujourd’hui</Text>
+              <Text style={s.metricLabel}>{choix.long}</Text>
               <View
                 accessible
                 accessibilityLabel={`Statut alimentaire : ${statusPresentation.label}`}
@@ -221,7 +325,9 @@ export default function FoodJournalScreen() {
               }
             />
             <Text style={localStyles.note}>
-              Cibles indicatives selon ton budget et ton activité ; le suivi reste calorique.
+              {choix.modifiable
+                ? "Cibles indicatives selon ton budget et ton activité ; le suivi reste calorique."
+                : "Journée passée : consultation en lecture seule."}
             </Text>
           </View>
 
@@ -230,10 +336,14 @@ export default function FoodJournalScreen() {
           <View style={s.card}>
             <Text style={s.cardTitle}>Aliments consommés</Text>
             {entries.length === 0 ? (
-              <>
-                <Text style={s.text}>Aucun aliment consigné aujourd’hui.</Text>
-                <Button title="Ajouter mon premier aliment" variant="secondary" onPress={addFood} />
-              </>
+              choix.modifiable ? (
+                <>
+                  <Text style={s.text}>Aucun aliment consigné aujourd’hui.</Text>
+                  <Button title="Ajouter mon premier aliment" variant="secondary" onPress={addFood} />
+                </>
+              ) : (
+                <Text style={s.text}>Aucun aliment consigné ce jour-là.</Text>
+              )
             ) : (
               mealGroups.map((group) => (
                 <View key={group.value} style={{ gap: 4 }}>
@@ -250,6 +360,7 @@ export default function FoodJournalScreen() {
                       onRemove={() => void confirmRemove(entry)}
                       onEdit={() => startEdit(entry)}
                       disabled={removingId !== null}
+                      readOnly={!choix.modifiable}
                     />
                   ))}
                 </View>
@@ -265,6 +376,8 @@ export default function FoodJournalScreen() {
             )}
             {!!removeError && <Text accessibilityRole="alert" style={s.error}>{removeError}</Text>}
           </View>
+          </>
+          )}
         </>
       )}
 

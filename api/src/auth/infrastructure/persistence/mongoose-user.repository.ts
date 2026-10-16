@@ -82,17 +82,32 @@ export class MongooseUserRepository implements UserRepositoryPort {
   /** Insertion d'un nouvel utilisateur (voir RegisterUseCase). */
   async create(user: User): Promise<User> {
     const props = user.toProps();
-    const doc = await this.userModel.create({
-      _id: props.id,
-      email: props.email,
-      passwordHash: props.passwordHash,
-      role: props.role,
-      prenom: props.prenom,
-      nom: props.nom,
-      profil: this.toProfile(props),
-      coachId: props.coachId,
-    });
-    return this.toDomain(doc);
+    try {
+      const doc = await this.userModel.create({
+        _id: props.id,
+        email: props.email,
+        passwordHash: props.passwordHash,
+        role: props.role,
+        prenom: props.prenom,
+        nom: props.nom,
+        profil: this.toProfile(props),
+        coachId: props.coachId,
+      });
+      return this.toDomain(doc);
+    } catch (error: unknown) {
+      // Deux inscriptions simultanees peuvent passer toutes les deux la
+      // verification prealable (findByEmail). L'index unique sur l'e-mail
+      // tranche : la seconde insertion echoue et recoit le meme 409 que
+      // dans le cas sequentiel, au lieu d'une erreur 500.
+      if (isDuplicateEmail(error)) {
+        throw new AppException(
+          'email-already-used',
+          'Cet email est deja utilise',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
   }
 
   /**
@@ -159,4 +174,18 @@ export class MongooseUserRepository implements UserRepositoryPort {
       sexe: props.sexe,
     };
   }
+}
+
+function isDuplicateEmail(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  if (!('code' in error) || error.code !== 11000) return false;
+  const keyPattern = 'keyPattern' in error ? error.keyPattern : undefined;
+  // Sans keyPattern (anciens pilotes), un doublon a l'insertion d'un compte
+  // ne peut venir que de l'e-mail : l'id est un UUID genere a l'instant.
+  return (
+    keyPattern === undefined ||
+    (typeof keyPattern === 'object' &&
+      keyPattern !== null &&
+      'email' in keyPattern)
+  );
 }
