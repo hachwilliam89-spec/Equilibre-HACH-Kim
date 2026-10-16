@@ -47,6 +47,14 @@ export function createMemoryStore(): LocalStore {
       const set = new Set(ids);
       file = file.filter((op) => !set.has(op.id));
     },
+    async appliquerReponse(terminees, aReessayer, snapshot: Snapshot, recuLe) {
+      const fini = new Set(terminees);
+      const encore = new Set(aReessayer);
+      file = file
+        .filter((op) => !fini.has(op.id))
+        .map((op) => (encore.has(op.id) ? { ...op, tentatives: op.tentatives + 1 } : op));
+      serveur = { ...clone(snapshot), synchroniseLe: recuLe, recents: serveur.recents };
+    },
     async noterTentative(ids) {
       const set = new Set(ids);
       file = file.map((op) =>

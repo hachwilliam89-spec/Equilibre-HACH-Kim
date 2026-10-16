@@ -25,6 +25,19 @@ export interface LocalStore {
   enfiler(operation: LocalOperation, creeLe: string): Promise<void>;
   retirerOperations(ids: string[]): Promise<void>;
   noterTentative(ids: string[]): Promise<void>;
+  /**
+   * Réponse d'un push, en une seule transaction : retire les opérations
+   * traitées, compte une tentative pour celles à réessayer et remplace la
+   * copie serveur. Un arrêt de l'application au milieu ne peut pas laisser
+   * une opération acquittée dans la file avec l'état serveur déjà à jour
+   * (ou l'inverse).
+   */
+  appliquerReponse(
+    terminees: string[],
+    aReessayer: string[],
+    snapshot: Snapshot,
+    recuLe: string,
+  ): Promise<void>;
   noterRecent(food: ReferenceFood, le: string): Promise<void>;
   /** Déconnexion : rien ne doit rester sur l'appareil. */
   vider(): Promise<void>;

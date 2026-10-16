@@ -5,9 +5,12 @@ import type { SqlDatabase, SqlExecutor, SqlParam } from "../sqlite-store";
  * Adaptateur de test : moteur SQLite réel (sql.js, compilé en JS) exposé avec
  * la même interface qu'expo-sqlite, pour exécuter le vrai SQL du store.
  */
-export async function createSqlJsDatabase(): Promise<SqlDatabase> {
+export async function createSqlJsDatabase(
+  contenu?: Uint8Array,
+): Promise<SqlDatabase & { exporter: () => Uint8Array; fermer: () => void }> {
   const SQL = await initSqlJs();
-  const db = new SQL.Database();
+  // contenu : octets d'un fichier SQLite existant (réouverture après arrêt).
+  const db = contenu ? new SQL.Database(contenu) : new SQL.Database();
   const executor: SqlExecutor = {
     async execAsync(source) {
       db.exec(source);
@@ -31,6 +34,9 @@ export async function createSqlJsDatabase(): Promise<SqlDatabase> {
   let file: Promise<void> = Promise.resolve();
   return {
     ...executor,
+    /** Octets du fichier SQLite, tels qu'ils seraient écrits sur le disque. */
+    exporter: () => db.export(),
+    fermer: () => db.close(),
     withExclusiveTransactionAsync(task) {
       const run = file.then(async () => {
         db.exec("BEGIN");

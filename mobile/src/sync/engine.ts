@@ -72,9 +72,8 @@ export async function synchroniser(
       }
     }
 
-    await store.retirerOperations(terminees);
-    await store.noterTentative(aReessayer);
-    await store.remplacerEtatServeur(instantane, maintenant().toISOString());
+    // Acquittement et nouvel état serveur dans la même transaction locale.
+    await store.appliquerReponse(terminees, aReessayer, instantane, maintenant().toISOString());
     rapport.donneesRecues = true;
 
     // Les opérations à réessayer attendront le prochain cycle.

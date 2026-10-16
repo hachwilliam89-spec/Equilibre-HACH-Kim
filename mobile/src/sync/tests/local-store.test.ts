@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { LocalStore } from "../local-store";
 import { createMemoryStore } from "../memory-store";
 import { createSqliteStore } from "../sqlite-store";
@@ -83,6 +86,20 @@ describe.each(adaptateurs)("LocalStore %s", (_nom, creer) => {
     expect((await store.operations()).map((op) => op.id)).toEqual(["op-2"]);
   });
 
+  it("applique la réponse d'un push : acquitte, compte les tentatives et remplace l'état", async () => {
+    await store.enfiler({ id: "op-1", type: "retrait-aliment", entreeId: "e-1" }, "2026-10-06T10:00:00.000Z");
+    await store.enfiler({ id: "op-2", type: "retrait-aliment", entreeId: "e-2" }, "2026-10-06T10:01:00.000Z");
+
+    await store.appliquerReponse(["op-1"], ["op-2"], snapshot(), "2026-10-06T10:02:00.000Z");
+
+    expect(await store.operations()).toEqual([
+      expect.objectContaining({ id: "op-2", tentatives: 1 }),
+    ]);
+    const etat = await store.lireEtatServeur();
+    expect(etat.curseur).toBe("curseur-1");
+    expect(etat.synchroniseLe).toBe("2026-10-06T10:02:00.000Z");
+  });
+
   it("garde les aliments récents même quand les favoris changent", async () => {
     await store.noterRecent(pomme, "2026-10-06T09:00:00.000Z");
     await store.remplacerEtatServeur(snapshot({ favoris: [] }), "t");
@@ -122,3 +139,48 @@ describe.each(adaptateurs)("LocalStore %s", (_nom, creer) => {
     expect((await store.lireEtatServeur()).curseur).toBe("curseur-1");
   });
 });
+
+describe("LocalStore SQLite : atomicité et persistance du fichier", () => {
+  it("n'acquitte rien si l'écriture de l'état serveur échoue (une seule transaction)", async () => {
+    const store = createSqliteStore(await createSqlJsDatabase());
+    await store.ouvrir("u-1");
+    await store.remplacerEtatServeur(snapshot(), "t0");
+    await store.enfiler({ id: "op-1", type: "retrait-aliment", entreeId: "e-1" }, "t1");
+    const valide = snapshot();
+    // Deux mesures avec le même identifiant : la clé primaire fait échouer l'écriture.
+    const invalide = snapshot({ curseur: "c-invalide", mesures: [valide.mesures[0], valide.mesures[0]] });
+
+    await expect(store.appliquerReponse(["op-1"], [], invalide, "t2")).rejects.toThrow();
+
+    expect((await store.operations()).map((op) => op.id)).toEqual(["op-1"]);
+    expect((await store.lireEtatServeur()).curseur).toBe("curseur-1");
+  });
+
+  it("retrouve l'état et la file après un arrêt complet (fichier fermé puis rouvert)", async () => {
+    const premiere = await createSqlJsDatabase();
+    const avant = createSqliteStore(premiere);
+    await avant.ouvrir("u-1");
+    await avant.remplacerEtatServeur(snapshot(), "2026-10-06T10:00:00.000Z");
+    await avant.enfiler({ id: "op-1", type: "retrait-aliment", entreeId: "e-1" }, "2026-10-06T10:01:00.000Z");
+    await avant.noterRecent(pomme, "2026-10-06T10:02:00.000Z");
+
+    // Arrêt de l'application : seul le fichier SQLite subsiste.
+    const fichier = join(mkdtempSync(join(tmpdir(), "equilibre-sqlite-")), "equilibre.db");
+    writeFileSync(fichier, premiere.exporter());
+    premiere.fermer();
+
+    // Redémarrage : nouvelle connexion ouverte sur le même fichier, même compte.
+    const apres = createSqliteStore(await createSqlJsDatabase(readFileSync(fichier)));
+    await apres.ouvrir("u-1");
+
+    const etat = await apres.lireEtatServeur();
+    expect(etat.curseur).toBe("curseur-1");
+    expect(etat.synchroniseLe).toBe("2026-10-06T10:00:00.000Z");
+    expect(etat.mesures.map((m) => m.id)).toEqual(["m-1", "m-0"]);
+    expect(etat.recents.map((r) => r.id)).toEqual([pomme.id]);
+    expect(await apres.operations()).toEqual([
+      expect.objectContaining({ id: "op-1", type: "retrait-aliment", entreeId: "e-1" }),
+    ]);
+  });
+});
+
