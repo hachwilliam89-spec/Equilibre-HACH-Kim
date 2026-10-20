@@ -4,6 +4,7 @@ import { measurementSchema, weightTrackingSchema } from "../measurements/api";
 import { macroTargetsSchema } from "../nutrition/api";
 import { clientSchema, requestApi } from "../plans/api";
 import { hasIdentity } from "../identity/identity";
+import { moyenneActiviteSchema } from "../activity/api";
 
 const foodStatusSchema = z.enum(["dans-le-budget", "depassement", "pas-de-donnees-recentes"]);
 
@@ -38,6 +39,8 @@ export const clientProgressionSchema = z.object({
       jours: z.array(jourCaloriqueSchema),
     })
     .nullable(),
+  /** Moyenne des 7 jours de pas (US4) ; absente sur une API antérieure. */
+  activite: moyenneActiviteSchema.optional(),
 });
 
 export type ClientOverview = z.infer<typeof clientOverviewSchema>;

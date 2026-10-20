@@ -17,6 +17,7 @@ import { MeasurementField } from "../../ui/MeasurementField";
 import { displayDate, nextDate } from "../../ui/dates";
 import { displayName, hasIdentity, initials } from "../../identity/identity";
 import { confirmAction } from "../../ui/confirmStore";
+import { coachActivityHint } from "../../activity/presentation";
 
 const activities = { sedentaire: "Sédentaire", actif: "Actif", sportif: "Sportif", athlete: "Athlète" } as const;
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -36,6 +37,10 @@ export default function UserPlan() {
   const [fields, setFields] = useState({ poidsDepart: "", poidsCible: "", dateDebut: today(), dateCible: "" });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [activity, setActivity] = useState<keyof typeof activities>("sedentaire");
+  // Niveau prérempli depuis la montre (US4) : tant que le coach ne le change
+  // pas, l'API le déduit elle-même au moment du calcul.
+  const [activityFromSteps, setActivityFromSteps] = useState(false);
+  const niveauEnvoye = () => (activityFromSteps ? {} : { niveauActivite: activity });
   const [budget, setBudget] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [suggestedBudget, setSuggestedBudget] = useState<number | null>(null);
@@ -69,6 +74,9 @@ export default function UserPlan() {
     const limit = goals.data.poidsCible < goals.data.poidsDepart ? 1 : 0.5;
     if (imc! < 18.5) { setFieldErrors({ poidsCible: "L’IMC cible doit être au moins égal à 18,5." }); return; }
     if (rate! > limit + 1e-9) { setFieldErrors({ dateCible: `Rythme maximal : ${limit} kg/semaine. Allongez la durée ou ajustez l’objectif.` }); return; }
+    const deduit = progression?.activite?.niveau ?? null;
+    if (deduit) setActivity(deduit);
+    setActivityFromSteps(deduit !== null);
     setPreview(null); setBudget(""); setSuggestedBudget(null); setStep("budget");
   };
   const calculate = () => run(async () => {
@@ -79,7 +87,7 @@ export default function UserPlan() {
       if (!parsed.success) throw new Error("Saisissez un budget calorique positif.");
       manual = parsed.data;
     }
-    const result = parseApiData(previewSchema, await requestApi("/plans/preview", "POST", { ...goals.data, userId, niveauActivite: activity, ...(manual === undefined ? {} : { budgetCalorique: manual }) }));
+    const result = parseApiData(previewSchema, await requestApi("/plans/preview", "POST", { ...goals.data, userId, ...niveauEnvoye(), ...(manual === undefined ? {} : { budgetCalorique: manual }) }));
     setPreview(result); setSuggestedBudget(manual === undefined ? result.budgetCalorique : null);
     setBudget(String(result.budgetCalorique));
   });
@@ -88,7 +96,7 @@ export default function UserPlan() {
     const parsed = budgetSchema.safeParse(budget);
     if (!parsed.success) throw new Error("Saisissez un budget calorique positif.");
     const result = parseApiData(planSchema, await requestApi("/plans", "POST", {
-      ...goals.data, userId, niveauActivite: activity,
+      ...goals.data, userId, ...niveauEnvoye(),
       // Sans modification, laisser le serveur recalculer la suggestion et son avertissement.
       ...(suggestedBudget !== null && parsed.data === suggestedBudget ? {} : { budgetCalorique: parsed.data }),
     }));
@@ -190,8 +198,9 @@ export default function UserPlan() {
       {step === "budget" && <View style={s.card}>
         <Text style={s.label}>Niveau d’activité</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {(Object.keys(activities) as (keyof typeof activities)[]).map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: activity === key }} disabled={busy} onPress={() => { setActivity(key); setPreview(null); setSuggestedBudget(null); if (automatic) setBudget(""); }} style={[s.choice, activity === key && s.choiceSelected]}><Text style={s.label}>{activities[key]}</Text></Pressable>)}
+          {(Object.keys(activities) as (keyof typeof activities)[]).map((key) => <Pressable key={key} accessibilityRole="radio" accessibilityState={{ checked: activity === key }} disabled={busy} onPress={() => { setActivity(key); setActivityFromSteps(false); setPreview(null); setSuggestedBudget(null); if (automatic) setBudget(""); }} style={[s.choice, activity === key && s.choiceSelected]}><Text style={s.label}>{activities[key]}</Text></Pressable>)}
         </View>
+        <Text style={s.historyMeta}>{activityFromSteps ? coachActivityHint(progression?.activite) : progression?.activite?.niveau ? "Niveau choisi par le coach : il remplace celui déduit de la montre." : coachActivityHint(progression?.activite)}</Text>
         {!automatic && <Text style={s.text}>Âge ou sexe non renseigné : saisissez le budget manuellement.</Text>}
         {(!automatic || preview) && <Field label="Budget retenu (kcal/jour)" value={budget} onChange={(value) => { setBudget(value); if (!automatic) setPreview(null); }} numeric disabled={busy} />}
         <Button title={automatic ? "Calculer la proposition" : "Vérifier la proposition"} disabled={busy} onPress={() => void calculate()} />
@@ -200,6 +209,7 @@ export default function UserPlan() {
           <Text style={s.text}>{preview.poidsDepart} kg → {preview.poidsCible} kg</Text>
           <Text style={s.text}>{displayDate(preview.dateDebut)} → {displayDate(preview.dateCible)}</Text>
           <Text style={s.text}>IMC cible : {preview.imcCible.toFixed(1)}</Text>
+          <Text style={s.text}>Niveau d’activité : {activities[preview.niveauActivite]}{preview.niveauActiviteSource === "pas" ? " (déduit de la montre)" : ""}</Text>
           {suggestedBudget !== null && <Text style={s.text}>Budget suggéré : {suggestedBudget.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour</Text>}
           {!!preview.avertissement && <Text style={s.text}>{preview.avertissement}</Text>}
           <Text style={s.text}>Budget retenu : {budget} kcal/jour</Text>

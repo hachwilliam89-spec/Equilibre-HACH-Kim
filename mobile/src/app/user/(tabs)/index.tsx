@@ -19,6 +19,7 @@ import { etatChargement } from "../../../sync/presentation";
 import { SyncStatus } from "../../../sync/SyncStatus";
 import { useSync } from "../../../sync/useSync";
 import { Collapsible } from "../../../ui/Collapsible";
+import { ActivityCard } from "../../../activity/ActivityCard";
 import { todayLabel } from "../../../ui/dates";
 import { useIdentity } from "../../../identity/store";
 import { ChevronRight } from "../../../ui/icons";
@@ -83,7 +84,12 @@ export default function WeightTrackingScreen() {
   const tracking = vue.suiviPoids;
   const history = vue.mesures;
   const { loading, error } = etatChargement({ ...vue, enCours, horsLigne, erreur });
-  const retry = () => void synchroniser();
+  // Rafraîchir le suivi recharge aussi l'activité, lue en ligne.
+  const [activityKey, setActivityKey] = useState(0);
+  const retry = () => {
+    setActivityKey((key) => key + 1);
+    void synchroniser();
+  };
   const [showAll, setShowAll] = useState(false);
   const [correctionWeight, setCorrectionWeight] = useState("");
   const [correctionError, setCorrectionError] = useState("");
@@ -236,6 +242,8 @@ export default function WeightTrackingScreen() {
       )}
 
       {(loading || error || tracking === null) && <SyncStatus />}
+
+      {!loading && !error && <ActivityCard refreshKey={activityKey} />}
 
       {!loading && !error && correctionAvailable && (
         <Collapsible
