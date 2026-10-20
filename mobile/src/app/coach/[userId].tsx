@@ -6,8 +6,8 @@ import { clientProgression, type ClientProgression } from "../../coaching/api";
 import { ClientProgress, type ClientSection } from "../../coaching/ClientProgress";
 import { AlertIcon, BowlIcon, ScaleIcon, TargetIcon } from "../../ui/icons";
 import { SectionTabBar } from "../../ui/SectionTabBar";
-import { Client, Plan, Preview, currentPlan, planSchema, previewSchema, requestApi } from "../../plans/api";
-import { budgetSchema, goalsSchema, weeklyRate } from "../../plans/form";
+import { Client, Plan, Preview, adjustPlan, currentPlan, planSchema, previewSchema, requestApi } from "../../plans/api";
+import { adjustmentBody, budgetSchema, goalsSchema, weeklyRate, type AdjustFields } from "../../plans/form";
 import { Button, Field, InfoRow, Screen } from "../../plans/ui";
 import { colors } from "../../ui/theme";
 import { styles as s } from "../../ui/styles";
@@ -29,7 +29,7 @@ export default function UserPlan() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const [step, setStep] = useState<"detail" | "goals" | "budget">("detail");
+  const [step, setStep] = useState<"detail" | "goals" | "budget" | "adjust">("detail");
   const [section, setSection] = useState<ClientSection | "plan">("suivi");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -42,6 +42,9 @@ export default function UserPlan() {
   const [activityFromSteps, setActivityFromSteps] = useState(false);
   const niveauEnvoye = () => (activityFromSteps ? {} : { niveauActivite: activity });
   const [budget, setBudget] = useState("");
+  // Ajustement du plan actif (US5) : prérempli avec les valeurs en cours.
+  const [adjustFields, setAdjustFields] = useState<AdjustFields>({ poidsCible: "", dateCible: "", budget: "" });
+  const [adjustErrors, setAdjustErrors] = useState<Partial<Record<keyof AdjustFields | "form", string>>>({});
   const [preview, setPreview] = useState<Preview | null>(null);
   const [suggestedBudget, setSuggestedBudget] = useState<number | null>(null);
   useEffect(() => {
@@ -118,10 +121,42 @@ export default function UserPlan() {
       setPlan(null); setNotice("Le plan a été annulé."); setReload((v) => v + 1);
     });
   };
+  const openAdjust = () => {
+    if (!plan) return;
+    setAdjustFields({
+      poidsCible: String(plan.poidsCible).replace(".", ","),
+      dateCible: plan.dateCible.slice(0, 10),
+      budget: String(Math.round(plan.budgetCalorique)),
+    });
+    setAdjustErrors({}); setError(""); setNotice(""); setStep("adjust");
+  };
+  const editAdjust = (key: keyof AdjustFields, value: string) => {
+    setAdjustFields((old) => ({ ...old, [key]: value }));
+    setAdjustErrors((old) => ({ ...old, [key]: "", form: "" }));
+  };
+  const submitAdjust = async () => {
+    if (!plan || busy) return;
+    setError("");
+    const result = adjustmentBody(plan, adjustFields, { tailleCm: client?.tailleCm, automatic, today: today() });
+    if (!result.ok) { setAdjustErrors(result.errors); return; }
+    const confirmed = await confirmAction({
+      title: "Ajuster le plan ?",
+      message: `${result.changes.join("\n")}\n\nLes alertes de la métrique ajustée repartent de zéro.`,
+      confirmLabel: "Ajuster le plan",
+      cancelLabel: "Revenir",
+      icon: TargetIcon,
+    });
+    if (!confirmed) return;
+    await run(async () => {
+      const updated = await adjustPlan(plan.id, result.body);
+      setPlan(updated); setStep("detail"); setSection("plan");
+      setNotice("Le plan a été ajusté. Les alertes concernées repartent de zéro."); setReload((v) => v + 1);
+    });
+  };
   const refresh = () => { setLoading(true); setError(""); setReload((v) => v + 1); };
   return <Screen
     back="/coach"
-    title={step === "detail" ? (client ? displayName(client) : "Suivi client") : step === "goals" ? "Objectifs · 1/2" : "Budget et validation · 2/2"}
+    title={step === "detail" ? (client ? displayName(client) : "Suivi client") : step === "adjust" ? "Ajuster le plan" : step === "goals" ? "Objectifs · 1/2" : "Budget et validation · 2/2"}
     refreshing={false}
     onRefresh={step === "detail" && !busy ? refresh : undefined}
     floating={client && !loading ? (
@@ -150,7 +185,7 @@ export default function UserPlan() {
     {!!error && <Text accessibilityRole="alert" style={s.error}>{error}</Text>}
     {loading ? <ActivityIndicator color={colors.brand} /> : client && <>
       {step === "detail" && section !== "plan" && progression && (progression.suiviPoids
-        ? <ClientProgress progression={progression} section={section} />
+        ? <ClientProgress progression={progression} section={section} onAdjust={plan ? openAdjust : undefined} />
         : <View style={s.card}><Text style={s.text}>Aucun plan actif : le suivi démarrera avec le premier plan (onglet « Plan »).</Text></View>)}
       {step === "detail" && section === "plan" && <View style={s.card}>
         <View style={[s.summaryRow, { alignItems: "center" }]}>
@@ -166,6 +201,8 @@ export default function UserPlan() {
           <InfoRow label="IMC cible" value={plan.imcCible.toFixed(1)} />
           <InfoRow label="Budget" value={`${plan.budgetCalorique.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} kcal/jour`} />
           {plan.budgetPlafonneAuBmr && <Text style={s.historyMeta}>Le budget suggéré a été ramené au BMR.</Text>}
+          {(plan.poidsAjusteLe || plan.budgetAjusteLe) && <Text style={s.historyMeta}>Ajusté le {displayDate([plan.poidsAjusteLe, plan.budgetAjusteLe].filter(Boolean).sort().pop()!)}</Text>}
+          <Button title="Ajuster le plan" variant="secondary" disabled={busy} onPress={openAdjust} />
           <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginTop: 10, paddingTop: 14 }}>
             <Pressable
               accessibilityRole="button"
@@ -182,6 +219,18 @@ export default function UserPlan() {
           {!client.tailleCm && <Text style={s.error}>La taille du profil doit être renseignée avant la soumission.</Text>}
           <Button title="Créer un plan" disabled={busy || !client.tailleCm} onPress={() => { setStep("goals"); setNotice(""); }} />
         </>}
+      </View>}
+      {step === "adjust" && plan && <View style={s.card}>
+        <Text style={s.text}>Départ : {plan.poidsDepart} kg le {displayDate(plan.dateDebut)}. Le poids de départ, la date de début et le niveau d’activité ne changent pas.</Text>
+        <MeasurementField label="Poids cible (kg)" unit="kg" value={adjustFields.poidsCible} onChange={(value) => editAdjust("poidsCible", value)} error={adjustErrors.poidsCible} />
+        <DateField label="Date cible" value={adjustFields.dateCible} minimum={[nextDate(plan.dateDebut.slice(0, 10)), today()].sort().pop()} onChange={(value) => editAdjust("dateCible", value)} error={adjustErrors.dateCible} />
+        <Field label="Budget calorique (kcal/jour)" value={adjustFields.budget} onChange={(value) => editAdjust("budget", value)} error={adjustErrors.budget || undefined} numeric disabled={busy} />
+        <Text style={s.historyMeta}>{automatic
+          ? "Budget laissé tel quel : il est recalculé si le poids cible ou la date cible change."
+          : "Âge ou sexe non renseigné : le budget saisi est conservé tel quel."}</Text>
+        {!!adjustErrors.form && <Text accessibilityRole="alert" style={s.error}>{adjustErrors.form}</Text>}
+        <Button title={busy ? "Traitement…" : "Vérifier et ajuster"} disabled={busy} onPress={() => void submitAdjust()} />
+        <Button title="Abandonner" variant="ghost" disabled={busy} onPress={() => { setStep("detail"); setError(""); }} />
       </View>}
       {step === "goals" && <View style={s.card}>
         {([ ["poidsDepart", "Poids de départ (kg)"], ["poidsCible", "Poids cible (kg)"] ] as const).map(([key, label]) => <MeasurementField key={key} label={label} unit="kg" value={fields[key]} onChange={(value) => { setFields((old) => ({ ...old, [key]: value })); setFieldErrors((old) => ({ ...old, [key]: "" })); }} error={fieldErrors[key]} />)}
