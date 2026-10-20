@@ -145,4 +145,52 @@ describe('Plan (entite domaine)', () => {
       );
     });
   });
+
+  describe('ajustement (US5)', () => {
+    const maintenant = new Date('2026-01-10T09:00:00Z');
+    const ajustement = {
+      poidsCible: 78,
+      dateCible: new Date('2026-01-29'),
+      budgetCalorique: 1500,
+      budgetPlafonneAuBmr: false,
+      tailleCm: 170,
+    };
+
+    it("date l'objectif modifie sans toucher au budget", () => {
+      const plan = Plan.create(baseProps);
+      plan.ajuster(
+        { ...ajustement, poidsCible: 79, dateCible: new Date('2026-02-12') },
+        maintenant,
+      );
+      const props = plan.toProps();
+      expect(props.poidsCible).toBe(79);
+      expect(props.poidsAjusteLe).toEqual(maintenant);
+      expect(props.budgetAjusteLe).toBeUndefined();
+      expect(props.poidsDepart).toBe(82);
+      expect(props.dateDebut).toEqual(baseProps.dateDebut);
+    });
+
+    it('date le budget modifie sans toucher a la serie de poids', () => {
+      const plan = Plan.create(baseProps);
+      plan.ajuster({ ...ajustement, budgetCalorique: 1650 }, maintenant);
+      expect(plan.toProps().budgetAjusteLe).toEqual(maintenant);
+      expect(plan.toProps().poidsAjusteLe).toBeUndefined();
+    });
+
+    it('revalide les regles de creation (rythme trop rapide)', () => {
+      const plan = Plan.create(baseProps);
+      expect(() =>
+        plan.ajuster({ ...ajustement, poidsCible: 74 }, maintenant),
+      ).toThrow();
+      expect(plan.toProps().poidsCible).toBe(78);
+    });
+
+    it("refuse d'ajuster un plan qui n'est plus actif", () => {
+      const plan = Plan.create(baseProps);
+      plan.cancel();
+      expect(() => plan.ajuster(ajustement, maintenant)).toThrow(
+        'Seul un plan actif peut être ajusté',
+      );
+    });
+  });
 });

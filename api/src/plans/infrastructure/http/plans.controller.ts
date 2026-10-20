@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Req,
   Res,
@@ -28,6 +29,8 @@ import { CreatePlanUseCase } from '../../application/use-cases/create-plan.use-c
 import { GetCurrentPlanUseCase } from '../../application/use-cases/get-current-plan.use-case';
 import { CancelPlanUseCase } from '../../application/use-cases/cancel-plan.use-case';
 import { CreatePlanDto, createPlanSchema } from './dto/create-plan.dto';
+import { UpdatePlanUseCase } from '../../application/use-cases/update-plan.use-case';
+import { UpdatePlanDto, updatePlanSchema } from './dto/update-plan.dto';
 import { ZodValidationPipe } from '../../../auth/infrastructure/http/dto/zod-validation.pipe';
 
 interface AuthenticatedRequest extends Request {
@@ -44,6 +47,7 @@ export class PlansController {
     private readonly createPlanUseCase: CreatePlanUseCase,
     private readonly getCurrentPlanUseCase: GetCurrentPlanUseCase,
     private readonly cancelPlanUseCase: CancelPlanUseCase,
+    private readonly updatePlanUseCase: UpdatePlanUseCase,
   ) {}
 
   @Post('preview')
@@ -162,6 +166,39 @@ export class PlansController {
       targetUserId: userId,
     });
     return res.json(plan ? plan.toProps() : null);
+  }
+
+  @Patch(':id')
+  @Roles('coach')
+  @ApiOperation({
+    summary: "Ajustement du plan actif d'un utilisateur rattache (coach)",
+    description:
+      'Poids cible, date cible et/ou budget. Memes regles que la creation ; sans budget saisi, il est recalcule quand l’objectif change. Reinitialise la serie d’ecarts de la metrique ajustee (US5).',
+  })
+  @ApiBody({ type: UpdatePlanDto })
+  @ApiResponse({ status: 200, description: 'Plan ajuste' })
+  @ApiResponse({
+    status: 400,
+    description: 'Corps vide, donnees ou regles metier invalides',
+  })
+  @ApiResponse({ status: 401, description: 'Authentification requise' })
+  @ApiResponse({ status: 403, description: 'Plan non rattache a ce coach' })
+  @ApiResponse({ status: 404, description: 'Plan introuvable' })
+  @ApiResponse({
+    status: 409,
+    description: "Le plan n'est plus actif, ou modification simultanee",
+  })
+  async update(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updatePlanSchema)) body: UpdatePlanDto,
+  ) {
+    const plan = await this.updatePlanUseCase.execute({
+      coachId: req.user.sub,
+      planId: id,
+      ...body,
+    });
+    return plan.toProps();
   }
 
   @Post(':id/cancel')

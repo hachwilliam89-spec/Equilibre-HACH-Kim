@@ -26,6 +26,7 @@ function buildPlanRepository(): jest.Mocked<PlanRepositoryPort> {
     findById: jest.fn(),
     findActiveByUserId: jest.fn(),
     save: jest.fn(),
+    updateActive: jest.fn(),
   };
 }
 

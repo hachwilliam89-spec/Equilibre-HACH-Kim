@@ -30,6 +30,9 @@ const PlanEmbeddedSchema = new MongooseSchema(
       enum: ['actif', 'termine', 'annule'],
     },
     createdAt: { type: Date, required: true },
+    // US5 : dates des derniers ajustements (objectif de poids, budget).
+    poidsAjusteLe: { type: Date },
+    budgetAjusteLe: { type: Date },
   },
   { _id: false },
 );

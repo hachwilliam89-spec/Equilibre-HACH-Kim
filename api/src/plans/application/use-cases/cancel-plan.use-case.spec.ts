@@ -48,6 +48,7 @@ function buildRepos() {
     findById: jest.fn(),
     findActiveByUserId: jest.fn(),
     save: jest.fn(),
+    updateActive: jest.fn(),
   };
   const userRepository: jest.Mocked<UserRepositoryPort> = {
     findByCoachId: jest.fn(),

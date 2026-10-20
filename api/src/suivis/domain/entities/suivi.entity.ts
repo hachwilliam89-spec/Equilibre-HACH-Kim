@@ -132,6 +132,18 @@ export class Suivi {
     this.props.derniereMesureValide = null;
   }
 
+  /** Remplace le plan actif par sa version ajustée (même identifiant). */
+  remplacerPlanActif(plan: Plan): void {
+    if (this.props.planActif?.id !== plan.id) {
+      throw new AppException(
+        'plan-not-active',
+        'Seul le plan actif peut être ajusté',
+        HttpStatus.CONFLICT,
+      );
+    }
+    this.props.planActif = plan;
+  }
+
   terminerPlan(plan: Plan): void {
     if (this.props.planActif?.id === plan.id) {
       this.props.planActif = null;

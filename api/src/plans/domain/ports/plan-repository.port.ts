@@ -13,6 +13,8 @@ export interface PlanRepositoryPort {
    */
   findActiveByUserId: (userId: string) => Promise<Plan | null>;
   save: (plan: Plan) => Promise<Plan>;
+  /** Enregistre l'ajustement du plan actif (US5), verrou de version compris. */
+  updateActive: (plan: Plan) => Promise<Plan>;
 }
 
 export const PLAN_REPOSITORY = Symbol('PLAN_REPOSITORY');

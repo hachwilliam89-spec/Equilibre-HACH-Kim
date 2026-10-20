@@ -28,6 +28,20 @@ export interface PlanProps {
   budgetPlafonneAuBmr: boolean;
   statut: PlanStatut;
   createdAt: Date;
+  /**
+   * US5 : dernier ajustement par le coach. Les écarts antérieurs ne comptent
+   * plus pour l'alerte de la métrique ajustée (objectif de poids, budget).
+   */
+  poidsAjusteLe?: Date;
+  budgetAjusteLe?: Date;
+}
+
+export interface PlanAjustement {
+  poidsCible: number;
+  dateCible: Date;
+  budgetCalorique: number;
+  budgetPlafonneAuBmr: boolean;
+  tailleCm: number;
 }
 
 /** Champs fournis à la création, avant calcul de l'IMC (dérivé de
@@ -41,6 +55,35 @@ export class Plan {
   private constructor(private props: PlanProps) {}
 
   static create(input: PlanCreateProps): Plan {
+    const imcCible = Plan.valider(input);
+    return new Plan({
+      id: input.id,
+      userId: input.userId,
+      coachId: input.coachId,
+      poidsDepart: input.poidsDepart,
+      poidsCible: input.poidsCible,
+      dateDebut: input.dateDebut,
+      dateCible: input.dateCible,
+      imcCible,
+      niveauActivite: input.niveauActivite,
+      budgetCalorique: input.budgetCalorique,
+      budgetPlafonneAuBmr: input.budgetPlafonneAuBmr,
+      statut: 'actif',
+      createdAt: input.createdAt,
+    });
+  }
+
+  /**
+   * Règles communes à la création et à l'ajustement : dates, poids, IMC
+   * minimal et rythme. Renvoie l'IMC cible calculé.
+   */
+  private static valider(input: {
+    poidsDepart: number;
+    poidsCible: number;
+    dateDebut: Date;
+    dateCible: Date;
+    tailleCm: number;
+  }): number {
     if (input.dateCible.getTime() <= input.dateDebut.getTime()) {
       throw new Error(
         'La date cible doit être strictement postérieure à la date de début',
@@ -74,22 +117,7 @@ export class Plan {
         `Rythme de prise de masse trop rapide (${rythme.toFixed(2)} kg/semaine, maximum ${RYTHME_MAX_PRISE})`,
       );
     }
-
-    return new Plan({
-      id: input.id,
-      userId: input.userId,
-      coachId: input.coachId,
-      poidsDepart: input.poidsDepart,
-      poidsCible: input.poidsCible,
-      dateDebut: input.dateDebut,
-      dateCible: input.dateCible,
-      imcCible,
-      niveauActivite: input.niveauActivite,
-      budgetCalorique: input.budgetCalorique,
-      budgetPlafonneAuBmr: input.budgetPlafonneAuBmr,
-      statut: 'actif',
-      createdAt: input.createdAt,
-    });
+    return imcCible;
   }
 
   /** Reconstruction depuis la persistance — aucune validation (déjà faite à
@@ -139,6 +167,40 @@ export class Plan {
       throw new Error('Seul un plan actif peut être annulé');
     }
     this.props = { ...this.props, statut: 'annule' };
+  }
+
+  /**
+   * Ajustement d'un plan actif par le coach (US5) : mêmes règles que la
+   * création. Le poids de départ, la date de début et le niveau d'activité
+   * restent ceux du plan. Les métriques modifiées sont datées pour
+   * réinitialiser leur série d'écarts.
+   */
+  ajuster(ajustement: PlanAjustement, maintenant: Date): void {
+    if (this.props.statut !== 'actif') {
+      throw new Error('Seul un plan actif peut être ajusté');
+    }
+    const imcCible = Plan.valider({
+      poidsDepart: this.props.poidsDepart,
+      poidsCible: ajustement.poidsCible,
+      dateDebut: this.props.dateDebut,
+      dateCible: ajustement.dateCible,
+      tailleCm: ajustement.tailleCm,
+    });
+    const objectifModifie =
+      ajustement.poidsCible !== this.props.poidsCible ||
+      ajustement.dateCible.getTime() !== this.props.dateCible.getTime();
+    const budgetModifie =
+      ajustement.budgetCalorique !== this.props.budgetCalorique;
+    this.props = {
+      ...this.props,
+      poidsCible: ajustement.poidsCible,
+      dateCible: ajustement.dateCible,
+      imcCible,
+      budgetCalorique: ajustement.budgetCalorique,
+      budgetPlafonneAuBmr: ajustement.budgetPlafonneAuBmr,
+      ...(objectifModifie ? { poidsAjusteLe: new Date(maintenant) } : {}),
+      ...(budgetModifie ? { budgetAjusteLe: new Date(maintenant) } : {}),
+    };
   }
 
   toProps(): PlanProps {
