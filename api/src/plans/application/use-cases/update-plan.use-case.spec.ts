@@ -130,6 +130,18 @@ describe('UpdatePlanUseCase (US5)', () => {
     expect(planRepository.updateActive).not.toHaveBeenCalled();
   });
 
+  it('refuse une date cible deja passee', async () => {
+    const { useCase } = setup();
+    await expectAppException(
+      useCase.execute(
+        { ...base, dateCible: new Date('2099-01-09') },
+        maintenant,
+      ),
+      HttpStatus.BAD_REQUEST,
+      'invalid-plan',
+    );
+  });
+
   it('404 si le plan est introuvable', async () => {
     const { useCase } = setup(null);
     await expectAppException(

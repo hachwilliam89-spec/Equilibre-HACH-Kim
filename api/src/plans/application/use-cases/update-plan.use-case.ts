@@ -76,6 +76,17 @@ export class UpdatePlanUseCase {
     const props = plan.toProps();
     const poidsCible = input.poidsCible ?? props.poidsCible;
     const dateCible = input.dateCible ?? props.dateCible;
+    if (
+      input.dateCible &&
+      input.dateCible.toISOString().slice(0, 10) <
+        maintenant.toISOString().slice(0, 10)
+    ) {
+      throw new AppException(
+        'invalid-plan',
+        'La date cible ne peut pas etre deja passee',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     const objectifModifie =
       poidsCible !== props.poidsCible ||
       dateCible.getTime() !== props.dateCible.getTime();
