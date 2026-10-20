@@ -168,6 +168,10 @@ Relancer uniquement Jest ne réinitialise pas automatiquement MongoDB.
 
 ## Protections de l’authentification
 
+Le [guide de connexion](../docs/login.md) présente le cycle de session et son
+diagramme, le stockage des jetons, les proxys de confiance et les limites
+(réponse de rotation perdue, révocation des access tokens à leur expiration).
+
 - Mots de passe hachés avec bcrypt ; limite de 72 octets UTF-8 à l’inscription
   et à la connexion.
 - Rotation des refresh tokens et révocation lors de la déconnexion.

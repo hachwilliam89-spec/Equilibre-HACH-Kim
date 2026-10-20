@@ -1,0 +1,53 @@
+@startuml
+title Équilibre — connexion et cycle de session
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam ParticipantBackgroundColor #F3F0FA
+skinparam ParticipantBorderColor #776A92
+actor Utilisateur
+participant "Application" as Mobile
+database "SecureStore\n(mémoire sur le web)" as Local
+participant "API NestJS" as API
+database MongoDB
+
+Utilisateur -> Mobile : E-mail et mot de passe
+Mobile -> API : POST /api/auth/login (HTTPS)
+API -> MongoDB : Lire le compte
+MongoDB --> API : Compte et empreinte bcrypt
+API -> API : Comparer le mot de passe
+alt Identifiants invalides
+  API --> Mobile : 401 — identifiants invalides
+else Connexion acceptée
+  API -> MongoDB : Enregistrer SHA-256 du refresh
+  API --> Mobile : Access 15 min + refresh 30 jours\nuserId, rôle (+ code coach)
+  Mobile -> Local : Conserver la session
+  Mobile --> Utilisateur : Ouvrir /coach ou /user
+  Mobile -> API : Route protégée + Bearer access
+  API -> API : Vérifier signature, expiration,\nrôle et périmètre des données
+  API --> Mobile : 200, ou 403 si accès interdit
+end
+
+group Renouvellement après un 401
+  Mobile -> API : POST /api/auth/refresh
+  API -> MongoDB : Consommer l'ancien refresh atomiquement
+  alt Jeton actif
+    API -> MongoDB : Enregistrer le nouveau refresh haché
+    API --> Mobile : Nouvelle paire (15 min / 30 jours)
+    Mobile -> Local : Remplacer la session
+    Mobile -> API : Rejouer la requête une fois
+  else Ancien jeton réutilisé ou invalide
+    API -> MongoDB : Si rejeu suspect après 30 s :\nrévoquer les refresh actifs du compte
+    API --> Mobile : 401 — reconnexion nécessaire
+    note over Mobile : SQLite conservée après expiration ;\nreconnexion au même compte pour reprendre.
+  end
+end
+
+group Déconnexion confirmée
+  Utilisateur -> Mobile : Déconnexion puis confirmation
+  Mobile -> API : POST /api/auth/logout
+  API -> MongoDB : Révoquer le refresh
+  API --> Mobile : 204
+  Mobile -> Local : Effacer la session
+  note over Mobile : Effacer aussi SQLite après logout réussi.\nUn access déjà émis expire au plus tard sous 15 min.
+end
+@enduml
