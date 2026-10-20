@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isIP } from 'node:net';
 
 /**
  * Schéma de validation des variables d'environnement.
@@ -16,6 +17,22 @@ export const envSchema = z.object({
   // hote par Docker : celui-la n'est jamais injecte dans le conteneur et ne
   // concerne pas l'application.
   PORT: z.coerce.number().int().positive().default(3000),
+
+  // Adresses exactes des reverse proxys administrés, jamais true ni un
+  // nombre de sauts. Vide en accès direct (développement et serveur école).
+  TRUSTED_PROXY_IPS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((ip) => ip.trim())
+        .filter(Boolean),
+    )
+    .refine((ips) => ips.every((ip) => isIP(ip) !== 0), {
+      message:
+        'TRUSTED_PROXY_IPS doit contenir des adresses IP séparées par des virgules',
+    }),
 
   MONGO_URI: z
     .string()

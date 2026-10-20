@@ -502,6 +502,78 @@ describe('Auth (integration)', () => {
     });
   });
 
+  describe('réponse de renouvellement perdue', () => {
+    let interruptedApp: INestApplication<App>;
+    beforeAll(async () => {
+      interruptedApp = await createIsolatedApp();
+    });
+    afterAll(async () => {
+      if (interruptedApp) await interruptedApp.close();
+    });
+
+    it('exige une reconnexion après une réponse perdue et conserve le refus du rejeu tardif', async () => {
+      const { refreshToken } = await registerAndLogin(interruptedApp);
+      const old = await refreshTokensCollection(interruptedApp).findOne({
+        tokenHash: hashToken(refreshToken),
+      });
+      const user = await usersCollection(interruptedApp).findOne({
+        _id: old!.userId,
+      });
+      const login = () =>
+        request(interruptedApp.getHttpServer())
+          .post('/api/auth/login')
+          .send({ email: user!.email, password: 'password123' })
+          .expect(HttpStatus.OK);
+
+      // Autre session du même compte : elle reste valide si le rejeu est immédiat.
+      const other = (await login()).body as { refreshToken: string };
+      // Le serveur a répondu, mais le client ne conserve pas le nouveau couple.
+      // C'est le même état persistant qu'une coupure après validation côté serveur.
+      await request(interruptedApp.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(HttpStatus.OK);
+      await request(interruptedApp.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(HttpStatus.UNAUTHORIZED);
+      expect(
+        (
+          await refreshTokensCollection(interruptedApp).findOne({
+            tokenHash: hashToken(other.refreshToken),
+          })
+        )?.revoked,
+      ).toBe(false);
+
+      await refreshTokensCollection(interruptedApp).updateOne(
+        { tokenHash: hashToken(refreshToken) },
+        { $set: { revokedAt: new Date(Date.now() - 60_000) } },
+      );
+      await request(interruptedApp.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(HttpStatus.UNAUTHORIZED);
+      expect(
+        await refreshTokensCollection(interruptedApp).countDocuments({
+          userId: old!.userId,
+          revoked: false,
+        }),
+      ).toBe(0);
+
+      const recovered = (await login()).body as { refreshToken: string };
+      expect(
+        (
+          await refreshTokensCollection(interruptedApp).findOne({
+            tokenHash: hashToken(recovered.refreshToken),
+          })
+        )?.revoked,
+      ).toBe(false);
+      expect(
+        await usersCollection(interruptedApp).findOne({ _id: old!.userId }),
+      ).toMatchObject({ email: user!.email });
+    });
+  });
+
   describe('POST /api/auth/logout', () => {
     // Instance dediee, meme raison que POST /api/auth/refresh ci-dessus.
     let logoutApp: INestApplication<App>;

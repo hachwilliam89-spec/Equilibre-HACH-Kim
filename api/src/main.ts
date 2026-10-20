@@ -5,9 +5,14 @@ import { cleanupOpenApiDoc } from 'nestjs-zod';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { EnvConfig } from './config/env.schema';
+import { configureTrustedProxy } from './config/http-proxy';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
   app.useLogger(app.get(Logger));
   // Sans ceci, un SIGTERM (docker compose down, deploiement, eviction K8s)
   // tue le process directement : les hooks OnModuleDestroy / OnApplicationShutdown
@@ -21,7 +26,11 @@ async function bootstrap() {
   // cree donc pas de risque de requete authentifiee cross-site.
   app.enableCors();
 
-  const configService = app.get(ConfigService);
+  const configService = app.get<ConfigService<EnvConfig, true>>(ConfigService);
+  configureTrustedProxy(
+    app,
+    configService.get('TRUSTED_PROXY_IPS', { infer: true }),
+  );
 
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
 
