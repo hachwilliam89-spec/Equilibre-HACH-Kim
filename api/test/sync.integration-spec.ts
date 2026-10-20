@@ -9,7 +9,10 @@ import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { REFERENCE_FOODS } from '../src/foods/infrastructure/persistence/reference-foods';
 import { Plan } from '../src/plans/domain/entities/plan.entity';
-import { Suivi } from '../src/suivis/domain/entities/suivi.entity';
+import {
+  MAX_ENTREES_RETIREES,
+  Suivi,
+} from '../src/suivis/domain/entities/suivi.entity';
 import { MongooseSuiviRepository } from '../src/suivis/infrastructure/persistence/mongoose-suivi.repository';
 
 interface StoredSuivi {
@@ -368,6 +371,68 @@ describe('Synchronisation BDD embarquée <-> MongoDB (intégration)', () => {
     expect(entrees).not.toContain(entreeId);
     // La trace du retrait est enregistree dans le meme document.
     expect(row?.entreesRetirees?.map((t) => t.id)).toContain(entreeId);
+  });
+
+  it('conserve les preuves a saturation et refuse le retrait sans bloquer le lot ni recreer une entree', async () => {
+    const maintenant = new Date();
+    const ancienneId = randomUUID();
+    const couranteId = randomUUID();
+    const ancienAjout = {
+      id: randomUUID(),
+      type: 'ajout-aliment',
+      entreeId: ancienneId,
+      foodId: riz,
+      quantiteGrammes: 80,
+      consommeLe: maintenant.toISOString(),
+    };
+    await push(userId, [
+      ancienAjout,
+      { ...ancienAjout, id: randomUUID(), entreeId: couranteId },
+    ]).expect(200);
+    await request(app.getHttpServer())
+      .delete(`/api/food-journals/me/entries/${ancienneId}`)
+      .auth(token(userId), { type: 'bearer' })
+      .expect(200);
+    // Etat atteignable apres 500 retraits dans la fenetre de rejeu.
+    const traces = Array.from({ length: MAX_ENTREES_RETIREES }, (_, i) => ({
+      id: i === 0 ? ancienneId : randomUUID(),
+      consommeLe: maintenant,
+      retireeLe: maintenant,
+    }));
+    await suivis.updateOne(
+      { _id: userId },
+      { $set: { entreesRetirees: traces } },
+    );
+    const avant = await suivis.findOne({ _id: userId });
+
+    const refus = await request(app.getHttpServer())
+      .delete(`/api/food-journals/me/entries/${couranteId}`)
+      .auth(token(userId), { type: 'bearer' })
+      .expect(409);
+    expect((refus.body as { type: string }).type).toContain(
+      'food-entry-removal-limit',
+    );
+    expect(await suivis.findOne({ _id: userId })).toEqual(avant);
+
+    const { body } = (await push(userId, [
+      { id: randomUUID(), type: 'retrait-aliment', entreeId: couranteId },
+      ancienAjout,
+      { id: randomUUID(), type: 'favori', foodId: riz, favori: true },
+    ]).expect(200)) as { body: PushResult };
+    expect(body.resultats[0]).toMatchObject({
+      statut: 'rejetee',
+      code: 'food-entry-removal-limit',
+    });
+    expect(body.resultats[1].statut).toBe('deja-appliquee');
+    expect(body.resultats[2].statut).toBe('appliquee');
+    const apres = await suivis.findOne({ _id: userId });
+    expect(apres?.entreesRetirees).toEqual(traces);
+    expect(apres?.journauxAlimentaires).toEqual(avant?.journauxAlimentaires);
+    expect(
+      body.instantane.alimentation?.journaux.flatMap((j) =>
+        j.entrees.map((e) => e.id),
+      ),
+    ).toContain(couranteId);
   });
 
   it('refuse un lot invalide', async () => {

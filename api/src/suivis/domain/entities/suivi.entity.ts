@@ -175,17 +175,31 @@ export class Suivi {
     const entree = journal
       .toProps()
       .entrees.find((item) => item.toProps().id === entryId);
-    journal.retirerEntree(entryId);
+    if (!entree) return null;
     const limite = maintenant.getTime() - CONSERVATION_TRACE_MS;
     const traces = this.props.entreesRetirees.filter(
       (trace) => trace.consommeLe.getTime() >= limite,
     );
-    traces.push({
-      id: entryId,
-      consommeLe: new Date(entree?.toProps().receivedAt ?? maintenant),
-      retireeLe: new Date(maintenant),
-    });
-    this.props.entreesRetirees = traces.slice(-MAX_ENTREES_RETIREES);
+    const consommeLe = entree.toProps().receivedAt;
+    const conserverTrace = consommeLe.getTime() >= limite;
+    // Une preuve encore rejouable ne doit jamais etre evincee par la borne
+    // de volume. Refuser avant toute mutation conserve le journal intact.
+    if (conserverTrace && traces.length >= MAX_ENTREES_RETIREES) {
+      throw new AppException(
+        'food-entry-removal-limit',
+        'Limite de retraits récents atteinte. Cette entrée est conservée ; réessayez dans quelques jours.',
+        HttpStatus.CONFLICT,
+      );
+    }
+    journal.retirerEntree(entryId);
+    if (conserverTrace) {
+      traces.push({
+        id: entryId,
+        consommeLe: new Date(consommeLe),
+        retireeLe: new Date(maintenant),
+      });
+    }
+    this.props.entreesRetirees = traces;
     return journal;
   }
 

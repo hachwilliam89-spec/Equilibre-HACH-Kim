@@ -95,7 +95,8 @@ export class FoodJournalsController {
   @ApiResponse({ status: 404, description: 'Entrée introuvable' })
   @ApiResponse({
     status: 409,
-    description: 'Conflit de mise à jour simultanée',
+    description:
+      'Conflit de mise à jour simultanée ou limite de 500 traces de retrait récentes atteinte (entrée conservée)',
   })
   @ApiResponse({ status: 429, description: 'Trop de requêtes' })
   async remove(
