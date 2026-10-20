@@ -1,0 +1,21 @@
+@startuml
+skinparam dpi 140
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+participant "useSync" as Sync
+database "SQLite" as DB
+participant "API /api/sync" as API
+database MongoDB
+
+Sync -> DB : file vide ? curseur ?
+Sync -> API : GET /api/sync/me?curseur=abc
+API -> MongoDB : suivi, mesures, journaux J et J-1, favoris
+API -> API : empreinte du contenu + jour UTC
+alt empreinte = curseur
+  API --> Sync : 204 No Content
+  Sync -> DB : synchronise_le = maintenant
+else contenu modifié (balance, autre appareil, nouveau jour)
+  API --> Sync : 200 instantané + nouveau curseur
+  Sync -> DB : remplacer tables serveur (transaction)
+end
+@enduml

@@ -1,0 +1,41 @@
+@startuml
+skinparam dpi 140
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+actor Utilisateur
+participant "Écran journal" as UI
+participant "useSync\n(moteur)" as Sync
+database "SQLite\n(appareil)" as DB
+participant "API NestJS\n/api/sync" as API
+participant "AddFoodEntryUseCase" as UC
+database MongoDB
+
+Utilisateur -> UI : Ajouter « Riz 200 g, dîner »
+UI -> Sync : ajouterAliment(aliment, 200, diner)
+Sync -> DB : INSERT operations_en_attente\n(id, entreeId UUID, consommeLe)
+Sync -> DB : lire état serveur + file
+Sync --> UI : vue = serveur + opération en attente
+UI --> Utilisateur : entrée affichée « en attente », total recalculé
+Sync -> API : POST /api/sync/me/operations
+API -x Sync : erreur réseau
+Sync --> UI : « Hors ligne · 1 modification en attente »
+
+== Le réseau revient (premier plan, minuterie ou bouton) ==
+
+Sync -> DB : SELECT operations_en_attente
+Sync -> API : POST /api/sync/me/operations\n{ operations: [ajout-aliment] }
+API -> UC : executeDepuisSynchro(userId du JWT, entrée)
+UC -> UC : fenêtre (futur, 7 jours, période du plan)
+UC -> MongoDB : charger suivi ; entreeId déjà présente\nou déjà retirée (entreesRetirees) ?
+alt entrée présente ou trace de retrait
+  UC --> API : deja-appliquee (aucune écriture)
+else nouvel ajout
+  UC -> MongoDB : updateOne si version inchangée
+  UC --> API : appliquee
+end
+API -> MongoDB : lecture du strict nécessaire
+API --> Sync : 200 { resultats, instantane }
+Sync -> DB : une transaction : DELETE opération acquittée,\ntentatives + 1 des autres, remplacer tables serveur
+Sync --> UI : vue à jour
+UI --> Utilisateur : « Synchronisé à 14:32 »
+@enduml

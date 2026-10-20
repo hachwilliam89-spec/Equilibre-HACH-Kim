@@ -156,7 +156,7 @@ describe("LocalStore SQLite : atomicité et persistance du fichier", () => {
     expect((await store.lireEtatServeur()).curseur).toBe("curseur-1");
   });
 
-  it("retrouve l'état et la file après un arrêt complet (fichier fermé puis rouvert)", async () => {
+  it("retrouve l'état et la file après export du fichier et réouverture dans SQL.js", async () => {
     const premiere = await createSqlJsDatabase();
     const avant = createSqliteStore(premiere);
     await avant.ouvrir("u-1");
@@ -164,12 +164,13 @@ describe("LocalStore SQLite : atomicité et persistance du fichier", () => {
     await avant.enfiler({ id: "op-1", type: "retrait-aliment", entreeId: "e-1" }, "2026-10-06T10:01:00.000Z");
     await avant.noterRecent(pomme, "2026-10-06T10:02:00.000Z");
 
-    // Arrêt de l'application : seul le fichier SQLite subsiste.
+    // Persistance du format SQLite : export sur disque puis fermeture SQL.js.
+    // La fermeture forcee de l'application native se verifie sur telephone.
     const fichier = join(mkdtempSync(join(tmpdir(), "equilibre-sqlite-")), "equilibre.db");
     writeFileSync(fichier, premiere.exporter());
     premiere.fermer();
 
-    // Redémarrage : nouvelle connexion ouverte sur le même fichier, même compte.
+    // Nouvelle connexion SQL.js ouverte sur le meme fichier, meme compte.
     const apres = createSqliteStore(await createSqlJsDatabase(readFileSync(fichier)));
     await apres.ouvrir("u-1");
 

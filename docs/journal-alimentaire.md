@@ -59,6 +59,12 @@ comme une journée sans données par le calcul du statut alimentaire.
 
 Le retrait est aussi tracé (`entreesRetirees` du suivi, dans la même écriture) :
 un ajout rejoué plus tard par la synchronisation ne recrée pas l'entrée.
+Les traces restent présentes 8 jours à partir de la consommation. Quand les
+500 emplacements sont encore nécessaires, un nouveau retrait récent reçoit
+`409 food-entry-removal-limit` : le journal, ses totaux et les preuves restent
+intacts. La synchronisation classe ce refus `rejetee`, en explique la raison
+et continue le lot. Les traces ne sont purgées qu'après cette fenêtre ; une
+entrée plus ancienne peut être retirée sans ajouter de trace.
 
 ## Consulter une journée antérieure (FR403-754)
 

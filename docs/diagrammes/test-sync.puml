@@ -36,9 +36,15 @@ else Opération hors règles (futur, > 7 jours, 2e poids)
 else Lot invalide / anonyme / coach
   T -> API : POST
   API --> T : 400 / 401 / 403
+else 500 traces de retrait encore nécessaires
+  T -> API : DELETE une autre entrée récente
+  API --> T : 409 food-entry-removal-limit
+  T -> DB : vérifier journal, version et 500 traces inchangés
+  T -> API : POST [retrait refusé, ancien ajout rejoué, favori]
+  API --> T : 200 [rejetee, deja-appliquee, appliquee]\naucune entrée recréée, le reste du lot continue
 end
 
 == Assert : état de la base en fin de test ==
 T -> DB : findOne suivis { _id: userId }
-DB --> T : une seule entrée par entreeId, totaux exacts,\ntrace présente pour chaque entrée retirée
+DB --> T : une seule entrée par entreeId, totaux exacts,\ntrace présente pour chaque retrait encore rejouable
 @enduml
