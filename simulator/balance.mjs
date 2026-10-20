@@ -3,6 +3,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Borne de l'API : au-delà, le nombre de pas est refusé comme aberrant. */
+export const MAX_STEPS = 50_000;
 
 export class SimulatorHttpError extends Error {
   constructor(status, message) {
@@ -60,7 +62,27 @@ export function readConfig(env = process.env) {
     ),
     mode,
     seed,
+    // US4 : la montre simulée envoie aussi les pas, sauf SIMULATOR_STEPS=false.
+    stepsEnabled: env.SIMULATOR_STEPS !== 'false',
+    baseSteps: positiveNumber(env.SIMULATOR_BASE_STEPS, 'SIMULATOR_BASE_STEPS', 8000),
+    maxStepsVariation: positiveNumber(
+      env.SIMULATOR_MAX_STEPS_VARIATION,
+      'SIMULATOR_MAX_STEPS_VARIATION',
+      2500,
+    ),
   };
+}
+
+/** Total de pas réaliste du jour, entier entre 0 et MAX_STEPS. */
+export function generateSteps(
+  { baseSteps, maxStepsVariation },
+  faker = simpleFaker,
+) {
+  const variation = faker.number.int({
+    min: -Math.round(maxStepsVariation),
+    max: Math.round(maxStepsVariation),
+  });
+  return Math.min(MAX_STEPS, Math.max(0, Math.round(baseSteps + variation)));
 }
 
 export function generateWeight(
@@ -105,7 +127,8 @@ async function request(fetchImpl, url, options) {
   return body;
 }
 
-export async function transmitWeight(config, poidsKg, fetchImpl = fetch) {
+/** Ouvre une session utilisateur, exécute les envois, puis la révoque. */
+async function withSession(config, fetchImpl, send) {
   const login = await request(fetchImpl, `${config.apiUrl}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -124,14 +147,16 @@ export async function transmitWeight(config, poidsKg, fetchImpl = fetch) {
     if (login.role !== 'utilisateur') {
       throw new Error('Le compte configuré doit avoir le rôle utilisateur.');
     }
-    return await request(fetchImpl, `${config.apiUrl}/measurements`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${login.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ poidsKg }),
-    });
+    const post = (path, body) =>
+      request(fetchImpl, `${config.apiUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${login.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    return await send(post);
   } finally {
     await fetchImpl(`${config.apiUrl}/auth/logout`, {
       method: 'POST',
@@ -139,6 +164,41 @@ export async function transmitWeight(config, poidsKg, fetchImpl = fetch) {
       body: JSON.stringify({ refreshToken: login.refreshToken }),
     }).catch(() => undefined);
   }
+}
+
+export async function transmitWeight(config, poidsKg, fetchImpl = fetch) {
+  return withSession(config, fetchImpl, (post) =>
+    post('/measurements', { poidsKg }),
+  );
+}
+
+/**
+ * Envoi quotidien de la balance et de la montre avec une seule session.
+ * Un conflit sur le poids (mesure déjà enregistrée) n'empêche pas l'envoi
+ * des pas. nombrePas absent : montre désactivée.
+ */
+export async function transmitDay(
+  config,
+  { poidsKg, nombrePas },
+  fetchImpl = fetch,
+) {
+  return withSession(config, fetchImpl, async (post) => {
+    let measurement = null;
+    let conflict = null;
+    try {
+      measurement = await post('/measurements', { poidsKg });
+    } catch (error) {
+      if (!(error instanceof SimulatorHttpError) || error.status !== 409) {
+        throw error;
+      }
+      conflict = error.message;
+    }
+    const steps =
+      nombrePas === undefined
+        ? null
+        : await post('/activity/steps', { nombrePas });
+    return { measurement, conflict, steps };
+  });
 }
 
 export async function run(config, { once = false, signal } = {}) {
@@ -149,18 +209,25 @@ export async function run(config, { once = false, signal } = {}) {
       { ...config, baseWeightKg: referenceWeightKg },
       simpleFaker,
     );
-    try {
-      const measurement = await transmitWeight(config, poidsKg);
+    const nombrePas = config.stepsEnabled
+      ? generateSteps(config, simpleFaker)
+      : undefined;
+    const { measurement, conflict, steps } = await transmitDay(config, {
+      poidsKg,
+      nombrePas,
+    });
+    if (measurement) {
       referenceWeightKg = poidsKg;
       console.log(
         `[balance] ${new Date().toISOString()} — ${poidsKg.toFixed(1)} kg envoyés — statut ${measurement.statut}`,
       );
-    } catch (error) {
-      if (error instanceof SimulatorHttpError && error.status === 409) {
-        console.log(`[balance] ${error.message} Aucun doublon créé.`);
-      } else {
-        throw error;
-      }
+    } else {
+      console.log(`[balance] ${conflict} Aucun doublon créé.`);
+    }
+    if (steps) {
+      console.log(
+        `[montre] ${steps.jourUtc} — ${steps.nombrePas} pas envoyés`,
+      );
     }
     if (once) return;
     console.log(
