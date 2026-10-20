@@ -4,6 +4,10 @@ import { Measurement } from '../../../measurements/domain/entities/measurement.e
 import { Plan } from '../../../plans/domain/entities/plan.entity';
 import { DailyFoodJournal } from '../../../nutrition/domain/entities/daily-food-journal.entity';
 import { ANCIENNETE_MAX_JOURS } from '../../../nutrition/domain/services/saisie-differee';
+import {
+  PAS_MAX_PAR_JOUR,
+  type PasQuotidien,
+} from '../../../activity/domain/services/niveau-activite';
 
 export const MAX_MESURES_SUIVI = 1000;
 
@@ -44,7 +48,14 @@ export interface SuiviProps {
   blocageJournalier: BlocageJournalier | null;
   journauxAlimentaires: DailyFoodJournal[];
   entreesRetirees: EntreeRetiree[];
+  /** Total de pas par jour UTC (US4), un seul par jour, fenêtre de 3 mois. */
+  pasQuotidiens: PasQuotidien[];
 }
+
+/** Documents antérieurs à l'US4 : pas encore de pas enregistrés. */
+export type SuiviRestoreProps = Omit<SuiviProps, 'pasQuotidiens'> & {
+  pasQuotidiens?: PasQuotidien[];
+};
 
 export class Suivi {
   private constructor(private props: SuiviProps) {}
@@ -60,10 +71,11 @@ export class Suivi {
       blocageJournalier: null,
       journauxAlimentaires: [],
       entreesRetirees: [],
+      pasQuotidiens: [],
     });
   }
 
-  static restore(props: SuiviProps): Suivi {
+  static restore(props: SuiviRestoreProps): Suivi {
     return new Suivi({
       ...props,
       plans: [...props.plans],
@@ -71,7 +83,41 @@ export class Suivi {
       journauxAlimentaires: [...props.journauxAlimentaires],
       // Documents antérieurs aux traces de retrait : aucune trace.
       entreesRetirees: [...(props.entreesRetirees ?? [])],
+      pasQuotidiens: (props.pasQuotidiens ?? []).map((jour) => ({ ...jour })),
     });
+  }
+
+  /**
+   * Enregistre le total de pas du jour UTC de réception. Une nouvelle valeur
+   * le même jour remplace la précédente : la montre envoie le total cumulé.
+   * Aucun plan actif n'est requis : l'historique sert à créer le plan.
+   */
+  enregistrerPas(nombrePas: number, maintenant: Date): PasQuotidien {
+    if (
+      !Number.isInteger(nombrePas) ||
+      nombrePas < 0 ||
+      nombrePas > PAS_MAX_PAR_JOUR
+    ) {
+      throw new AppException(
+        'invalid-steps',
+        `Le nombre de pas doit être un entier entre 0 et ${PAS_MAX_PAR_JOUR}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const jourUtc = maintenant.toISOString().slice(0, 10);
+    const limite = troisMoisAvantUtc(maintenant).toISOString().slice(0, 10);
+    const jour: PasQuotidien = {
+      jourUtc,
+      nombrePas,
+      recuLe: new Date(maintenant),
+    };
+    this.props.pasQuotidiens = [
+      ...this.props.pasQuotidiens.filter(
+        (item) => item.jourUtc !== jourUtc && item.jourUtc >= limite,
+      ),
+      jour,
+    ].sort((a, b) => a.jourUtc.localeCompare(b.jourUtc));
+    return { ...jour };
   }
 
   activerPlan(plan: Plan): void {
@@ -280,6 +326,7 @@ export class Suivi {
       entreesRetirees: this.props.entreesRetirees.map((trace) => ({
         ...trace,
       })),
+      pasQuotidiens: this.props.pasQuotidiens.map((jour) => ({ ...jour })),
     };
   }
 }

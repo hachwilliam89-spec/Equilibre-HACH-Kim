@@ -14,6 +14,7 @@ import {
   troisMoisAvantUtc,
   type EntreeRetiree,
 } from '../../domain/entities/suivi.entity';
+import type { PasQuotidien } from '../../../activity/domain/services/niveau-activite';
 import type { SuiviRepositoryPort } from '../../domain/ports/suivi-repository.port';
 import { SuiviDocumentClass } from './suivi.schema';
 import {
@@ -39,6 +40,7 @@ interface StoredSuivi {
   blocageJournalier: { jourUtc: string; mesureId: string } | null;
   journauxAlimentaires: StoredFoodJournal[];
   entreesRetirees?: EntreeRetiree[];
+  pasQuotidiens?: PasQuotidien[];
 }
 
 @Injectable()
@@ -194,6 +196,7 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
             blocageJournalier: stored.blocageJournalier,
             journauxAlimentaires: stored.journauxAlimentaires,
             entreesRetirees: stored.entreesRetirees,
+            pasQuotidiens: stored.pasQuotidiens,
           },
           $inc: { version: 1 },
         },
@@ -221,6 +224,7 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
         };
       }),
       entreesRetirees: props.entreesRetirees,
+      pasQuotidiens: props.pasQuotidiens,
     };
   }
 
@@ -248,6 +252,11 @@ export class MongooseSuiviRepository implements SuiviRepositoryPort {
         id: trace.id,
         consommeLe: new Date(trace.consommeLe),
         retireeLe: new Date(trace.retireeLe),
+      })),
+      pasQuotidiens: (document.pasQuotidiens ?? []).map((jour) => ({
+        jourUtc: jour.jourUtc,
+        nombrePas: jour.nombrePas,
+        recuLe: new Date(jour.recuLe),
       })),
     });
   }

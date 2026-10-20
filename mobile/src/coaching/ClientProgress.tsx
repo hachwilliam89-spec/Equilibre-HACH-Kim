@@ -15,6 +15,7 @@ import { Collapsible } from "../ui/Collapsible";
 import { styles as s } from "../ui/styles";
 import { colors } from "../ui/theme";
 import { coachActionLabel, coachAlerts, type ClientProgression } from "./api";
+import { moyenneSummary } from "../activity/presentation";
 
 /** Progression d'un utilisateur vue par son coach : résumé, courbes, pesées. */
 export type ClientSection = "suivi" | "alimentation";
@@ -141,6 +142,13 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
       <View style={s.card}>
         <WeightTrajectoryChart plan={suiviPoids.plan} measurements={mesures} showLast={false} />
       </View>
+
+      {progression.activite && (
+        <View style={s.card}>
+          <Text style={s.metricLabel}>Activité · 7 derniers jours</Text>
+          <Text style={s.label}>{moyenneSummary(progression.activite)}</Text>
+        </View>
+      )}
 
       {mesures.length > 0 && (
         <Collapsible title="Dernières pesées" hint={`${mesures.length} pesée${mesures.length > 1 ? "s" : ""} sur 3 mois`}>

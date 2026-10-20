@@ -170,6 +170,22 @@ export class SuiviDocumentClass {
     default: [],
   })
   entreesRetirees: { id: string; consommeLe: Date; retireeLe: Date }[];
+
+  // US4 : total de pas par jour UTC, un seul par jour, fenetre de 3 mois.
+  @Prop({
+    type: [
+      new MongooseSchema(
+        {
+          jourUtc: { type: String, required: true },
+          nombrePas: { type: Number, required: true, min: 0, max: 50000 },
+          recuLe: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+    ],
+    default: [],
+  })
+  pasQuotidiens: { jourUtc: string; nombrePas: number; recuLe: Date }[];
 }
 
 export type SuiviDocument = HydratedDocument<SuiviDocumentClass>;

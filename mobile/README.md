@@ -110,6 +110,15 @@ Hors ligne, une journée ancienne affiche un message et un bouton « Réessayer 
 Sans plan actif, le journal affiche un message dédié. La
 [recette US3](../docs/recette-us3.md) détaille les scénarios à vérifier.
 
+## Activité physique — US4
+
+L’onglet Suivi affiche une carte « Activité · 7 derniers jours » : moyenne de
+pas, niveau déduit et pas des derniers jours, transmis par la montre simulée.
+Elle est chargée en ligne (`GET /api/activity/me`) ; hors ligne, un message et
+un bouton « Réessayer » la remplacent. Côté coach, le formulaire de plan
+présélectionne le niveau déduit des 7 derniers jours ; sans 7 jours de pas, le
+choix reste manuel. Détails : [activité physique](../docs/activite-physique.md).
+
 ## Parcours coach
 
 « Utilisateurs » liste les comptes rattachés au coach (`GET /api/users/me/clients`).

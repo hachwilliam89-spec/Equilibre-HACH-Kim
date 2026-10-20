@@ -22,6 +22,10 @@ import {
   type JourCalorique,
 } from '../../domain/services/serie-calorique';
 import { chargerClientDuCoach } from '../client-du-coach';
+import {
+  moyenneSeptJours,
+  type MoyenneActivite,
+} from '../../../activity/domain/services/niveau-activite';
 
 export interface AlimentationCoach extends FoodBudgetResult {
   budgetCalorique: number;
@@ -35,6 +39,8 @@ export interface ClientProgression {
   suiviPoids: WeightTrackingStatus | null;
   mesures: Measurement[];
   alimentation: AlimentationCoach | null;
+  /** Moyenne des 7 jours de pas et niveau déduit (US4), même sans plan. */
+  activite: MoyenneActivite;
 }
 
 /**
@@ -68,10 +74,17 @@ export class GetClientProgressionUseCase {
       this.history.execute(input.userId),
     ]);
 
+    const jourCourantUtc =
+      input.jourCourantUtc ?? new Date().toISOString().slice(0, 10);
+    const suivi = await this.suivis.charger(input.userId);
+    const activite = moyenneSeptJours(
+      suivi?.toProps().pasQuotidiens ?? [],
+      jourCourantUtc,
+    );
+
     let alimentation: AlimentationCoach | null = null;
     if (statutAlimentaire && suiviPoids) {
       const planId = suiviPoids.plan.id;
-      const suivi = await this.suivis.charger(input.userId);
       const journaux = (suivi?.toProps().journauxAlimentaires ?? [])
         .map((journal) => journal.toProps())
         .filter((journal) => journal.planId === planId)
@@ -91,11 +104,11 @@ export class GetClientProgressionUseCase {
         jours: serieCalorique(
           journaux,
           statutAlimentaire.budgetCalorique,
-          input.jourCourantUtc ?? new Date().toISOString().slice(0, 10),
+          jourCourantUtc,
         ),
       };
     }
 
-    return { utilisateur, suiviPoids, mesures, alimentation };
+    return { utilisateur, suiviPoids, mesures, alimentation, activite };
   }
 }

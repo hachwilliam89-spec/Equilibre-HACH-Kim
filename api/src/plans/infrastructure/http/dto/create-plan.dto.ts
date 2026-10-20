@@ -16,8 +16,9 @@ export const createPlanSchema = z
     dateCible: planDateSchema.describe('Date cible du plan'),
     niveauActivite: z
       .enum(['sedentaire', 'actif', 'sportif', 'athlete'])
+      .optional()
       .describe(
-        "Niveau d'activite (saisi par le coach ; deduction automatique via montre connectee prevue en backlog)",
+        "Niveau d'activite choisi par le coach ; si absent, deduit de la moyenne des 7 jours de pas precedents (400 activity-level-required si l'historique est incomplet)",
       ),
     budgetCalorique: z
       .number()

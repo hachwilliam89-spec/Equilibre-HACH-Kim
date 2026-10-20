@@ -3,7 +3,9 @@
 Le simulateur est un client externe de l’API. Il ne lit et ne modifie jamais
 MongoDB directement : il se connecte avec un compte `utilisateur`, génère un
 poids avec `@faker-js/faker`, appelle `POST /api/measurements`, puis révoque sa
-session. L’API reste responsable du rattachement au plan, de l’horodatage UTC,
+session. Depuis l’US4 (FR403-967), il joue aussi le rôle de la montre : dans la
+même session, il envoie un total de pas réaliste à `POST /api/activity/steps`,
+même si le poids du jour était déjà enregistré (409). L’API reste responsable du rattachement au plan, de l’horodatage UTC,
 du statut et des conflits journaliers.
 
 ## Configuration
@@ -67,6 +69,8 @@ SIMULATOR_PASSWORD=a_remplacer
 SIMULATOR_BASE_WEIGHT_KG=75
 SIMULATOR_MAX_DAILY_VARIATION_KG=0.4
 SIMULATOR_MODE=normal
+SIMULATOR_BASE_STEPS=8000
+SIMULATOR_MAX_STEPS_VARIATION=2500
 EOF
 chmod 600 .env.simulator
 ```

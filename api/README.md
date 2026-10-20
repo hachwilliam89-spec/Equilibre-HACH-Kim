@@ -16,10 +16,12 @@ par un coach. L’API utilise NestJS, TypeScript et MongoDB via Mongoose.
 - **measurements** : modèle de mesure, stockage et historique personnel,
   tous plans, sources et statuts confondus (FR403-671).
 
-L'ingestion des pesées, les corrections et le calcul du suivi restent à réaliser
-dans les tickets suivants de l'US2. Le journal alimentaire n'est pas encore présent.
-La déduction du niveau d’activité depuis une montre simulée relève de l’US4,
-hors MVP ; le niveau d’activité du plan est actuellement choisi manuellement.
+- **activity** : réception du total de pas quotidien (montre simulée), moyenne
+  des 7 jours précédents et déduction du niveau d’activité utilisé par les plans
+  (US4, voir `docs/activite-physique.md`).
+
+Les modules `foods`, `nutrition`, `sync`, `coaching` et `suivis` complètent
+l’US2 et l’US3 (voir les documents de `docs/`).
 
 ## Démarrage avec Docker
 
@@ -88,7 +90,7 @@ réponses documentées sont consultables dans Swagger.
 | POST | `/api/auth/login` | Connexion ; retourne les jetons |
 | POST | `/api/auth/refresh` | Renouvellement avec rotation du refresh token |
 | POST | `/api/auth/logout` | Révocation du refresh token fourni ; réponse 204 |
-| POST | `/api/plans/preview` | Proposition sans enregistrement ; coach authentifié |
+| POST | `/api/plans/preview` | Proposition sans enregistrement ; coach authentifié ; `niveauActivite` facultatif (déduit des pas) |
 | POST | `/api/plans` | Soumission d’un plan ; coach authentifié |
 | GET | `/api/plans/me` | Plan actif de l’utilisateur connecté, ou `null` |
 | GET | `/api/measurements/me` | Historique complet de l’utilisateur connecté ; rôle utilisateur uniquement |
@@ -98,6 +100,8 @@ réponses documentées sont consultables dans Swagger.
 | DELETE | `/api/food-journals/me/entries/:entryId` | Retrait d’une entrée et recalcul du journal ; rôle utilisateur |
 | GET | `/api/food-journals/me/status` | Statut calorique du plan actif, ou `null` ; rôle utilisateur |
 | GET | `/api/food-journals/me/days/:jourUtc` | Journal d’un jour passé (lecture seule), ou `null` ; rôle utilisateur |
+| POST | `/api/activity/steps` | Total de pas du jour (0 à 50 000) ; remplace la valeur du jour ; rôle utilisateur |
+| GET | `/api/activity/me` | Historique des pas et moyenne des 7 jours précédents avec le niveau déduit ; rôle utilisateur |
 | GET / POST | `/api/sync/me`, `/api/sync/me/operations` | Synchronisation de la base embarquée (voir `docs/synchronisation.md`) |
 
 Pour les routes protégées, transmettre `Authorization: Bearer <accessToken>`.
