@@ -72,10 +72,11 @@ export class PlansController {
     @Req() req: AuthenticatedRequest,
     @Body(new ZodValidationPipe(createPlanSchema)) body: CreatePlanDto,
   ): Promise<PlanPreviewDto> {
-    const plan = await this.preparePlanUseCase.execute({
-      ...body,
-      coachId: req.user.sub,
-    });
+    const { plan, niveauActiviteSource, moyennePas7Jours } =
+      await this.preparePlanUseCase.prepare({
+        ...body,
+        coachId: req.user.sub,
+      });
     const props = plan.toProps();
     return {
       userId: props.userId,
@@ -87,6 +88,8 @@ export class PlansController {
       niveauActivite: props.niveauActivite,
       budgetCalorique: props.budgetCalorique,
       budgetPlafonneAuBmr: props.budgetPlafonneAuBmr,
+      niveauActiviteSource,
+      moyennePas7Jours,
       avertissement: props.budgetPlafonneAuBmr
         ? 'La suggestion a été ramenée au BMR ; elle ne correspond plus au déficit calculé pour le rythme demandé.'
         : null,

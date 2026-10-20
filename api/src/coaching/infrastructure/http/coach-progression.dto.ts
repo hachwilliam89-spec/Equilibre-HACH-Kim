@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { MoyenneActiviteDto } from '../../../activity/infrastructure/http/activity.dto';
 import type { User } from '../../../auth/domain/entities/user.entity';
 import {
   MeasurementDto,
@@ -99,6 +100,12 @@ export class ClientProgressionDto {
 
   @ApiProperty({ type: AlimentationCoachDto, nullable: true })
   alimentation: AlimentationCoachDto | null;
+  @ApiProperty({
+    type: MoyenneActiviteDto,
+    description:
+      'Moyenne des 7 jours de pas precedant aujourd’hui et niveau deduit (null si moins de 7 jours)',
+  })
+  activite: MoyenneActiviteDto;
 }
 
 export function toClientDto(user: User): ClientDto {
@@ -148,5 +155,6 @@ export function toClientProgressionDto(
           jours: alimentation.jours.map((jour) => ({ ...jour })),
         }
       : null,
+    activite: { ...progression.activite },
   };
 }

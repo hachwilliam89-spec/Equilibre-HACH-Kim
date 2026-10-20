@@ -10,6 +10,11 @@ import {
 import { USER_REPOSITORY } from '../../../auth/domain/ports/user-repository.port';
 import type { UserRepositoryPort } from '../../../auth/domain/ports/user-repository.port';
 import { AppException } from '../../../common/errors/app-exception';
+import {
+  SUIVI_REPOSITORY,
+  type SuiviRepositoryPort,
+} from '../../../suivis/domain/ports/suivi-repository.port';
+import { moyenneSeptJours } from '../../../activity/domain/services/niveau-activite';
 
 export interface PreparePlanInput {
   coachId: string;
@@ -18,9 +23,20 @@ export interface PreparePlanInput {
   poidsCible: number;
   dateDebut: Date;
   dateCible: Date;
-  niveauActivite: NiveauActivite;
+  /**
+   * Choix du coach. Absent : déduit de la moyenne des 7 jours de pas
+   * précédant le calcul (US4) ; refusé si cet historique est incomplet.
+   */
+  niveauActivite?: NiveauActivite;
   /** Valeur saisie par le coach : prévaut sur la suggestion automatique. */
   budgetCalorique?: number;
+}
+
+export interface PlanPrepare {
+  plan: Plan;
+  niveauActiviteSource: 'coach' | 'pas';
+  /** Moyenne des 7 jours utilisée pour la déduction, sinon null. */
+  moyennePas7Jours: number | null;
 }
 
 @Injectable()
@@ -28,9 +44,18 @@ export class PreparePlanUseCase {
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: UserRepositoryPort,
+    @Inject(SUIVI_REPOSITORY)
+    private readonly suivis: SuiviRepositoryPort,
   ) {}
 
   async execute(input: PreparePlanInput): Promise<Plan> {
+    return (await this.prepare(input)).plan;
+  }
+
+  async prepare(
+    input: PreparePlanInput,
+    maintenant: Date = new Date(),
+  ): Promise<PlanPrepare> {
     const user = await this.userRepository.findById(input.userId);
     if (
       !user ||
@@ -50,6 +75,27 @@ export class PreparePlanUseCase {
         'Taille non renseignee sur le profil utilisateur : completez-la avant de creer un plan',
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    // Facteur figé ici : le plan enregistre le niveau retenu, de nouvelles
+    // mesures de pas ne le recalculent jamais.
+    let niveauActivite = input.niveauActivite;
+    let moyennePas7Jours: number | null = null;
+    if (!niveauActivite) {
+      const suivi = await this.suivis.charger(input.userId);
+      const moyenne = moyenneSeptJours(
+        suivi?.toProps().pasQuotidiens ?? [],
+        maintenant.toISOString().slice(0, 10),
+      );
+      if (!moyenne.niveau) {
+        throw new AppException(
+          'activity-level-required',
+          `Moins de 7 jours de pas enregistres (${moyenne.joursRenseignes}/7) : choisissez le niveau d'activite`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      niveauActivite = moyenne.niveau;
+      moyennePas7Jours = moyenne.moyennePas;
     }
 
     let budgetCalorique: number;
@@ -81,7 +127,7 @@ export class PreparePlanUseCase {
       });
       const budget = calculateCalorieBudget({
         bmr,
-        niveauActivite: input.niveauActivite,
+        niveauActivite,
         rythmeKgParSemaine: rythme,
       });
       budgetCalorique = budget.budget;
@@ -99,7 +145,7 @@ export class PreparePlanUseCase {
         dateDebut: input.dateDebut,
         dateCible: input.dateCible,
         tailleCm: user.tailleCm,
-        niveauActivite: input.niveauActivite,
+        niveauActivite,
         budgetCalorique,
         budgetPlafonneAuBmr,
         createdAt: new Date(),
@@ -116,6 +162,10 @@ export class PreparePlanUseCase {
       );
     }
 
-    return plan;
+    return {
+      plan,
+      niveauActiviteSource: input.niveauActivite ? 'coach' : 'pas',
+      moyennePas7Jours,
+    };
   }
 }

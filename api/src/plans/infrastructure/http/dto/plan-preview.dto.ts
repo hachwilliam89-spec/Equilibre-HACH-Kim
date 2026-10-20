@@ -12,6 +12,13 @@ export class PlanPreviewDto extends createZodDto(
     niveauActivite: z.enum(['sedentaire', 'actif', 'sportif', 'athlete']),
     budgetCalorique: z.number(),
     budgetPlafonneAuBmr: z.boolean(),
+    niveauActiviteSource: z
+      .enum(['coach', 'pas'])
+      .describe('coach : niveau choisi ; pas : deduit de la montre'),
+    moyennePas7Jours: z
+      .number()
+      .nullable()
+      .describe('Moyenne des 7 jours utilisee pour la deduction, sinon null'),
     avertissement: z.string().nullable(),
   }),
 ) {}
