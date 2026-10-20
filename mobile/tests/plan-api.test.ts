@@ -37,6 +37,19 @@ test("un refresh refuse efface la session et ne rejoue pas la soumission", async
   expect(session).toBeNull(); expect(storage.clear).toHaveBeenCalledTimes(1);
   expect(global.fetch).toHaveBeenCalledTimes(1);
 });
+test("une réponse de refresh perdue conserve la session pour réessayer ; un refus ultérieur demande la reconnexion", async () => {
+  (refresh as jest.Mock).mockRejectedValueOnce(new TypeError("Network request failed"))
+    .mockRejectedValueOnce(new ApiError("Session expirée", 401));
+  (global.fetch as jest.Mock).mockResolvedValue(response(401, {}));
+  await expect(requestApi("/plans", "POST", {})).rejects.toThrow("Network request failed");
+  expect(session).toEqual(initial);
+  expect(storage.clear).not.toHaveBeenCalled();
+  await expect(requestApi("/plans", "POST", {})).rejects.toThrow("Session expirée");
+  expect(session).toBeNull();
+  expect(storage.clear).toHaveBeenCalledTimes(1);
+  // Aucun des POST métier n'est rejoué sans renouvellement réussi.
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+});
 test("une erreur metier conserve son message et ne relance pas le POST", async () => {
   (global.fetch as jest.Mock).mockResolvedValue(response(409, { detail: "Un plan actif existe déjà." }));
   await expect(requestApi("/plans", "POST", {})).rejects.toThrow("Un plan actif existe déjà.");

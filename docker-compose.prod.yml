@@ -10,6 +10,7 @@ services:
     environment:
       # Force en dur : la production ne doit jamais tourner dans un autre mode.
       - NODE_ENV=production
+      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-}
     # Aucun port hote : le Caddy existant joint l'API sur ce reseau dedie.
     networks:
       equilibre-network: {}

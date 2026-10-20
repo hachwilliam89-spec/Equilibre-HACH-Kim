@@ -214,7 +214,7 @@ Sur `develop`, `deploy:ecole` part seul une fois tous les étages verts ; sur
 `main`, il attend un clic. Il reste conditionné à `DEPLOY_ECOLE_ENABLED`.
 Voir [le déploiement école](docs/deploiement-ecole.md).
 
-`api/` et `mobile/` sont deux paquets indépendants ; chaque job
+`api/`, `mobile/` et `simulator/` sont trois paquets indépendants ; chaque job
 installe ses propres dépendances avec `pnpm install --frozen-lockfile`, qui
 échoue si le lockfile ne correspond plus au `package.json`.
 
@@ -239,10 +239,12 @@ Secrets du dépôt GitHub : `DEPLOY_HOST`, `DEPLOY_USER`, `SSH_PRIVATE_KEY`,
 `SSH_KNOWN_HOSTS`. Les paquets GHCR doivent autoriser l'accès en écriture au
 dépôt GitHub (paramètres du paquet → *Manage Actions access*).
 
-Voir [la procédure de recette](docs/deploiement-recette.md) avant d'activer la CD.
+Voir [la procédure OVH actuelle](docs/deploiement-recette.md) pour les secrets,
+les contrôles après livraison et le retour arrière. Le web, l'APK et les OTA
+suivent des livraisons distinctes de la CI API.
 
-Étage `test`, en plus des tests unitaires : `api:integration` (optionnel,
-étape 11 des consignes) exécute les tests d'intégration (`pnpm test:e2e`,
+Étage `test`, en plus des tests unitaires : `api:integration` est exécuté dans
+chaque pipeline et bloque la suite en cas d'échec. Il lance les tests (`pnpm test:e2e`,
 sans mock) contre un vrai MongoDB, démarré comme service jetable de la
 pipeline. Identifiants et secrets JWT de ce job n'existent que pour sa
 durée ; ils n'ont aucune valeur en dehors de la CI.
@@ -262,4 +264,4 @@ durée ; ils n'ont aucune valeur en dehors de la CI.
 
 ## Application mobile
 
-Le premier écran de connexion est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le parcours coach de proposition et soumission du plan (FR403-128) est disponible pour recette sur iPhone. L’espace utilisateur fonctionne hors ligne grâce à une base SQLite embarquée synchronisée avec MongoDB : voir [Page 9 — Synchronisation](docs/synchronisation.md).
+L'application est disponible dans `mobile/`. Voir [le guide mobile](mobile/README.md) pour configurer l’adresse API, lancer Expo et effectuer la recette sur téléphone. Le [guide de connexion](docs/login.md) décrit les jetons, les autorisations et les limites de session. L’espace utilisateur fonctionne hors ligne grâce à une base SQLite embarquée synchronisée avec MongoDB : voir [Page 9 — Synchronisation](docs/synchronisation.md).

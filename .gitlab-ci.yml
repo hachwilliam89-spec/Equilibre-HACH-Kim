@@ -27,7 +27,7 @@
 
 stages:
   - quality   # lint + verification des types : rapide, echoue vite
-  - test      # tests unitaires (Jest), sans base de donnees
+  - test      # tests unitaires, integration MongoDB et contrats des scripts
   - build     # compilation TypeScript -> JavaScript (api/dist)
   - publish   # image issue du commit valide
   - deploy    # automatique sur develop, manuel sur main
@@ -86,7 +86,7 @@ api:test:
     # ci-dessous utilise une vraie base jetable.
     - pnpm test
 
-# Test d'integration optionnel (etape 11 des consignes) : contre une vraie
+# Test d'integration execute et bloquant dans chaque pipeline : contre une vraie
 # instance MongoDB (service Docker de la pipeline), sans mock, comme l'exige
 # le cahier des charges pour les tests d'integration. L'application demarree
 # par le test (via Nest TestingModule + supertest) est celle qui existe

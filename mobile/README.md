@@ -55,6 +55,9 @@ nécessaire.
 
 ## Session
 
+Voir [le cycle de connexion documenté](../docs/login.md), y compris la réponse
+de renouvellement perdue et la conservation des saisies après expiration.
+
 - Connexion sur `/auth/login` ; rôle, identifiant et identité fournis par le serveur.
 - Jetons conservés dans Expo SecureStore sur iOS/Android, jamais dans SQLite ;
   l’aperçu web les garde en mémoire uniquement.
