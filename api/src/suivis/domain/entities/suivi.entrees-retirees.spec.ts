@@ -90,8 +90,33 @@ describe('Suivi : traces des entrees retirees', () => {
     ]);
   });
 
-  it('borne le nombre de traces', () => {
+  it('refuse un retrait a saturation sans perdre de trace ni modifier le journal', () => {
     const traces = Array.from({ length: MAX_ENTREES_RETIREES }, (_, i) => ({
+      id: `trace-${i}`,
+      consommeLe: maintenant,
+      retireeLe: maintenant,
+    }));
+    const suivi = Suivi.restore({
+      ...suiviAvecEntree('entree-1').toProps(),
+      entreesRetirees: traces,
+    });
+
+    const avant = suivi.toProps();
+    const journalAvant = avant.journauxAlimentaires[0].toProps();
+
+    expect(() =>
+      suivi.retirerEntreeAlimentaire('entree-1', maintenant),
+    ).toThrow(AppException);
+
+    expect(suivi.toProps().entreesRetirees).toEqual(traces);
+    expect(suivi.entreeAlimentaireRetiree('trace-0')).toBe(true);
+    expect(suivi.toProps().journauxAlimentaires[0].toProps()).toEqual(
+      journalAvant,
+    );
+  });
+
+  it('accepte le 500e retrait et conserve toutes les preuves recentes', () => {
+    const traces = Array.from({ length: MAX_ENTREES_RETIREES - 1 }, (_, i) => ({
       id: `trace-${i}`,
       consommeLe: maintenant,
       retireeLe: maintenant,
@@ -103,10 +128,52 @@ describe('Suivi : traces des entrees retirees', () => {
 
     suivi.retirerEntreeAlimentaire('entree-1', maintenant);
 
-    const ids = suivi.toProps().entreesRetirees.map((trace) => trace.id);
-    expect(ids).toHaveLength(MAX_ENTREES_RETIREES);
-    expect(ids[0]).toBe('trace-1');
-    expect(ids.at(-1)).toBe('entree-1');
+    expect(suivi.toProps().entreesRetirees).toHaveLength(MAX_ENTREES_RETIREES);
+    expect(suivi.entreeAlimentaireRetiree('trace-0')).toBe(true);
+    expect(suivi.entreeAlimentaireRetiree('entree-1')).toBe(true);
+  });
+
+  it('libere une place uniquement quand une trace a quitte la fenetre de rejeu', () => {
+    const traces = Array.from({ length: MAX_ENTREES_RETIREES }, (_, i) => ({
+      id: `trace-${i}`,
+      consommeLe: i === 0 ? new Date('2026-10-07T12:00:00Z') : maintenant,
+      retireeLe: maintenant,
+    }));
+    const suivi = Suivi.restore({
+      ...suiviAvecEntree('entree-1').toProps(),
+      entreesRetirees: traces,
+    });
+
+    suivi.retirerEntreeAlimentaire('entree-1', maintenant);
+
+    expect(suivi.toProps().entreesRetirees).toHaveLength(MAX_ENTREES_RETIREES);
+    expect(suivi.entreeAlimentaireRetiree('trace-0')).toBe(false);
+    expect(suivi.entreeAlimentaireRetiree('trace-1')).toBe(true);
+    expect(suivi.entreeAlimentaireRetiree('entree-1')).toBe(true);
+  });
+
+  it('retire une entree trop ancienne pour etre rejouee meme a saturation', () => {
+    const traces = Array.from({ length: MAX_ENTREES_RETIREES }, (_, i) => ({
+      id: `trace-${i}`,
+      consommeLe: maintenant,
+      retireeLe: maintenant,
+    }));
+    const suivi = Suivi.restore({
+      ...suiviAvecEntree(
+        'ancienne-entree',
+        new Date('2026-10-07T12:00:00Z'),
+      ).toProps(),
+      entreesRetirees: traces,
+    });
+
+    const journal = suivi.retirerEntreeAlimentaire(
+      'ancienne-entree',
+      maintenant,
+    );
+
+    expect(journal?.toProps().entrees).toHaveLength(0);
+    expect(suivi.toProps().entreesRetirees).toEqual(traces);
+    expect(suivi.entreeAlimentaireRetiree('ancienne-entree')).toBe(false);
   });
 
   it('restaure un ancien document sans traces', () => {
@@ -120,3 +187,4 @@ describe('Suivi : traces des entrees retirees', () => {
     ).toEqual([]);
   });
 });
+import { AppException } from '../../../common/errors/app-exception';

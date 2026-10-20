@@ -124,7 +124,7 @@ aussi le curseur.
 | Type | Champs | Règle appliquée par le serveur |
 | --- | --- | --- |
 | `ajout-aliment` | `entreeId`, `foodId`, `quantiteGrammes`, `categorieRepas?`, `consommeLe` | Même calcul que l’ajout en ligne. L’heure de consommation de l’appareil est retenue (repas d’hier soir saisi hors ligne → journal d’hier) si elle n’est ni dans le futur (tolérance 5 min), ni plus vieille que 7 jours, ni hors de la période du plan. |
-| `retrait-aliment` | `entreeId` | Recalcul des totaux. Entrée introuvable = déjà retirée. |
+| `retrait-aliment` | `entreeId` | Recalcul des totaux. Entrée introuvable = déjà retirée. À saturation des 500 traces encore nécessaires, refus `food-entry-removal-limit` sans suppression ; les autres opérations du lot continuent. |
 | `saisie-poids` | `mesureId`, `poidsKg`, `saisiLe` | Saisie de secours **du jour** : refusée si elle arrive un autre jour UTC ou si une mesure valide existe déjà ce jour. Horodatée par le serveur à la réception. |
 | `favori` | `foodId`, `favori` | Ajout/retrait idempotent. |
 
@@ -157,6 +157,7 @@ et doit confirmer.
 | --- | --- |
 | Même opération envoyée deux fois (réseau coupé avant la réponse) | Identifiants client → `deja-appliquee`, aucun doublon |
 | Ajout accepté, réponse perdue, entrée retirée ailleurs, puis ajout rejoué | Trace du retrait → `deja-appliquee`, l’entrée **n’est pas recréée** |
+| 500 traces de retrait encore nécessaires | Le retrait suivant est refusé (`409 food-entry-removal-limit` en ligne, `rejetee` en synchronisation), avant toute mutation. L’entrée et les traces restent intactes. Aucune preuve encore rejouable n’est évincée. |
 | Aliment ajouté puis retiré hors ligne, avant envoi | Les deux opérations s’annulent sur l’appareil, rien n’est envoyé |
 | Favori basculé plusieurs fois hors ligne | Seul le dernier choix est envoyé |
 | Balance et saisie manuelle le même jour | Règle « une mesure valide par jour » : la saisie hors ligne est rejetée et l’utilisateur en est informé |
@@ -168,7 +169,7 @@ et doit confirmer.
 | Sens | Règle |
 | --- | --- |
 | Appareil → serveur | Retirer un aliment hors ligne crée une opération `retrait-aliment` dans la file. L’entrée disparaît de l’écran, mais l’opération reste jusqu’à la réponse du serveur. Si l’entrée n’avait pas encore été envoyée, l’ajout et le retrait s’annulent sur l’appareil. Retirer un favori envoie `favori` à `false`. Les mesures de poids ne se suppriment pas (historique conservé, règles de l’US2). |
-| Trace côté serveur | Chaque retrait d’entrée (route en ligne ou `retrait-aliment`) ajoute `{ id, consommeLe, retireeLe }` à `entreesRetirees` du document `suivis`, **dans la même mise à jour versionnée** que la suppression : la trace existe si et seulement si le retrait a été enregistré. Un `ajout-aliment` dont l’`entreeId` figure dans les traces répond `deja-appliquee` sans rien créer. Les traces sont conservées tant que l’ajout peut encore être rejoué (fenêtre de saisie différée de 7 jours, plus 1 jour de marge), et bornées à 500. Pas de nouvelle collection : la preuve vit avec les données qu’elle protège. |
+| Trace côté serveur | Le retrait d’une entrée encore rejouable (route en ligne ou `retrait-aliment`) ajoute `{ id, consommeLe, retireeLe }` à `entreesRetirees` du document `suivis`, **dans la même mise à jour versionnée** que la suppression. Un `ajout-aliment` dont l’`entreeId` figure dans les traces répond `deja-appliquee` sans rien créer. Les traces sont conservées pendant 8 jours à partir de `consommeLe` (fenêtre de saisie différée de 7 jours, plus 1 jour de marge), dans la limite de 500. Seules les traces sorties de cette fenêtre sont purgées. Si 500 traces sont encore nécessaires, un nouveau retrait récent est refusé avant toute mutation (`food-entry-removal-limit`) ; l’appareil restaure l’entrée depuis l’instantané et affiche la raison. Une entrée antérieure à la fenêtre peut être retirée sans nouvelle trace, même à saturation. Pas de nouvelle collection : la preuve vit avec les données qu’elle protège. |
 | Serveur → appareil | Pas de marqueur de suppression : chaque instantané contient **tout** le périmètre embarqué et remplace les tables serveur dans une transaction. Un élément absent de l’instantané disparaît de l’appareil : entrée retirée depuis un autre appareil, favori retiré, journal sorti de la fenêtre J/J-1, mesure de plus de 3 mois. Il n’y a donc aucun marqueur à nettoyer. |
 
 Coût de ce choix : un instantané reste petit (2 journaux, environ 90 mesures,
@@ -184,7 +185,7 @@ actor Utilisateur
 participant "Écran journal" as UI
 participant "useSync\n(moteur)" as Sync
 database "SQLite\n(appareil)" as DB
-participant "API NestJS\n/sync" as API
+participant "API NestJS\n/api/sync" as API
 participant "AddFoodEntryUseCase" as UC
 database MongoDB
 
@@ -194,21 +195,25 @@ Sync -> DB : INSERT operations_en_attente\n(id, entreeId UUID, consommeLe)
 Sync -> DB : lire état serveur + file
 Sync --> UI : vue = serveur + opération en attente
 UI --> Utilisateur : entrée affichée « en attente », total recalculé
-Sync -> API : POST /sync/me/operations
+Sync -> API : POST /api/sync/me/operations
 API -x Sync : erreur réseau
 Sync --> UI : « Hors ligne · 1 modification en attente »
 
 == Le réseau revient (premier plan, minuterie ou bouton) ==
 
 Sync -> DB : SELECT operations_en_attente
-Sync -> API : POST /sync/me/operations\n{ operations: [ajout-aliment] }
+Sync -> API : POST /api/sync/me/operations\n{ operations: [ajout-aliment] }
 API -> UC : executeDepuisSynchro(userId du JWT, entrée)
 UC -> UC : fenêtre (futur, 7 jours, période du plan)
 UC -> MongoDB : charger suivi ; entreeId déjà présente\nou déjà retirée (entreesRetirees) ?
-UC -> MongoDB : updateOne si version inchangée
-UC --> API : appliquée
+alt entrée présente ou trace de retrait
+  UC --> API : deja-appliquee (aucune écriture)
+else nouvel ajout
+  UC -> MongoDB : updateOne si version inchangée
+  UC --> API : appliquee
+end
 API -> MongoDB : lecture du strict nécessaire
-API --> Sync : 200 { resultats: [appliquee], instantane }
+API --> Sync : 200 { resultats, instantane }
 Sync -> DB : une transaction : DELETE opération acquittée,\ntentatives + 1 des autres, remplacer tables serveur
 Sync --> UI : vue à jour
 UI --> Utilisateur : « Synchronisé à 14:32 »
@@ -221,11 +226,11 @@ UI --> Utilisateur : « Synchronisé à 14:32 »
 @startuml
 participant "useSync" as Sync
 database "SQLite" as DB
-participant "API /sync" as API
+participant "API /api/sync" as API
 database MongoDB
 
 Sync -> DB : file vide ? curseur ?
-Sync -> API : GET /sync/me?curseur=abc
+Sync -> API : GET /api/sync/me?curseur=abc
 API -> MongoDB : suivi, mesures, journaux J et J-1, favoris
 API -> API : empreinte du contenu + jour UTC
 alt empreinte = curseur
@@ -245,18 +250,19 @@ end
 actor Utilisateur
 participant "useSync" as Sync
 database "SQLite" as DB
-participant "API /sync" as API
+participant "API /api/sync" as API
 participant "CorrectMeasurementUseCase" as UC
 database MongoDB
 
 Utilisateur -> Sync : saisirPoids(79,4) — hors ligne
 Sync -> DB : INSERT opération saisie-poids
 note over MongoDB : entre-temps, la balance\nenvoie une mesure valide
-Sync -> API : POST /sync/me/operations
+Sync -> API : POST /api/sync/me/operations
 API -> UC : executeDepuisSynchro
 UC -> MongoDB : mesure valide déjà présente ce jour
 UC --> API : 409 measurement-day-conflict
-API --> Sync : { statut: rejetee, code: measurement-day-conflict }
+API -> MongoDB : lire l’instantané à jour
+API --> Sync : 200 { resultats: [rejetee], instantane }\ncode: measurement-day-conflict
 Sync -> DB : une transaction : DELETE opération rejetée,\nremplacer tables serveur
 Sync --> Utilisateur : « Ton poids saisi (79,4 kg) n’a pas été retenu :\nune mesure valide existait déjà ce jour-là. »
 @enduml
@@ -295,10 +301,15 @@ Aucune règle métier n’est dupliquée : `AddFoodEntryUseCase` et
 
 | Niveau | Fichier | Couvre |
 | --- | --- | --- |
-| Unitaires API | `saisie-differee*.spec.ts`, `add-food-entry.use-case.spec.ts`, `suivi.entrees-retirees.spec.ts`, `apply-sync-operations.use-case.spec.ts`, `sync.dto.spec.ts` | Fenêtres temporelles, idempotence (y compris rejeu après retrait), traces de retrait (purge, borne), classification des résultats, curseur, validation |
+| Unitaires API | `saisie-differee*.spec.ts`, `add-food-entry.use-case.spec.ts`, `suivi.entrees-retirees.spec.ts`, `apply-sync-operations.use-case.spec.ts`, `sync.dto.spec.ts` | Fenêtres temporelles, idempotence (y compris rejeu après retrait), traces de retrait (purge, saturation sans perte, retrait ancien), classification des résultats, curseur, validation |
 | HTTP API | `sync.controller.spec.ts` | 401/403, 200 puis 204 avec curseur, conversion des dates, 400, Swagger |
-| Intégration API (MongoDB réel, sans mock) | `test/sync.integration-spec.ts` | Pull, push, rejeu sans doublon, rejeu d’un ajout après retrait de l’entrée, refus métier, état final de la base |
-| Mobile | `src/sync/tests/*.test.ts` | Contrat identique des adaptateurs SQLite (vrai SQL via sql.js) et mémoire, projection, moteur, store ; réponse d’un push appliquée en une transaction (rien n’est acquitté si l’écriture échoue) ; état et file retrouvés après fermeture puis réouverture du fichier SQLite |
+| Intégration API (MongoDB réel, sans mock) | `test/sync.integration-spec.ts` | Pull, push, rejeu sans doublon, rejeu d’un ajout après retrait de l’entrée, saturation des 500 traces sans perte ni écriture partielle, poursuite du lot après refus, état final de la base |
+| Mobile | `src/sync/tests/*.test.ts` | Contrat identique des adaptateurs SQLite (vrai SQL via SQL.js) et mémoire, projection, moteur, store ; réponse d’un push appliquée en une transaction (rien n’est acquitté si l’écriture échoue) ; export d’un fichier sur disque et réouverture dans une nouvelle connexion SQL.js |
+
+Le test SQL.js vérifie le fichier et le SQL du store. La conservation après
+fermeture forcée de l’application native se valide sur téléphone avec la
+recette suivante (étapes 3, 4 et 6), en notant la date et l’appareil dans
+« Observé ».
 
 ```bash
 pnpm test                       # unitaires API
@@ -324,7 +335,7 @@ La colonne « Observé » se remplit pendant la recette (date, OK ou KO, remarqu
 | 1 | Se connecter, ouvrir le suivi | « Synchronisé à hh:mm » | |
 | 2 | Activer le mode Avion, rouvrir l’app | Session reprise, données affichées, bandeau « Hors ligne » | |
 | 3 | Ajouter « Riz blanc cuit 200 g » hors ligne | Entrée visible « en attente », total +260 kcal, statut recalculé | |
-| 4 | Fermer complètement l’app, la rouvrir toujours hors ligne | L’entrée et l’opération en attente sont toujours là | |
+| 4 | Fermer complètement l’app, la rouvrir toujours hors ligne | L’entrée et l’opération en attente sont toujours là | 20/10/2026 — OK, confirmé par le porteur du projet : la mention « en attente » persiste. Modèle et version de l’application non relevés. |
 | 5 | Ajouter puis retirer un aliment hors ligne | Rien en attente pour cet aliment | |
 | 6 | Désactiver le mode Avion | Bandeau « Synchronisé », entrée confirmée ; visible dans MongoDB (collection `suivis`) | |
 | 7 | Couper le réseau pendant l’envoi (mode Avion juste après l’ajout), puis le rétablir | Une seule entrée dans MongoDB, aucun doublon | |

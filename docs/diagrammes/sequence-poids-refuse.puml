@@ -1,0 +1,23 @@
+@startuml
+skinparam dpi 140
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+actor Utilisateur
+participant "useSync" as Sync
+database "SQLite" as DB
+participant "API /api/sync" as API
+participant "CorrectMeasurementUseCase" as UC
+database MongoDB
+
+Utilisateur -> Sync : saisirPoids(79,4) — hors ligne
+Sync -> DB : INSERT opération saisie-poids
+note over MongoDB : entre-temps, la balance\nenvoie une mesure valide
+Sync -> API : POST /api/sync/me/operations
+API -> UC : executeDepuisSynchro
+UC -> MongoDB : mesure valide déjà présente ce jour
+UC --> API : 409 measurement-day-conflict
+API -> MongoDB : lire l’instantané à jour
+API --> Sync : 200 { resultats: [rejetee], instantane }\ncode: measurement-day-conflict
+Sync -> DB : une transaction : DELETE opération rejetée,\nremplacer tables serveur
+Sync --> Utilisateur : « Ton poids saisi (79,4 kg) n’a pas été retenu :\nune mesure valide existait déjà ce jour-là. »
+@enduml
