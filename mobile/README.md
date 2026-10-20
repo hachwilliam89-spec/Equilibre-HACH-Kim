@@ -119,6 +119,15 @@ un bouton « Réessayer » la remplacent. Côté coach, le formulaire de plan
 présélectionne le niveau déduit des 7 derniers jours ; sans 7 jours de pas, le
 choix reste manuel. Détails : [activité physique](../docs/activite-physique.md).
 
+## Alertes d’écart persistant — US5
+
+La liste du coach ouvre sur une section « Écart persistant » : utilisateurs
+ayant 3 pesées valides ou 3 journées clôturées consécutives hors tolérance.
+Chaque carte porte un libellé texte en plus de la couleur. La fiche affiche un
+bandeau avec le bouton « Ajuster le plan » : formulaire prérempli (poids cible,
+date cible, budget), contrôles de la création, récapitulatif et confirmation,
+puis `PATCH /api/plans/:id`. Détails : [alertes d’écart](../docs/alertes-ecart.md).
+
 ## Parcours coach
 
 « Utilisateurs » liste les comptes rattachés au coach (`GET /api/users/me/clients`).
@@ -128,8 +137,8 @@ onglets :
 - **Plan** : plan actif ou création en deux étapes — objectifs (poids, dates,
   IMC et rythme indicatifs), puis activité, proposition de budget
   (`POST /api/plans/preview`, sans enregistrement) et validation
-  (`POST /api/plans`, qui revalide les règles). Le plan peut être annulé après
-  confirmation.
+  (`POST /api/plans`, qui revalide les règles). Le plan peut être ajusté
+  (US5) ou annulé après confirmation.
 - **Suivi** : courbe du poids, alertes d’écart et dernières pesées sur 3 mois.
 - **Alimentation** : barres des calories des derniers jours face au budget.
 
