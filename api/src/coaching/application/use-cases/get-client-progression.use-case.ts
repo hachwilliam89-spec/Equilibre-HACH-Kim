@@ -22,6 +22,8 @@ import {
   type JourCalorique,
 } from '../../domain/services/serie-calorique';
 import { chargerClientDuCoach } from '../client-du-coach';
+import type { AlerteEcartPersistant } from '../../domain/services/ecart-persistant';
+import { alertesDuSuivi } from '../alertes-du-suivi';
 import {
   moyenneSeptJours,
   type MoyenneActivite,
@@ -41,6 +43,8 @@ export interface ClientProgression {
   alimentation: AlimentationCoach | null;
   /** Moyenne des 7 jours de pas et niveau déduit (US4), même sans plan. */
   activite: MoyenneActivite;
+  /** Écarts persistants du plan actif (US5) ; vide sans plan. */
+  alertes: AlerteEcartPersistant[];
 }
 
 /**
@@ -109,6 +113,17 @@ export class GetClientProgressionUseCase {
       };
     }
 
-    return { utilisateur, suiviPoids, mesures, alimentation, activite };
+    const alertes = suiviPoids
+      ? alertesDuSuivi(suiviPoids.plan, suivi, jourCourantUtc)
+      : [];
+
+    return {
+      utilisateur,
+      suiviPoids,
+      mesures,
+      alimentation,
+      activite,
+      alertes,
+    };
   }
 }

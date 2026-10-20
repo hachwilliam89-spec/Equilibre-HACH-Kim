@@ -77,7 +77,14 @@ function journal(jourUtc: string, quantiteGrammes: number, planId = plan.id) {
   return j;
 }
 
-function build(found: User | null) {
+function build(
+  found: User | null,
+  journauxAlimentaires = [
+    journal('2026-10-07', 200),
+    journal('2026-10-08', 1500),
+    journal('2026-10-08', 100, 'ancien-plan'),
+  ],
+) {
   const users = {
     findById: jest.fn().mockResolvedValue(found),
   } as unknown as UserRepositoryPort;
@@ -89,11 +96,7 @@ function build(found: User | null) {
     mesures: [],
     derniereMesureValide: null,
     blocageJournalier: null,
-    journauxAlimentaires: [
-      journal('2026-10-07', 200),
-      journal('2026-10-08', 1500),
-      journal('2026-10-08', 100, 'ancien-plan'),
-    ],
+    journauxAlimentaires,
     entreesRetirees: [],
   });
   const suivis = {
@@ -191,5 +194,42 @@ describe('GetClientProgressionUseCase', () => {
     });
     expect(result.suiviPoids).toBeNull();
     expect(result.alimentation).toBeNull();
+    expect(result.alertes).toEqual([]);
+  });
+
+  it('signale 3 journées clôturées consécutives au-delà de budget + 150 kcal', async () => {
+    // 1600 g de riz = 2080 kcal, soit 280 kcal au-dessus du budget de 1800.
+    const journaux = ['2026-10-05', '2026-10-06', '2026-10-07'].map((jour) =>
+      journal(jour, 1600),
+    );
+    const { useCase } = build(user(), [
+      ...journaux,
+      journal('2026-10-08', 100),
+    ]);
+    const result = await useCase.execute({
+      coachId: 'coach-1',
+      userId: 'user-1',
+      jourCourantUtc: '2026-10-08',
+    });
+    expect(result.alertes).toEqual([
+      {
+        metrique: 'calories',
+        serie: 3,
+        depuis: '2026-10-05',
+        derniere: { jourUtc: '2026-10-07', ecart: 280, horsTolerance: true },
+      },
+    ]);
+  });
+
+  it('ne signale rien tant que la 3e journée n’est pas clôturée', async () => {
+    const journaux = ['2026-10-06', '2026-10-07', '2026-10-08'].map((jour) =>
+      journal(jour, 1600),
+    );
+    const result = await build(user(), journaux).useCase.execute({
+      coachId: 'coach-1',
+      userId: 'user-1',
+      jourCourantUtc: '2026-10-08',
+    });
+    expect(result.alertes).toEqual([]);
   });
 });
