@@ -14,6 +14,10 @@ import { MacroTargetsDto } from '../../../nutrition/infrastructure/http/food-bud
 import type { ClientOverview } from '../../application/use-cases/get-clients-overview.use-case';
 import type { ClientProgression } from '../../application/use-cases/get-client-progression.use-case';
 import type { StatutJour } from '../../domain/services/serie-calorique';
+import type {
+  AlerteEcartPersistant,
+  MetriqueSuivie,
+} from '../../domain/services/ecart-persistant';
 
 const STATUTS_ALIMENTAIRES = [
   'dans-le-budget',
@@ -31,6 +35,29 @@ export class ClientDto {
   @ApiProperty({ required: false, enum: ['homme', 'femme'] }) sexe?:
     'homme' | 'femme';
 }
+
+export class PointSuiviDto {
+  @ApiProperty({ format: 'date', example: '2026-10-08' }) jourUtc: string;
+  @ApiProperty({
+    description: 'Ecart signe : kg pour le poids, kcal pour les calories',
+  })
+  ecart: number;
+  @ApiProperty() horsTolerance: boolean;
+}
+
+export class AlerteEcartDto {
+  @ApiProperty({ enum: ['poids', 'calories'] }) metrique: MetriqueSuivie;
+  @ApiProperty({
+    description: 'Valeurs consecutives hors tolerance (au moins 3)',
+  })
+  serie: number;
+  @ApiProperty({ format: 'date', description: 'Premier jour de la serie' })
+  depuis: string;
+  @ApiProperty({ type: PointSuiviDto }) derniere: PointSuiviDto;
+}
+
+const ALERTES_DESCRIPTION =
+  'Ecarts persistants du plan actif (US5), calcules a la lecture ; vide sans plan ou sans alerte';
 
 export class StatutAlimentaireDto {
   @ApiProperty({ enum: STATUTS_ALIMENTAIRES }) statut: FoodBudgetStatus;
@@ -60,6 +87,22 @@ export class ClientOverviewDto extends ClientDto {
       'Derniere pesee ou saisie alimentaire du plan actif ; null sans activite',
   })
   derniereActivite: string | null;
+
+  @ApiProperty({
+    type: AlerteEcartDto,
+    isArray: true,
+    description: ALERTES_DESCRIPTION,
+  })
+  alertes: AlerteEcartDto[];
+}
+
+export class ClientAlertesDto extends ClientDto {
+  @ApiProperty({
+    type: AlerteEcartDto,
+    isArray: true,
+    description: 'Au moins une alerte',
+  })
+  alertes: AlerteEcartDto[];
 }
 
 export class JourCaloriqueDto {
@@ -106,6 +149,13 @@ export class ClientProgressionDto {
       'Moyenne des 7 jours de pas precedant aujourd’hui et niveau deduit (null si moins de 7 jours)',
   })
   activite: MoyenneActiviteDto;
+
+  @ApiProperty({
+    type: AlerteEcartDto,
+    isArray: true,
+    description: ALERTES_DESCRIPTION,
+  })
+  alertes: AlerteEcartDto[];
 }
 
 export function toClientDto(user: User): ClientDto {
@@ -117,6 +167,19 @@ export function toClientDto(user: User): ClientDto {
     tailleCm: user.tailleCm,
     age: user.age,
     sexe: user.sexe,
+  };
+}
+
+export function toAlerteEcartDto(
+  alerte: AlerteEcartPersistant,
+): AlerteEcartDto {
+  return { ...alerte, derniere: { ...alerte.derniere } };
+}
+
+export function toClientAlertesDto(overview: ClientOverview): ClientAlertesDto {
+  return {
+    ...toClientDto(overview.utilisateur),
+    alertes: overview.alertes.map(toAlerteEcartDto),
   };
 }
 
@@ -133,6 +196,7 @@ export function toClientOverviewDto(
         }
       : null,
     derniereActivite: overview.derniereActivite?.toISOString() ?? null,
+    alertes: overview.alertes.map(toAlerteEcartDto),
   };
 }
 
@@ -156,5 +220,6 @@ export function toClientProgressionDto(
         }
       : null,
     activite: { ...progression.activite },
+    alertes: progression.alertes.map(toAlerteEcartDto),
   };
 }

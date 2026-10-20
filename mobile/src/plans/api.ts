@@ -45,8 +45,12 @@ export async function requestApi(path: string, method = "GET", body?: unknown, r
 export const clientSchema = z.object({ id: z.string(), email: z.string(), prenom: z.string().optional(), nom: z.string().optional(), tailleCm: z.number().optional(), age: z.number().optional(), sexe: z.enum(["homme", "femme"]).optional() });
 export type Client = z.infer<typeof clientSchema>;
 export const previewSchema = z.object({ userId: z.string(), poidsDepart: z.number(), poidsCible: z.number(), dateDebut: z.string(), dateCible: z.string(), imcCible: z.number(), niveauActivite: z.enum(["sedentaire", "actif", "sportif", "athlete"]), budgetCalorique: z.number(), budgetPlafonneAuBmr: z.boolean(), avertissement: z.string().nullable().optional(), niveauActiviteSource: z.enum(["coach", "pas"]).optional(), moyennePas7Jours: z.number().nullable().optional() });
-export const planSchema = previewSchema.extend({ id: z.string(), statut: z.enum(["actif", "annule", "termine"]) });
+export const planSchema = previewSchema.extend({ id: z.string(), statut: z.enum(["actif", "annule", "termine"]), poidsAjusteLe: z.string().optional(), budgetAjusteLe: z.string().optional() });
 export type Plan = z.infer<typeof planSchema>;
 export type Preview = z.infer<typeof previewSchema>;
 export const clients = async () => parseApiData(z.array(clientSchema), await requestApi("/users/me/clients"));
 export const currentPlan = async (id: string) => parseApiData(planSchema.nullable(), await requestApi(`/plans/users/${encodeURIComponent(id)}`));
+export interface PlanAdjustment { poidsCible?: number; dateCible?: string; budgetCalorique?: number }
+/** Ajustement du plan actif par le coach (US5) : seuls les champs modifiés sont envoyés. */
+export const adjustPlan = async (planId: string, body: PlanAdjustment) =>
+  parseApiData(planSchema, await requestApi(`/plans/${encodeURIComponent(planId)}`, "PATCH", body));

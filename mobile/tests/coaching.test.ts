@@ -71,3 +71,32 @@ test("explique pourquoi regarder un utilisateur et quoi faire", () => {
   expect(coachAlerts(client("d", "en-attente-premiere-mesure"))[0].action).toBe("attendre-pesee");
   expect(coachAlerts(client("e", "dans-les-clous"))).toEqual([]);
 });
+
+const persistante = (metrique: "poids" | "calories", ecart: number) => ({
+  metrique,
+  serie: 3,
+  depuis: "2026-10-05",
+  derniere: { jourUtc: "2026-10-07", ecart, horsTolerance: true },
+});
+
+test("place l'écart persistant au-dessus de tout et propose d'ajuster le plan", () => {
+  const ecart = { ...client("a", "ecart-detecte", "depassement"), alertes: [persistante("poids", 2.4)] };
+  ecart.alimentation!.ecartKcal = 312;
+  expect(attentionLevel(ecart)).toBe(3);
+  // L'écart persistant remplace l'écart ponctuel du poids, pas celui des calories.
+  expect(coachAlerts(ecart)).toEqual([
+    { raison: "Poids hors tolérance sur 3 pesées de suite (+2,4 kg)", action: "ajuster-plan" },
+    { raison: "Calories au-dessus du budget (+312 kcal)", action: "revoir-plan" },
+  ]);
+  const calories = { ...client("b", "dans-les-clous", "depassement"), alertes: [persistante("calories", 280)] };
+  expect(coachAlerts(calories)).toEqual([
+    { raison: "Calories au-delà du budget 3 jours de suite (+280 kcal)", action: "ajuster-plan" },
+  ]);
+  const sorted = sortForCoach([client("max@x.fr", "ecart-detecte"), { ...client("zoe@x.fr", "dans-les-clous"), alertes: [persistante("poids", -1.6)] }]);
+  expect(sorted.map((c) => c.email)).toEqual(["zoe@x.fr", "max@x.fr"]);
+});
+
+test("reste compatible avec une API sans alertes persistantes", () => {
+  expect(attentionLevel({ ...client("a", "dans-les-clous"), alertes: [] })).toBe(0);
+  expect(attentionLevel(client("a", "dans-les-clous"))).toBe(0);
+});

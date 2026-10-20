@@ -5,12 +5,13 @@ import { attentionLevel, clientsOverview, coachActionLabel, coachAlerts, sortFor
 import { displayName, initials, lastActivityLabel, matchesSearch } from "../../../identity/identity";
 import { formatWeight } from "../../../measurements/presentation";
 import { Button, Screen } from "../../../plans/ui";
-import { ChevronRight } from "../../../ui/icons";
+import { AlertIcon, ChevronRight } from "../../../ui/icons";
 import { SearchField } from "../../../ui/SearchField";
 import { styles as s } from "../../../ui/styles";
 import { colors } from "../../../ui/theme";
 
 const SECTIONS = [
+  { level: 3 as const, title: "Écart persistant" },
   { level: 2 as const, title: "À surveiller" },
   { level: 1 as const, title: "En attente" },
   { level: 0 as const, title: "Sans alerte" },
@@ -23,7 +24,7 @@ function UserCard({ client }: { client: ClientOverview }) {
   const level = attentionLevel(client);
   const priorityAlert = alerts[0];
   const action = priorityAlert?.action;
-  const accent = level === 2 ? colors.warning : level === 1 ? colors.muted : colors.brand;
+  const accent = level === 3 ? colors.danger : level === 2 ? colors.warning : level === 1 ? colors.muted : colors.brand;
   const name = displayName(client);
   const activity = poids ? lastActivityLabel(client.derniereActivite) : null;
   const inactive = !!activity && !activity.startsWith("Actif");
@@ -59,9 +60,16 @@ function UserCard({ client }: { client: ClientOverview }) {
         </View>
         <ChevronRight color={colors.brand} />
       </View>
+      {level === 3 && (
+        // Libellé texte : la priorité ne repose pas sur la seule couleur.
+        <View style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: "#fbe9e7" }}>
+          <AlertIcon color={colors.danger} size={14} />
+          <Text style={{ color: colors.danger, fontSize: 12, fontWeight: "800" }}>ÉCART PERSISTANT</Text>
+        </View>
+      )}
       {priorityAlert ? (
         <View style={{ gap: 4 }}>
-          <Text numberOfLines={2} style={{ color: level === 2 ? colors.warning : colors.ink, fontSize: 14, fontWeight: "600" }}>
+          <Text numberOfLines={2} style={{ color: level === 3 ? colors.danger : level === 2 ? colors.warning : colors.ink, fontSize: 14, fontWeight: "600" }}>
             {priorityAlert.raison}{alerts.length > 1 ? ` · +${alerts.length - 1} autre${alerts.length > 2 ? "s" : ""}` : ""}
           </Text>
           {action && (
@@ -146,11 +154,11 @@ export default function MyUsers() {
                 justifyContent: "center",
                 gap: 2,
                 borderRadius: 14,
-                backgroundColor: filter === section.level ? (section.level === 2 ? "#fff0db" : colors.mint) : pressed ? colors.mintSoft : colors.card,
+                backgroundColor: filter === section.level ? (section.level === 3 ? "#fbe9e7" : section.level === 2 ? "#fff0db" : colors.mint) : pressed ? colors.mintSoft : colors.card,
               })}
             >
-              <Text style={{ fontSize: 25, fontWeight: "800", color: section.level === 2 && counts[i] ? colors.warning : colors.ink }}>{counts[i]}</Text>
-              <Text style={[s.historyMeta, { fontWeight: filter === section.level ? "700" : "500", color: filter === section.level ? colors.ink : colors.muted }]}>{section.title}</Text>
+              <Text style={{ fontSize: 25, fontWeight: "800", color: counts[i] && section.level === 3 ? colors.danger : counts[i] && section.level === 2 ? colors.warning : colors.ink }}>{counts[i]}</Text>
+              <Text numberOfLines={2} style={[s.historyMeta, { textAlign: "center", fontWeight: filter === section.level ? "700" : "500", color: filter === section.level ? colors.ink : colors.muted }]}>{section.title}</Text>
             </Pressable>
           ))}
         </View>
@@ -177,7 +185,7 @@ export default function MyUsers() {
           if (rows.length === 0) return null;
           return (
             <View key={section.level} style={{ gap: 10 }}>
-              {filter === null && <Text accessibilityRole="header" style={[s.metricLabel, { marginTop: section.level === 2 ? 0 : 6, color: section.level === 2 ? colors.warning : colors.muted }]}>
+              {filter === null && <Text accessibilityRole="header" style={[s.metricLabel, { marginTop: section.level >= 2 ? 0 : 6, color: section.level === 3 ? colors.danger : section.level === 2 ? colors.warning : colors.muted }]}>
                 {section.title} · {rows.length}
               </Text>}
               {rows.map((client) => <UserCard key={client.id} client={client} />)}

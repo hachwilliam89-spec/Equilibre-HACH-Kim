@@ -20,7 +20,11 @@ par un coach. L’API utilise NestJS, TypeScript et MongoDB via Mongoose.
   des 7 jours précédents et déduction du niveau d’activité utilisé par les plans
   (US4, voir `docs/activite-physique.md`).
 
-Les modules `foods`, `nutrition`, `sync`, `coaching` et `suivis` complètent
+- **coaching** : progression des utilisateurs pour leur coach et alertes
+  d’écart persistant poids et calories, calculées à la lecture ; les plans
+  actifs s’ajustent par `PATCH /api/plans/:id` (US5, voir `docs/alertes-ecart.md`).
+
+Les modules `foods`, `nutrition`, `sync` et `suivis` complètent
 l’US2 et l’US3 (voir les documents de `docs/`).
 
 ## Démarrage avec Docker
@@ -95,6 +99,7 @@ réponses documentées sont consultables dans Swagger.
 | GET | `/api/plans/me` | Plan actif de l’utilisateur connecté, ou `null` |
 | GET | `/api/measurements/me` | Historique complet de l’utilisateur connecté ; rôle utilisateur uniquement |
 | GET | `/api/plans/users/:userId` | Plan actif d’un utilisateur rattaché au coach, ou `null` |
+| PATCH | `/api/plans/:id` | Ajustement du plan actif (poids cible, date cible, budget) ; coach concerné ; remet à zéro la série d’écarts ajustée |
 | POST | `/api/plans/:id/cancel` | Annulation d’un plan ; coach concerné |
 | POST | `/api/food-journals/me/entries` | Ajout d’un aliment au journal du jour UTC ; rôle utilisateur |
 | DELETE | `/api/food-journals/me/entries/:entryId` | Retrait d’une entrée et recalcul du journal ; rôle utilisateur |
@@ -102,6 +107,8 @@ réponses documentées sont consultables dans Swagger.
 | GET | `/api/food-journals/me/days/:jourUtc` | Journal d’un jour passé (lecture seule), ou `null` ; rôle utilisateur |
 | POST | `/api/activity/steps` | Total de pas du jour (0 à 50 000) ; remplace la valeur du jour ; rôle utilisateur |
 | GET | `/api/activity/me` | Historique des pas et moyenne des 7 jours précédents avec le niveau déduit ; rôle utilisateur |
+| GET | `/api/coach/clients`, `/api/coach/clients/:userId` | Vue d’ensemble et fiche de progression avec le champ `alertes` ; coach |
+| GET | `/api/coach/alerts` | Utilisateurs rattachés en écart persistant (3 valeurs consécutives hors tolérance) ; coach |
 | GET / POST | `/api/sync/me`, `/api/sync/me/operations` | Synchronisation de la base embarquée (voir `docs/synchronisation.md`) |
 
 Pour les routes protégées, transmettre `Authorization: Bearer <accessToken>`.

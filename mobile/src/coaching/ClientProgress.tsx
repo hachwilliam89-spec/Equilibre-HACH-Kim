@@ -14,13 +14,35 @@ import { foodStatusPresentation } from "../nutrition/presentation";
 import { Collapsible } from "../ui/Collapsible";
 import { styles as s } from "../ui/styles";
 import { colors } from "../ui/theme";
-import { coachActionLabel, coachAlerts, type ClientProgression } from "./api";
+import { coachActionLabel, coachAlerts, persistentAlertReason, type ClientProgression } from "./api";
+import { Button } from "../plans/ui";
+import { AlertIcon } from "../ui/icons";
 import { moyenneSummary } from "../activity/presentation";
 
 /** Progression d'un utilisateur vue par son coach : résumé, courbes, pesées. */
 export type ClientSection = "suivi" | "alimentation";
 
-export function ClientProgress({ progression, section }: { progression: ClientProgression; section: ClientSection }) {
+/** Écart persistant (US5) : bandeau commun aux onglets Poids et Alimentation. */
+function PersistentBanner({ raisons, onAdjust }: { raisons: string[]; onAdjust?: () => void }) {
+  return (
+    <View accessibilityRole="alert" style={[s.card, { backgroundColor: "#fbe9e7", borderColor: "#efb9b3" }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <AlertIcon color={colors.danger} size={18} />
+        <Text style={[s.metricLabel, { color: colors.danger }]}>Écart persistant</Text>
+      </View>
+      {raisons.map((raison) => <Text key={raison} style={[s.label, { color: colors.ink }]}>{raison}</Text>)}
+      <Text style={s.historyMeta}>3 valeurs consécutives hors tolérance. L’alerte disparaît au retour dans la tolérance ou après un ajustement.</Text>
+      {onAdjust && <Button title="Ajuster le plan" onPress={onAdjust} />}
+    </View>
+  );
+}
+
+export function ClientProgress({ progression, section, onAdjust }: {
+  progression: ClientProgression;
+  section: ClientSection;
+  /** Ouvre l'ajustement du plan actif (US5). */
+  onAdjust?: () => void;
+}) {
   const { suiviPoids, mesures, alimentation } = progression;
   if (!suiviPoids) return null;
   const derniere = suiviPoids.derniereMesure;
@@ -29,6 +51,10 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
     : null;
 
   const alerts = coachAlerts(progression);
+  const persistantes = progression.alertes ?? [];
+  const persistanteCalories = persistantes.filter((a) => a.metrique === "calories").map(persistentAlertReason);
+  // Les écarts persistants ont leur bandeau : le résumé garde les autres raisons.
+  const autres = alerts.filter((alert) => alert.action !== "ajuster-plan");
 
   if (section === "alimentation") {
     if (!alimentation) {
@@ -44,6 +70,7 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
     const food = foodStatusPresentation[alimentation.statut];
     return (
       <>
+        {persistanteCalories.length > 0 && <PersistentBanner raisons={persistanteCalories} onAdjust={onAdjust} />}
         <View style={[s.card, { backgroundColor: food.background, borderColor: food.background }]}>
           <Text style={s.metricLabel}>Suivi alimentaire · 7 derniers jours</Text>
           <Text style={s.cardTitle}>
@@ -83,26 +110,31 @@ export function ClientProgress({ progression, section }: { progression: ClientPr
 
   return (
     <>
-      <View
-        accessibilityRole="summary"
-        style={[s.card, alerts.length
-          ? { backgroundColor: "#fff6eb", borderColor: "#f1c58e" }
-          : { backgroundColor: colors.mintSoft, borderColor: colors.mint }]}
-      >
-        <Text style={[s.metricLabel, { color: alerts.length ? colors.warning : colors.brand }]}>
-          {alerts.length ? "À examiner" : "Rien à signaler"}
-        </Text>
-        {alerts.length ? (
-          alerts.map((alert) => (
-            <View key={alert.raison} style={{ gap: 2 }}>
-              <Text style={[s.label, { color: colors.ink }]}>{alert.raison}</Text>
-              <Text style={s.pillText}>Suite suggérée : {coachActionLabel[alert.action]}</Text>
-            </View>
-          ))
-        ) : (
-          <Text style={s.label}>Aucun écart récent signalé dans les données disponibles.</Text>
-        )}
-      </View>
+      {persistantes.length > 0 && (
+        <PersistentBanner raisons={persistantes.map(persistentAlertReason)} onAdjust={onAdjust} />
+      )}
+      {(autres.length > 0 || persistantes.length === 0) && (
+        <View
+          accessibilityRole="summary"
+          style={[s.card, autres.length
+            ? { backgroundColor: "#fff6eb", borderColor: "#f1c58e" }
+            : { backgroundColor: colors.mintSoft, borderColor: colors.mint }]}
+        >
+          <Text style={[s.metricLabel, { color: autres.length ? colors.warning : colors.brand }]}>
+            {autres.length ? "À examiner" : "Rien à signaler"}
+          </Text>
+          {autres.length ? (
+            autres.map((alert) => (
+              <View key={alert.raison} style={{ gap: 2 }}>
+                <Text style={[s.label, { color: colors.ink }]}>{alert.raison}</Text>
+                <Text style={s.pillText}>Suite suggérée : {coachActionLabel[alert.action]}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={s.label}>Aucun écart récent signalé dans les données disponibles.</Text>
+          )}
+        </View>
+      )}
 
       <View style={s.card}>
         <View style={{ gap: 2 }}>

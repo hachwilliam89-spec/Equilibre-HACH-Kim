@@ -8,6 +8,7 @@ import { PlansController } from './infrastructure/http/plans.controller';
 import { CreatePlanUseCase } from './application/use-cases/create-plan.use-case';
 import { GetCurrentPlanUseCase } from './application/use-cases/get-current-plan.use-case';
 import { CancelPlanUseCase } from './application/use-cases/cancel-plan.use-case';
+import { UpdatePlanUseCase } from './application/use-cases/update-plan.use-case';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { CancelPlanUseCase } from './application/use-cases/cancel-plan.use-case'
     PreparePlanUseCase,
     GetCurrentPlanUseCase,
     CancelPlanUseCase,
+    UpdatePlanUseCase,
   ],
 })
 export class PlansModule {}

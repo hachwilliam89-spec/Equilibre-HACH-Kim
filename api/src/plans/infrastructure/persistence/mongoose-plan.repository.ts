@@ -75,6 +75,27 @@ export class MongoosePlanRepository implements PlanRepositoryPort {
     throw this.planConflict();
   }
 
+  async updateActive(plan: Plan): Promise<Plan> {
+    for (let attempt = 0; attempt < MAX_TENTATIVES; attempt += 1) {
+      const suivi = await this.suivis.charger(plan.userId);
+      if (!suivi) {
+        throw new AppException(
+          'plan-not-found',
+          'Plan introuvable',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const version = suivi.toProps().version;
+      suivi.remplacerPlanActif(plan);
+      if (await this.suivis.sauvegarderSiVersion(suivi, version)) return plan;
+    }
+    throw new AppException(
+      'plan-concurrent-update',
+      'Le suivi a été modifié simultanément, veuillez réessayer',
+      HttpStatus.CONFLICT,
+    );
+  }
+
   private planConflict(): AppException {
     return new AppException(
       'plan-already-active',

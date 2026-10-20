@@ -10,7 +10,13 @@ import {
 } from '../../../measurements/application/use-cases/get-weight-tracking-status.use-case';
 import { GetFoodBudgetStatusUseCase } from '../../../nutrition/application/use-cases/get-food-budget-status.use-case';
 import type { FoodBudgetResult } from '../../../nutrition/domain/services/food-budget-status';
+import {
+  SUIVI_REPOSITORY,
+  type SuiviRepositoryPort,
+} from '../../../suivis/domain/ports/suivi-repository.port';
 import { derniereActivite } from '../../domain/services/derniere-activite';
+import type { AlerteEcartPersistant } from '../../domain/services/ecart-persistant';
+import { alertesDuSuivi, jourUtc } from '../alertes-du-suivi';
 
 export interface ClientOverview {
   utilisateur: User;
@@ -18,6 +24,8 @@ export interface ClientOverview {
   alimentation: FoodBudgetResult | null;
   /** Dernière pesée ou saisie alimentaire du plan actif ; null sans activité. */
   derniereActivite: Date | null;
+  /** Écarts persistants du plan actif (US5) ; vide sans plan. */
+  alertes: AlerteEcartPersistant[];
 }
 
 /** Vue d'ensemble : statuts poids et alimentation de chaque utilisateur rattaché. */
@@ -25,11 +33,15 @@ export interface ClientOverview {
 export class GetClientsOverviewUseCase {
   constructor(
     @Inject(USER_REPOSITORY) private readonly users: UserRepositoryPort,
+    @Inject(SUIVI_REPOSITORY) private readonly suivis: SuiviRepositoryPort,
     private readonly weightStatus: GetWeightTrackingStatusUseCase,
     private readonly foodStatus: GetFoodBudgetStatusUseCase,
   ) {}
 
-  async execute(coachId: string): Promise<ClientOverview[]> {
+  async execute(
+    coachId: string,
+    jourCourantUtc: string = jourUtc(),
+  ): Promise<ClientOverview[]> {
     const clients = await this.users.findByCoachId(coachId);
     return Promise.all(
       clients.map(async (utilisateur) => {
@@ -38,9 +50,17 @@ export class GetClientsOverviewUseCase {
           this.foodStatus.execute(utilisateur.id),
         ]);
         const entrees = alimentation?.journal?.toProps().entrees ?? [];
+        const alertes = suiviPoids
+          ? alertesDuSuivi(
+              suiviPoids.plan,
+              await this.suivis.charger(utilisateur.id),
+              jourCourantUtc,
+            )
+          : [];
         return {
           utilisateur,
           suiviPoids,
+          alertes,
           derniereActivite: derniereActivite([
             suiviPoids?.derniereMesure?.toProps().receivedAt,
             ...entrees.map((entree) => entree.toProps().receivedAt),
